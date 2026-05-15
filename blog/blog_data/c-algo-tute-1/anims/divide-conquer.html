@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Divide & conquer — find max</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; align-items: stretch; justify-content: flex-start; }
+  .tree-scroll {
+    flex: 1;
+    width: 100%;
+    overflow: auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 6px 0 4px;
+  }
+  .tree-area {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .tree-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .dc-edge {
+    stroke: rgba(255,255,255,0.10);
+    stroke-width: 2;
+    stroke-linecap: round;
+    fill: none;
+    transition: stroke 0.4s, stroke-width 0.4s;
+  }
+  .dc-edge.shown {
+    stroke: rgba(255,255,255,0.32);
+  }
+  .dc-edge.split {
+    stroke: #d97757;
+    stroke-width: 2.5;
+    stroke-dasharray: 5 5;
+    animation: dashflow 0.8s linear infinite;
+  }
+  .dc-edge.merge {
+    stroke: #4ade80;
+    stroke-width: 3;
+  }
+  @keyframes dashflow {
+    to { stroke-dashoffset: -20; }
+  }
+
+  .tree-node {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    border: 1px solid #3a3a39;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.04);
+    padding: 0;
+    overflow: hidden;     /* prevent any text bleeding into siblings */
+    opacity: 0;
+    transform: translateY(-12px) scale(0.9);
+    transition:
+      opacity 0.35s,
+      transform 0.45s cubic-bezier(0.34, 1.5, 0.64, 1),
+      border-color 0.4s,
+      background 0.4s,
+      box-shadow 0.4s;
+    box-sizing: border-box;
+  }
+  .tree-node.shown {
+    opacity: 1;
+    transform: none;
+  }
+  .tree-node.splitting {
+    border-color: #d97757;
+    background: rgba(217,119,87,0.14);
+    box-shadow: 0 0 0 1px rgba(217,119,87,0.35), 0 4px 14px rgba(217,119,87,0.22);
+  }
+  .tree-node.merging {
+    border-color: #4ade80;
+    background: rgba(74,222,128,0.16);
+    box-shadow: 0 0 0 1px rgba(74,222,128,0.5), 0 4px 14px rgba(74,222,128,0.28);
+  }
+  .tree-node.solved {
+    border-color: rgba(74,222,128,0.55);
+    background: rgba(74,222,128,0.07);
+  }
+
+  .tn-cells {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    height: 24px;
+  }
+  .tn-cell {
+    flex: 1;
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: #e8e8e8;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    transition: background 0.35s, color 0.35s, transform 0.25s, box-shadow 0.3s;
+  }
+  .tn-cell:last-child { border-right: none; }
+  .tree-node.solved .tn-cell.is-max,
+  .tree-node.merging .tn-cell.is-max {
+    color: #d8ffe1;
+    font-weight: 800;
+    background: rgba(74,222,128,0.32);
+  }
+  .tn-cell.pulse {
+    animation: cellPulse 0.65s ease-out;
+  }
+  @keyframes cellPulse {
+    0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(74,222,128,0.6); }
+    40%  { transform: scale(1.45); box-shadow: 0 0 0 5px rgba(74,222,128,0.4); }
+    100% { transform: scale(1);    box-shadow: 0 0 0 10px rgba(74,222,128,0); }
+  }
+  .tn-result {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    color: #555;
+    background: rgba(0,0,0,0.18);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    transition: color 0.4s, background 0.4s;
+  }
+  .tree-node.solved .tn-result,
+  .tree-node.merging .tn-result {
+    color: #4ade80;
+    background: rgba(74,222,128,0.10);
+  }
+  .tree-node.merging .tn-result .val {
+    animation: valueLand 0.55s ease-out;
+    display: inline-block;
+  }
+  @keyframes valueLand {
+    0%   { transform: translateY(-14px) scale(1.5); opacity: 0; }
+    60%  { transform: translateY(2px)   scale(1.15); opacity: 1; }
+    100% { transform: translateY(0)     scale(1);   opacity: 1; }
+  }
+
+  /* Leaves: hide the result strip — the cell IS the answer */
+  .tree-node.is-leaf .tn-result {
+    display: none;
+  }
+
+  .legend {
+    display: flex; gap: 14px; font-size: 11px;
+    color: #a1a1a0;
+    flex-wrap: wrap;
+    padding: 0 4px;
+  }
+  .swatch-line {
+    display: inline-block; width: 16px; height: 2px;
+    vertical-align: middle; margin-right: 4px; border-radius: 1px;
+  }
+
+  .note { padding: 4px 6px; min-height: 18px; }
+</style>
+</head>
+<body>
+
+<div class="title">案例：寻找最大值</div>
+
+<div class="controls">
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="200" max="1500" value="850" style="width:100px">
+  <span class="label">快</span>
+  <span class="label">第 <span class="value" id="stepIdx">0</span> 步</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="tree-scroll">
+    <div class="tree-area" id="treeArea">
+      <svg class="tree-lines" id="treeLines"></svg>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">数组：</span><span class="mono" id="arrShow"></span></span>
+  <span><span class="stat-label">最大值：</span><span class="stat-value green" id="maxVal">—</span></span>
+  <span><span class="stat-label">递归深度：</span><span class="stat-value" id="depthLabel">log₂(8) = 3</span></span>
+</div>
+
+<script>
+const ARR = [3, 8, 1, 5, 7, 2, 6, 4];
+const N = ARR.length;
+document.getElementById('arrShow').textContent = '[' + ARR.join(', ') + ']';
+
+/* ── Layout constants ────────────────────────────────────────── */
+/* NODE_PAD_X = 0 so adjacent siblings share a clean edge instead of
+ * overlapping. Each node's box exactly matches the columns of its cells. */
+const CELL_W = 28;
+const NODE_PAD_X = 0;
+const NODE_INNER_H = 24 /*cells*/ + 18 /*result strip*/ + 2 /*borders*/;
+const LEAF_INNER_H  = 24 + 2;
+const LEVEL_H = 66;
+const LEFT_PAD = 14;
+const TOP_PAD  = 8;
+
+/* ── Build recursion tree ────────────────────────────────────── */
+const nodes = [];
+function build(lo, hi, depth) {
+  const id = nodes.length;
+  const node = { id, lo, hi, depth, children: null, maxVal: null };
+  nodes.push(node);
+  if (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    node.children = [
+      build(lo, mid, depth + 1),
+      build(mid + 1, hi, depth + 1),
+    ];
+  }
+  return id;
+}
+build(0, N - 1, 0);
+
+(function compute(id) {
+  const node = nodes[id];
+  if (!node.children) {
+    node.maxVal = ARR[node.lo];
+  } else {
+    compute(node.children[0]);
+    compute(node.children[1]);
+    node.maxVal = Math.max(nodes[node.children[0]].maxVal, nodes[node.children[1]].maxVal);
+  }
+})(0);
+
+const maxDepth = Math.max(...nodes.map(n => n.depth));
+document.getElementById('depthLabel').textContent = `log₂(${N}) = ${maxDepth}`;
+
+const TOTAL_W = LEFT_PAD * 2 + N * CELL_W;
+const TOTAL_H = TOP_PAD * 2 + (maxDepth + 1) * LEVEL_H;
+
+const treeArea  = document.getElementById('treeArea');
+const treeLines = document.getElementById('treeLines');
+treeArea.style.width  = TOTAL_W + 'px';
+treeArea.style.height = TOTAL_H + 'px';
+treeLines.setAttribute('viewBox', `0 0 ${TOTAL_W} ${TOTAL_H}`);
+treeLines.setAttribute('width',  TOTAL_W);
+treeLines.setAttribute('height', TOTAL_H);
+
+/* ── Box geometry helpers ────────────────────────────────────── */
+function isLeaf(node) { return !node.children; }
+function nodeBox(node) {
+  const span = node.hi - node.lo + 1;
+  return {
+    left:   LEFT_PAD + node.lo * CELL_W - NODE_PAD_X,
+    top:    TOP_PAD  + node.depth * LEVEL_H,
+    width:  span * CELL_W + 2 * NODE_PAD_X,
+    height: isLeaf(node) ? LEAF_INNER_H : NODE_INNER_H,
+  };
+}
+function nodeBC(n) { const b = nodeBox(n); return { x: b.left + b.width / 2, y: b.top + b.height }; }
+function nodeTC(n) { const b = nodeBox(n); return { x: b.left + b.width / 2, y: b.top }; }
+
+/* ── Render nodes & edges ────────────────────────────────────── */
+const nodeEls = new Map();
+for (const node of nodes) {
+  const div = document.createElement('div');
+  div.className = 'tree-node' + (isLeaf(node) ? ' is-leaf' : '');
+  div.dataset.id = node.id;
+  const box = nodeBox(node);
+  div.style.left   = box.left + 'px';
+  div.style.top    = box.top  + 'px';
+  div.style.width  = box.width + 'px';
+  div.style.height = box.height + 'px';
+
+  const cellsDiv = document.createElement('div');
+  cellsDiv.className = 'tn-cells';
+  for (let i = node.lo; i <= node.hi; i++) {
+    const c = document.createElement('div');
+    c.className = 'tn-cell';
+    c.dataset.idx = i;
+    c.dataset.value = ARR[i];
+    c.textContent = ARR[i];
+    cellsDiv.appendChild(c);
+  }
+  div.appendChild(cellsDiv);
+
+  // Result strip — shown only on internal nodes (CSS hides it on .is-leaf)
+  const resultDiv = document.createElement('div');
+  resultDiv.className = 'tn-result';
+  resultDiv.innerHTML = `<span class="val">?</span>`;
+  div.appendChild(resultDiv);
+
+  treeArea.appendChild(div);
+  nodeEls.set(node.id, div);
+}
+
+const edgeEls = new Map();
+const NS = 'http://www.w3.org/2000/svg';
+function edgeKey(p, c) { return p + '-' + c; }
+for (const node of nodes) {
+  if (node.children) {
+    for (const cid of node.children) {
+      const a = nodeBC(node), b = nodeTC(nodes[cid]);
+      const line = document.createElementNS(NS, 'line');
+      line.setAttribute('x1', a.x);
+      line.setAttribute('y1', a.y);
+      line.setAttribute('x2', b.x);
+      line.setAttribute('y2', b.y);
+      line.setAttribute('class', 'dc-edge');
+      treeLines.appendChild(line);
+      edgeEls.set(edgeKey(node.id, cid), line);
+    }
+  }
+}
+
+/* ── Step list: pre-order splits, then post-order merges ─────── */
+const steps = [];
+(function pre(id) {
+  const n = nodes[id];
+  if (n.children) {
+    steps.push({ kind: 'split', id });
+    pre(n.children[0]);
+    pre(n.children[1]);
+  }
+})(0);
+(function post(id) {
+  const n = nodes[id];
+  if (n.children) {
+    post(n.children[0]);
+    post(n.children[1]);
+    steps.push({ kind: 'merge', id });
+  }
+})(0);
+
+/* ── Paint ───────────────────────────────────────────────────── */
+let cursor = -1;
+let timer  = null;
+const stepIdxEl = document.getElementById('stepIdx');
+const maxValEl  = document.getElementById('maxVal');
+const noteEl    = document.getElementById('note');
+const stepBtn   = document.getElementById('stepBtn');
+const autoBtn   = document.getElementById('autoBtn');
+const speedEl   = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+function paint() {
+  // Determine which nodes are shown / solved given cursor
+  const shown  = new Set([0]);
+  const solved = new Set();
+  for (let i = 0; i <= cursor; i++) {
+    const s = steps[i];
+    if (s.kind === 'split') {
+      for (const cid of nodes[s.id].children) {
+        shown.add(cid);
+        if (isLeaf(nodes[cid])) solved.add(cid);
+      }
+    } else if (s.kind === 'merge') {
+      solved.add(s.id);
+    }
+  }
+
+  // Apply persistent classes idempotently + result text
+  for (const node of nodes) {
+    const dom = nodeEls.get(node.id);
+    dom.classList.toggle('shown',  shown.has(node.id));
+    dom.classList.toggle('solved', solved.has(node.id));
+    dom.classList.remove('splitting', 'merging');
+
+    const valEl = dom.querySelector('.tn-result .val');
+    const cells = dom.querySelectorAll('.tn-cell');
+    cells.forEach(c => c.classList.remove('pulse'));
+
+    if (solved.has(node.id)) {
+      if (valEl && valEl.textContent !== String(node.maxVal)) {
+        valEl.textContent = node.maxVal;
+      }
+      cells.forEach(c => c.classList.toggle('is-max', +c.dataset.value === node.maxVal));
+    } else {
+      if (valEl) valEl.textContent = '?';
+      cells.forEach(c => c.classList.remove('is-max'));
+    }
+  }
+
+  // Edges
+  edgeEls.forEach(e => e.classList.remove('split', 'merge', 'shown'));
+  for (let i = 0; i <= cursor; i++) {
+    const s = steps[i];
+    if (s.kind === 'split') {
+      for (const cid of nodes[s.id].children) edgeEls.get(edgeKey(s.id, cid)).classList.add('shown');
+    } else if (s.kind === 'merge') {
+      for (const cid of nodes[s.id].children) edgeEls.get(edgeKey(s.id, cid)).classList.add('merge');
+    }
+  }
+
+  // CURRENT step highlights
+  if (cursor >= 0 && cursor < steps.length) {
+    const cur = steps[cursor];
+    const node = nodes[cur.id];
+    if (cur.kind === 'split') {
+      nodeEls.get(cur.id).classList.add('splitting');
+      for (const cid of node.children) edgeEls.get(edgeKey(cur.id, cid)).classList.add('split');
+      const [lid, rid] = node.children;
+      const lN = nodes[lid], rN = nodes[rid];
+      noteEl.innerHTML = `<span style="color:#d97757">切成两半</span>`;
+    } else if (cur.kind === 'merge') {
+      nodeEls.get(cur.id).classList.add('merging');
+      const winners = [];
+      for (const cid of node.children) {
+        const cdom = nodeEls.get(cid);
+        cdom.querySelectorAll('.tn-cell').forEach(c => {
+          if (+c.dataset.value === nodes[cid].maxVal) winners.push(c);
+        });
+      }
+      requestAnimationFrame(() => winners.forEach(c => c.classList.add('pulse')));
+      const [lid, rid] = node.children;
+      const lV = nodes[lid].maxVal, rV = nodes[rid].maxVal;
+      noteEl.innerHTML = `<span style="color:#4ade80">取较大值：${lV} 和 ${rV} → <strong>${node.maxVal}</strong></span>`;
+    }
+  } else if (cursor < 0) {
+    noteEl.innerHTML = '';
+  } else {
+    noteEl.innerHTML = `<span style="color:#4ade80;font-weight:700">最大值 = ${nodes[0].maxVal}</span>`;
+  }
+
+  stepIdxEl.textContent = (cursor + 1) + ' / ' + steps.length;
+  maxValEl.textContent = (cursor === steps.length - 1) ? nodes[0].maxVal : '—';
+}
+
+function step() {
+  if (cursor + 1 >= steps.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '自动'; }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '自动'; }
+  cursor = -1;
+  paint();
+}
+
+stepBtn.addEventListener('click', step);
+document.getElementById('resetBtn').addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '自动'; return; }
+  if (cursor + 1 >= steps.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

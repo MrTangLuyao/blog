@@ -1,0 +1,22 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+
+# Python (the editor/ helper is a small CLI tool)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (not used yet, kept for future)
+node_modules/
+npm-debug.log*
+
+# Local server / cache
+.cache/
+dist/
+.tmp/

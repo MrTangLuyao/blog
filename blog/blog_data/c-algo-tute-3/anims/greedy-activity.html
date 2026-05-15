@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>greedy: activity selection</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 6px; }
+  .canvas {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    padding: 6px 12px 26px;
+  }
+
+  .timeline {
+    position: absolute;
+    left: 12px; right: 12px;
+    bottom: 6px;
+    height: 16px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .ttick {
+    position: absolute;
+    width: 1px;
+    height: 6px;
+    background: rgba(255,255,255,0.18);
+    top: 0;
+  }
+  .tlabel {
+    position: absolute;
+    transform: translateX(-50%);
+    top: 8px;
+    font-size: 10px;
+    color: #888;
+  }
+
+  .last-end {
+    position: absolute;
+    width: 2px;
+    background: rgba(74,222,128,0.6);
+    top: 12px;
+    bottom: 22px;
+    pointer-events: none;
+    transition: left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+    opacity: 0;
+    z-index: 5;
+  }
+  .last-end.shown { opacity: 1; }
+  .last-end::before {
+    content: '上次选中的结束';
+    position: absolute;
+    top: -16px; left: 4px;
+    white-space: nowrap;
+    font-size: 10px;
+    color: #4ade80;
+    font-weight: 700;
+  }
+
+  .actbar {
+    position: absolute;
+    height: 22px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid #3a3a39;
+    display: flex; align-items: center; padding: 0 10px;
+    color: #c8c8c7;
+    font-size: 12px; font-weight: 700;
+    transition: background 0.35s, border-color 0.35s, color 0.35s, transform 0.3s, box-shadow 0.3s, opacity 0.4s;
+  }
+  .actbar.cur     { transform: translateY(-3px); background: rgba(251,191,36,0.25); border-color: #fbbf24; color: #fef3c7; box-shadow: 0 0 0 2px rgba(251,191,36,0.4), 0 4px 10px rgba(245,158,11,0.3); }
+  .actbar.picked  { background: linear-gradient(180deg, rgba(74,222,128,0.5), rgba(34,197,94,0.85)); border-color: rgba(74,222,128,0.8); color: #fff; }
+  .actbar.skipped { opacity: 0.42; background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.4); color: #fecaca; }
+
+  .note {
+    text-align: center;
+    font-size: 12px;
+    padding: 4px;
+    min-height: 22px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：贪心 — 活动选择问题</div>
+
+<div class="controls">
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">已按"结束时间"排序</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="canvas" id="canvas">
+    <div class="last-end" id="lastEnd"></div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">已考察：</span><span class="stat-value" id="seen">0</span> / <span id="total">0</span></span>
+  <span><span class="stat-label">选中：</span><span class="stat-value green" id="picked">0</span></span>
+  <span><span class="stat-label">最近选中的结束时间：</span><span class="stat-value" id="lastE">—</span></span>
+</div>
+
+<script>
+/* Activities sorted by END time. The greedy: walk in order; pick if start
+ * is >= last picked end; otherwise skip. */
+const ACTIVITIES = [
+  { name: 'A', start: 1, end: 4 },
+  { name: 'B', start: 3, end: 5 },
+  { name: 'C', start: 0, end: 6 },
+  { name: 'D', start: 5, end: 7 },
+  { name: 'E', start: 3, end: 9 },
+  { name: 'F', start: 6, end: 10 },
+  { name: 'G', start: 8, end: 11 },
+  { name: 'H', start: 12, end: 16 },
+];
+const T_MIN = 0, T_MAX = 16;
+
+const canvas = document.getElementById('canvas');
+const lastEndDom = document.getElementById('lastEnd');
+const timeline = document.getElementById('timeline');
+const noteEl = document.getElementById('note');
+const stepBtn = document.getElementById('stepBtn');
+const autoBtn = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const seenEl = document.getElementById('seen');
+const pickedEl = document.getElementById('picked');
+const lastEEl = document.getElementById('lastE');
+document.getElementById('total').textContent = ACTIVITIES.length;
+
+let events = [];
+let cursor = -1;
+let timer = null;
+
+function timeToPx(t) {
+  const innerW = canvas.clientWidth - 24;   // minus padding 12+12
+  return 12 + (t - T_MIN) / (T_MAX - T_MIN) * innerW;
+}
+
+function buildBars() {
+  canvas.querySelectorAll('.actbar').forEach(d => d.remove());
+  const ROW_H = 28;
+  for (let i = 0; i < ACTIVITIES.length; i++) {
+    const a = ACTIVITIES[i];
+    const bar = document.createElement('div');
+    bar.className = 'actbar';
+    bar.dataset.idx = i;
+    bar.textContent = `${a.name}  ${a.start}–${a.end}`;
+    bar.style.left = timeToPx(a.start) + 'px';
+    bar.style.width = (timeToPx(a.end) - timeToPx(a.start)) + 'px';
+    bar.style.top = (8 + i * ROW_H) + 'px';
+    canvas.appendChild(bar);
+  }
+}
+
+function buildTimeline() {
+  timeline.innerHTML = '';
+  for (let t = T_MIN; t <= T_MAX; t += 2) {
+    const x = timeToPx(t) - 12;  // timeline is offset by canvas padding
+    const tk = document.createElement('div');
+    tk.className = 'ttick';
+    tk.style.left = x + 'px';
+    timeline.appendChild(tk);
+    const lbl = document.createElement('div');
+    lbl.className = 'tlabel';
+    lbl.textContent = t;
+    lbl.style.left = x + 'px';
+    timeline.appendChild(lbl);
+  }
+}
+
+function buildEvents() {
+  const evs = [];
+  let lastEnd = -1;
+  for (let i = 0; i < ACTIVITIES.length; i++) {
+    evs.push({ type: 'consider', idx: i });
+    const a = ACTIVITIES[i];
+    if (a.start >= lastEnd) {
+      evs.push({ type: 'pick', idx: i, lastEnd: a.end });
+      lastEnd = a.end;
+    } else {
+      evs.push({ type: 'skip', idx: i, lastEnd });
+    }
+  }
+  evs.push({ type: 'done' });
+  return evs;
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  buildBars();
+  buildTimeline();
+  events = buildEvents();
+  cursor = -1;
+  seenEl.textContent = '0';
+  pickedEl.textContent = '0';
+  lastEEl.textContent = '—';
+  lastEndDom.classList.remove('shown');
+  noteEl.innerHTML = '点 ▶ 看贪心算法逐个考察活动';
+}
+
+function paint() {
+  // Replay all events up to cursor to determine state of each bar
+  canvas.querySelectorAll('.actbar').forEach(d => d.classList.remove('cur', 'picked', 'skipped'));
+  let lastEnd = -1, picked = 0, seen = 0, lastEv = null;
+  for (let e = 0; e <= cursor; e++) {
+    const ev = events[e];
+    lastEv = ev;
+    if (ev.type === 'consider') {
+      seen++;
+    } else if (ev.type === 'pick') {
+      const dom = canvas.querySelector(`.actbar[data-idx="${ev.idx}"]`);
+      if (dom) dom.classList.add('picked');
+      lastEnd = ev.lastEnd;
+      picked++;
+    } else if (ev.type === 'skip') {
+      const dom = canvas.querySelector(`.actbar[data-idx="${ev.idx}"]`);
+      if (dom) dom.classList.add('skipped');
+    }
+  }
+
+  // Highlight current activity if last event was 'consider'
+  if (lastEv && lastEv.type === 'consider') {
+    const dom = canvas.querySelector(`.actbar[data-idx="${lastEv.idx}"]`);
+    if (dom) dom.classList.add('cur');
+    const a = ACTIVITIES[lastEv.idx];
+    if (lastEnd < 0) {
+      noteEl.innerHTML = `考察 <strong>${a.name}</strong>（${a.start}–${a.end}）：第一个活动，直接选`;
+    } else if (a.start >= lastEnd) {
+      noteEl.innerHTML = `考察 <strong>${a.name}</strong>（${a.start}–${a.end}）：开始时间 ${a.start} ≥ 上次结束 ${lastEnd} → 没冲突，<span style="color:#4ade80">选</span>`;
+    } else {
+      noteEl.innerHTML = `考察 <strong>${a.name}</strong>（${a.start}–${a.end}）：开始时间 ${a.start} &lt; 上次结束 ${lastEnd} → <span style="color:#f87171">冲突，跳过</span>`;
+    }
+  } else if (lastEv && lastEv.type === 'pick') {
+    const a = ACTIVITIES[lastEv.idx];
+    noteEl.innerHTML = `<strong style="color:#4ade80">选 ${a.name}</strong>，更新"上次结束" = ${a.end}`;
+  } else if (lastEv && lastEv.type === 'skip') {
+    const a = ACTIVITIES[lastEv.idx];
+    noteEl.innerHTML = `<span style="color:#f87171">跳过 ${a.name}</span>（与上次选中的活动重叠）`;
+  } else if (lastEv && lastEv.type === 'done') {
+    noteEl.innerHTML = `<strong style="color:#4ade80">完成。</strong>共选了 ${picked} 个活动 — 这就是当前最大的可能数（数学可证）`;
+  }
+
+  if (lastEnd >= 0) {
+    lastEndDom.style.left = timeToPx(lastEnd) + 'px';
+    lastEndDom.classList.add('shown');
+    lastEEl.textContent = lastEnd;
+  } else {
+    lastEndDom.classList.remove('shown');
+    lastEEl.textContent = '—';
+  }
+
+  seenEl.textContent = seen;
+  pickedEl.textContent = picked;
+}
+
+function step() {
+  if (cursor + 1 >= events.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= events.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, 800);
+});
+
+window.addEventListener('resize', () => { buildBars(); buildTimeline(); paint(); });
+
+reset();
+</script>
+</body>
+</html>

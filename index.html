@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Louie — Blog</title>
+
+  <!-- ─── SEO ─── -->
+  <meta name="description" content="Louie's blog — dev logs, notes, and small experiments. Bilingual posts on Python, SQL, networking, and life as a CS student abroad.">
+  <meta name="author" content="Louie">
+  <meta name="theme-color" content="#1f1f1e">
+  <link rel="canonical" href="https://blog.louie1.com/">
+
+  <!-- ─── Open Graph ─── -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Louie · Blog">
+  <meta property="og:title" content="Louie — Blog">
+  <meta property="og:description" content="Dev logs, notes, and small experiments. Bilingual posts on Python, SQL, and networking.">
+  <meta property="og:url" content="https://blog.louie1.com/">
+  <meta property="og:image" content="https://blog.louie1.com/lib/resources/po.webp">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:locale:alternate" content="en_US">
+
+  <!-- ─── Twitter Card ─── -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Louie — Blog">
+  <meta name="twitter:description" content="Dev logs, notes, and small experiments.">
+  <meta name="twitter:image" content="https://blog.louie1.com/lib/resources/po.webp">
+
+  <link rel="icon" href="lib/resources/po.webp">
+  <link rel="stylesheet" href="lib/design/fonts.css">
+  <link rel="stylesheet" href="lib/design/louie.css">
+  <link rel="stylesheet" href="blog/blog.css">
+  <script src="lib/design/tailwindcss.js"></script>
+  <script src="lib/design/tailwind.config.js"></script>
+
+  <!-- ─── Structured data (Blog) ─── -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "url": "https://blog.louie1.com/",
+    "name": "Louie's Blog",
+    "description": "Dev logs, notes, and small experiments.",
+    "inLanguage": ["zh-CN", "en"],
+    "author": {
+      "@type": "Person",
+      "name": "Louie",
+      "url": "https://louie1.com",
+      "image": "https://louie1.com/lib/resources/po.webp"
+    }
+  }
+  </script>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <nav id="navbar">
+    <div class="nav-brand-wrap" id="brand-dropdown-container">
+      <button id="brand-dropdown-btn" class="ripple-surface" type="button">
+        <span class="b-static">louie</span><span class="b-dot">.</span><span class="b-page">blog</span>
+        <svg id="brand-dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      <div id="brand-dropdown-menu">
+        <a href="https://louie1.com" class="nav-dd-item ripple-surface"><span style="color:var(--text)">louie</span><span class="b-dot">.</span><span style="color:var(--muted)">home</span></a>
+        <a href="/" class="nav-dd-item nav-active ripple-surface"><span style="color:var(--text)">louie</span><span class="b-dot">.</span><span style="color:var(--accent);font-weight:600">blog</span></a>
+        <a href="https://learn.louie1.com" class="nav-dd-item ripple-surface"><span style="color:var(--text)">louie</span><span class="b-dot">.</span><span style="color:var(--muted)">learn</span></a>
+        <a href="https://louie1.com/95.html" class="nav-dd-item ripple-surface"><span style="color:var(--text)">louie</span><span class="b-dot">.</span><span style="color:var(--muted)">95</span></a>
+      </div>
+    </div>
+    <div class="nav-right">
+      <a id="github-btn" class="ripple-surface" href="https://github.com/MrTangLuyao/blog" target="_blank" rel="noopener" aria-label="GitHub repository" title="GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.97-3.2.69-3.87-1.54-3.87-1.54-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.27-5.23-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.16 1.17.92-.25 1.91-.38 2.89-.38.98 0 1.97.13 2.89.38 2.2-1.48 3.16-1.17 3.16-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.25 5.65.41.35.78 1.04.78 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.55C20.71 21.39 24 17.08 24 12 24 5.65 18.85.5 12 .5z"/></svg>
+      </a>
+      <div class="nav-divider"></div>
+      <button id="lang-toggle" class="ripple-surface" onclick="toggleLang()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+        <span id="lang-label">EN ⇄ 文</span>
+      </button>
+    </div>
+  </nav>
+
+  <button id="toc-fab" aria-label="Table of contents">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="0.8" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="0.8" fill="currentColor" stroke="none"/><circle cx="3" cy="18" r="0.8" fill="currentColor" stroke="none"/></svg>
+  </button>
+
+  <div id="mobile-toc">
+    <div id="mobile-toc-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #3a3a39;">
+        <span id="mobile-toc-title" style="font-size:11px; letter-spacing:0.15em; text-transform:uppercase; color:#a1a1a0; font-weight:700;">Contents</span>
+        <button id="mobile-toc-close" class="ripple-surface" style="background:none; border:none; color:#a1a1a0; cursor:pointer; padding:6px; border-radius:9999px; display:flex; align-items:center; justify-content:center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <nav id="mobile-toc-nav" style="display:flex; flex-direction:column;"></nav>
+    </div>
+  </div>
+
+  <main class="flex-grow pt-28 pb-20 px-6 max-w-4xl w-full mx-auto relative z-10">
+    <div id="view-list">
+      <div class="mb-14 fade-in">
+        <p class="text-m3-primary font-bold tracking-widest uppercase mb-4 text-xs flex items-center gap-3 before:w-8 before:h-[2px] before:bg-m3-primary" data-i18n="blog-greeting">notes</p>
+        <h1 class="text-4xl md:text-5xl font-extrabold leading-tight text-m3-onSurface mb-3" data-i18n="blog-title">Blog</h1>
+        <p class="text-m3-onSurfaceVariant text-[17px]" data-i18n="blog-sub">Louie 的博客及文章</p>
+      </div>
+
+      <div class="flex flex-wrap gap-3 py-6 mb-8 border-y border-m3-outlineVariant fade-in" id="tag-bar"></div>
+
+      <div class="grid gap-6" id="blog-list"></div>
+
+      <div class="text-center py-20 text-m3-onSurfaceVariant text-sm" id="blog-empty" style="display:none;" data-i18n="blog-empty">
+        No posts yet — come back soon.
+      </div>
+    </div>
+
+    <article id="view-reader" style="display:none;" class="w-full">
+      <nav id="toc-sidebar" aria-label="Table of contents" class="hidden flex-col z-50 bg-m3-surfaceContainer/90 backdrop-blur border border-m3-outlineVariant rounded-m3-xl p-4 shadow-lg shadow-black/20"></nav>
+
+      <a href="#" class="ripple-surface ripple-surface-variant inline-flex items-center gap-2 px-5 py-2 mb-10 rounded-m3-full text-sm font-medium text-m3-onSurfaceVariant border border-m3-outline hover:text-m3-onSurface hover:bg-m3-surfaceContainerHigh transition-colors" id="reader-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+        <span data-i18n="reader-back">All posts</span>
+      </a>
+
+      <div id="reader-content" class="w-full"></div>
+    </article>
+  </main>
+
+  <footer class="text-center py-10 mt-auto border-t border-m3-outlineVariant bg-m3-surfaceContainer/30">
+    <div class="text-sm text-m3-onSurfaceVariant tracking-widest font-mono" data-i18n="footer-copy">
+      Copyright © 2026 Louie’s Blog
+    </div>
+  </footer>
+
+  <script src="lib/runtime/luxon.min.js"></script>
+  <script src="blog/blog_data/manifest.js"></script>
+  <script src="blog/blog-i18n.js"></script>
+  <script src="blog/blog-core.js"></script>
+  <script src="blog/blog-syntax.js"></script>
+  <script src="blog/blog-toc.js"></script>
+  <script src="blog/blog-views.js"></script>
+  <script src="blog/blog-router.js"></script>
+</body>
+</html>

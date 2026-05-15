@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>array vs list</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; align-items: stretch; gap: 8px; }
+  .lane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+    padding: 6px;
+    min-height: 100px;
+    margin: 0 4px;
+  }
+  .lane-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #d97757;
+    padding: 0 6px;
+  }
+  .lane-canvas {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 70px;
+  }
+
+  .acell {
+    position: absolute;
+    width: 38px; height: 38px;
+    border-radius: 6px;
+    border: 1px solid #3a3a39;
+    background: linear-gradient(180deg, rgba(217,119,87,0.5), rgba(217,119,87,0.85));
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition:
+      left 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.4s, opacity 0.4s, background 0.3s, box-shadow 0.3s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .acell.shifting { background: linear-gradient(180deg, #fbbf24, #f59e0b); transform: translateY(-6px); box-shadow: 0 4px 12px rgba(245,158,11,0.4); }
+  .acell.entering { animation: cellIn 0.45s cubic-bezier(0.34, 1.5, 0.64, 1); }
+  .acell.new      { background: linear-gradient(180deg, #4ade80, #22c55e); }
+
+  @keyframes cellIn {
+    from { opacity: 0; transform: translateY(-30px) scale(0.7); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .lnode {
+    position: absolute;
+    width: 38px; height: 38px;
+    border-radius: 6px;
+    border: 1px solid #3a3a39;
+    background: rgba(255,255,255,0.06);
+    color: #e8e8e8;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    transition: left 0.45s, top 0.45s, transform 0.3s, opacity 0.4s, background 0.3s, border-color 0.3s, box-shadow 0.3s;
+  }
+  .lnode.head     { background: rgba(217,119,87,0.18); border-color: #d97757; box-shadow: 0 0 0 2px rgba(217,119,87,0.25); }
+  .lnode.entering { animation: cellIn 0.45s cubic-bezier(0.34, 1.5, 0.64, 1); }
+  .lnode.new      { background: rgba(74,222,128,0.2); border-color: #4ade80; color: #d8ffe1; }
+
+  .ledge {
+    position: absolute;
+    height: 2px;
+    background: rgba(74,222,128,0.5);
+    pointer-events: none;
+    transition: left 0.45s, width 0.45s, opacity 0.3s;
+  }
+  .ledge::after {
+    content: '';
+    position: absolute;
+    right: -6px; top: -3px;
+    width: 0; height: 0;
+    border-left: 6px solid rgba(74,222,128,0.5);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+  }
+
+  .work-meter {
+    font-size: 11px;
+    color: #a1a1a0;
+    padding: 0 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .work-meter strong { color: #d97757; }
+
+  .step-label {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #d97757;
+    padding: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：数组 vs 链表 — 在头部插入</div>
+
+<div class="controls">
+  <button id="autoBtn" class="primary">▶ 演示</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1400" value="700" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="step-label" id="step">点 ▶ 演示，在两个结构最前面各插入一个 0</div>
+
+<div class="stage">
+  <div class="lane">
+    <div class="lane-title">数组：每个旧元素都要往后挪一格</div>
+    <div class="lane-canvas" id="arrCanvas"></div>
+    <div class="work-meter">
+      <span>已挪动 <strong id="arrShift">0</strong> 个元素</span>
+      <span id="arrCost">复杂度 O(n)</span>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lane-title">链表：只动一个指针，新节点直接接到 head</div>
+    <div class="lane-canvas" id="listCanvas"></div>
+    <div class="work-meter">
+      <span>已动 <strong id="listShift">0</strong> 个元素</span>
+      <span id="listCost">复杂度 O(1)</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const arrCanvas  = document.getElementById('arrCanvas');
+const listCanvas = document.getElementById('listCanvas');
+const stepEl  = document.getElementById('step');
+const arrShiftEl = document.getElementById('arrShift');
+const listShiftEl = document.getElementById('listShift');
+const stepBtn = document.getElementById('stepBtn');
+const autoBtn = document.getElementById('autoBtn');
+const resetBtn= document.getElementById('resetBtn');
+const speedEl = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+const CELL_W = 38;
+const ARR_GAP = 6;
+const LIST_GAP = 28;
+const TOP_OFF = 18;
+
+const INITIAL = [1, 2, 3, 4, 5];
+const NEW_VAL = 0;
+
+let cursor = -1;       // step
+let arrCells = [];
+let listNodes = [];
+let listEdges = [];   // SVG-less, simple bars
+let timer = null;
+
+function leftPx(idx, gap) { return 12 + idx * (CELL_W + gap); }
+
+function buildArray() {
+  arrCanvas.innerHTML = '';
+  arrCells = [];
+  INITIAL.forEach((v, i) => {
+    const c = document.createElement('div');
+    c.className = 'acell';
+    c.dataset.v = v;
+    c.textContent = v;
+    c.style.left = leftPx(i, ARR_GAP) + 'px';
+    c.style.top  = TOP_OFF + 'px';
+    arrCanvas.appendChild(c);
+    arrCells.push(c);
+  });
+}
+
+function buildList() {
+  listCanvas.innerHTML = '';
+  listNodes = [];
+  listEdges = [];
+  INITIAL.forEach((v, i) => {
+    const n = document.createElement('div');
+    n.className = 'lnode' + (i === 0 ? ' head' : '');
+    n.textContent = v;
+    n.style.left = leftPx(i, LIST_GAP) + 'px';
+    n.style.top  = TOP_OFF + 'px';
+    listCanvas.appendChild(n);
+    listNodes.push(n);
+    if (i > 0) {
+      const e = document.createElement('div');
+      e.className = 'ledge';
+      e.style.left = (leftPx(i - 1, LIST_GAP) + CELL_W) + 'px';
+      e.style.top  = (TOP_OFF + CELL_W / 2) + 'px';
+      e.style.width = (LIST_GAP - 8) + 'px';
+      listCanvas.appendChild(e);
+      listEdges.push(e);
+    }
+  });
+  // Head label
+  const headLbl = document.createElement('div');
+  headLbl.className = 'step-label';
+  headLbl.style.position = 'absolute';
+  headLbl.style.fontSize = '10px';
+  headLbl.style.color = '#d97757';
+  headLbl.style.padding = '0';
+  headLbl.style.left = leftPx(0, LIST_GAP) + 'px';
+  headLbl.style.width = CELL_W + 'px';
+  headLbl.style.top = '2px';
+  headLbl.style.textAlign = 'center';
+  headLbl.id = 'listHead';
+  headLbl.textContent = 'head';
+  listCanvas.appendChild(headLbl);
+}
+
+const STEPS = [
+  // Each step represents one "shift" tick for the array, and gradual list operation
+  { kind: 'arr-shift', target: 4 },
+  { kind: 'arr-shift', target: 3 },
+  { kind: 'arr-shift', target: 2 },
+  { kind: 'arr-shift', target: 1 },
+  { kind: 'arr-shift', target: 0 },
+  { kind: 'arr-insert' },         // insert new at index 0 (now empty)
+  { kind: 'list-insert' },        // single step for list
+];
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 演示'; autoBtn.classList.add('primary'); }
+  cursor = -1;
+  buildArray();
+  buildList();
+  arrShiftEl.textContent = '0';
+  listShiftEl.textContent = '0';
+  stepEl.textContent = '点 ▶ 演示，在两个结构最前面各插入一个 0';
+}
+
+function step() {
+  if (cursor + 1 >= STEPS.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 演示'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  const s = STEPS[cursor];
+
+  if (s.kind === 'arr-shift') {
+    const idx = s.target;
+    const cell = arrCells[idx];
+    if (cell) {
+      cell.style.left = leftPx(idx + 1, ARR_GAP) + 'px';
+      cell.classList.add('shifting');
+      setTimeout(() => cell.classList.remove('shifting'), 500);
+    }
+    arrShiftEl.textContent = (5 - idx);
+    stepEl.innerHTML = `<span style="color:#fbbf24">数组：</span>把 a[${idx}] 挪到 a[${idx + 1}]（必须挪，不然新值塞不进去）`;
+  } else if (s.kind === 'arr-insert') {
+    // Add new cell at index 0
+    const c = document.createElement('div');
+    c.className = 'acell entering new';
+    c.textContent = NEW_VAL;
+    c.style.left = leftPx(0, ARR_GAP) + 'px';
+    c.style.top  = TOP_OFF + 'px';
+    arrCanvas.appendChild(c);
+    stepEl.innerHTML = `<span style="color:#4ade80">数组：</span>把 ${NEW_VAL} 写入 a[0] — 一共动了 5 个元素`;
+  } else if (s.kind === 'list-insert') {
+    // Add new node at left of list
+    // Shift entire list right to make room? No, in real linked list we don't shift.
+    // We add new node at the left, point its next to old head; old nodes don't move (in memory).
+    // But for visualization, we'll actually shift them right slightly to make room.
+    // ALTERNATE: just add new node at the LEFT position; old nodes stay; old "head" label moves to the new one.
+    // Easiest: shift all existing nodes/edges right by ONE slot and add new at index 0.
+    listNodes.forEach((n, i) => {
+      n.style.left = leftPx(i + 1, LIST_GAP) + 'px';
+      n.classList.remove('head');
+    });
+    listEdges.forEach((e, i) => {
+      e.style.left = (leftPx(i, LIST_GAP) + CELL_W) + 'px';
+    });
+    // New node at position 0
+    const n = document.createElement('div');
+    n.className = 'lnode entering new head';
+    n.textContent = NEW_VAL;
+    n.style.left = leftPx(0, LIST_GAP) + 'px';
+    n.style.top  = TOP_OFF + 'px';
+    listCanvas.appendChild(n);
+    // New edge from new node to old head
+    const e = document.createElement('div');
+    e.className = 'ledge';
+    e.style.left = (leftPx(0, LIST_GAP) + CELL_W) + 'px';
+    e.style.top  = (TOP_OFF + CELL_W / 2) + 'px';
+    e.style.width = '0';
+    listCanvas.appendChild(e);
+    requestAnimationFrame(() => { e.style.width = (LIST_GAP - 8) + 'px'; });
+    // Move head label to new node
+    const headLbl = document.getElementById('listHead');
+    if (headLbl) headLbl.style.left = leftPx(0, LIST_GAP) + 'px';
+
+    listShiftEl.textContent = '1';
+    stepEl.innerHTML = `<span style="color:#4ade80">链表：</span>新节点 next 指向旧 head，head 移到新节点 — 一共只动了 1 个指针`;
+  }
+}
+
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 演示'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= STEPS.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

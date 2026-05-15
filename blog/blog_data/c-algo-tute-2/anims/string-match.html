@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>naive vs kmp</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 8px; }
+  /* No padding here — both text-row and the absolutely-positioned pat-window
+   * sit 8px from their track's outer left edge so chars align column-by-column. */
+  .text-row {
+    display: flex;
+    gap: 2px;
+  }
+  .ch {
+    width: 28px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #3a3a39;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.04);
+    font-size: 14px;
+    font-weight: 700;
+    color: #c8c8c7;
+    transition:
+      background 0.25s, color 0.25s, border-color 0.25s, transform 0.25s, box-shadow 0.3s;
+  }
+  .ch.cmp {
+    background: rgba(251,191,36,0.25);
+    border-color: #fbbf24;
+    color: #fef3c7;
+    transform: translateY(-3px);
+    box-shadow: 0 4px 10px rgba(245,158,11,0.3);
+  }
+  .ch.match {
+    background: rgba(74,222,128,0.22);
+    border-color: rgba(74,222,128,0.65);
+    color: #d8ffe1;
+  }
+  .ch.miss {
+    background: rgba(248,113,113,0.25);
+    border-color: #f87171;
+    color: #fecaca;
+  }
+  .ch.found {
+    background: rgba(74,222,128,0.4);
+    border-color: #4ade80;
+    color: #d8ffe1;
+    box-shadow: 0 0 0 2px rgba(74,222,128,0.4);
+  }
+
+  .pat-track {
+    position: relative;
+    padding: 4px 8px;
+    height: 38px;
+  }
+  .pat-window {
+    position: absolute;
+    display: flex;
+    gap: 2px;
+    transition: left 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+    top: 4px;
+  }
+
+  .text-track {
+    padding: 4px 8px;
+    position: relative;
+  }
+
+  .lane {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+    padding: 6px;
+    margin: 0 4px;
+  }
+  .lane-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 0 6px;
+  }
+  .lane-title { font-size: 12px; font-weight: 700; color: #d97757; }
+  .lane-stat { font-size: 11px; color: #a1a1a0; }
+  .lane-stat strong { color: #d97757; }
+
+  .next-box {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 8px;
+    margin: 0 4px;
+    background: rgba(56,189,248,0.05);
+  }
+  .next-box .nb-title {
+    font-size: 11px;
+    color: #38bdf8;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .next-row {
+    display: flex;
+    gap: 2px;
+  }
+  .next-cell {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #3a3a39;
+    border-radius: 5px;
+    background: rgba(56,189,248,0.10);
+    font-size: 12px;
+    font-weight: 700;
+    color: #cce8ff;
+    transition: background 0.3s, transform 0.3s;
+  }
+  .next-cell.used {
+    background: rgba(56,189,248,0.4);
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.5);
+  }
+  .next-label-row {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 2px;
+  }
+  .next-label {
+    width: 28px;
+    text-align: center;
+    font-size: 10px;
+    color: #888;
+  }
+
+  .note {
+    padding: 4px 8px;
+    min-height: 20px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：字符串匹配 — 朴素 vs KMP</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button class="active" data-mode="naive">朴素 Naive</button>
+    <button data-mode="kmp">KMP</button>
+  </div>
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="200" max="1500" value="700" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="lane">
+    <div class="lane-head">
+      <span class="lane-title">主串 text</span>
+      <span class="lane-stat">比较次数 <strong id="cmpCount">0</strong></span>
+    </div>
+    <div class="text-track">
+      <div class="text-row" id="textRow"></div>
+    </div>
+    <div class="pat-track" id="patTrack">
+      <div class="pat-window" id="patWindow"></div>
+    </div>
+  </div>
+
+  <div class="next-box" id="nextBox" style="display: none;">
+    <div class="nb-title">失败函数 next[]（KMP 用来"跳过"已匹配的前缀）</div>
+    <div class="next-label-row" id="nextLabels"></div>
+    <div class="next-row" id="nextRow"></div>
+  </div>
+</div>
+
+<script>
+const TEXT    = "ABABCABABABABC";
+const PATTERN = "ABABABC";
+
+function computeNext(p) {
+  const m = p.length;
+  const next = new Array(m).fill(0);
+  let k = 0;
+  for (let i = 1; i < m; i++) {
+    while (k > 0 && p[i] !== p[k]) k = next[k - 1];
+    if (p[i] === p[k]) k++;
+    next[i] = k;
+  }
+  return next;
+}
+const NEXT = computeNext(PATTERN);
+
+function naiveEvents() {
+  const evs = [];
+  const n = TEXT.length, m = PATTERN.length;
+  outer: for (let i = 0; i <= n - m; i++) {
+    evs.push({ type: 'align', patStart: i });
+    let j = 0;
+    for (j = 0; j < m; j++) {
+      evs.push({ type: 'compare', textPos: i + j, patPos: j, patStart: i });
+      if (TEXT[i + j] !== PATTERN[j]) {
+        evs.push({ type: 'miss', textPos: i + j, patPos: j, patStart: i });
+        evs.push({ type: 'reset-shift', from: i, to: i + 1 });
+        break;
+      }
+    }
+    if (j === m) {
+      evs.push({ type: 'found', patStart: i });
+      break outer;
+    }
+  }
+  return evs;
+}
+
+function kmpEvents() {
+  const evs = [];
+  const n = TEXT.length, m = PATTERN.length;
+  let i = 0, j = 0;
+  evs.push({ type: 'align', patStart: 0 });
+  while (i < n) {
+    evs.push({ type: 'compare', textPos: i, patPos: j, patStart: i - j });
+    if (TEXT[i] === PATTERN[j]) {
+      i++; j++;
+      if (j === m) { evs.push({ type: 'found', patStart: i - m }); break; }
+    } else {
+      evs.push({ type: 'miss', textPos: i, patPos: j, patStart: i - j });
+      if (j > 0) {
+        const newJ = NEXT[j - 1];
+        evs.push({ type: 'kmp-jump', useNextIdx: j - 1, newJ, newPatStart: i - newJ });
+        j = newJ;
+      } else {
+        evs.push({ type: 'no-match-here', textPos: i });
+        i++;
+        evs.push({ type: 'align', patStart: i });
+      }
+    }
+  }
+  return evs;
+}
+
+const textRow   = document.getElementById('textRow');
+const patWindow = document.getElementById('patWindow');
+const patTrack  = document.getElementById('patTrack');
+const noteEl    = document.getElementById('note');
+const nextBox   = document.getElementById('nextBox');
+const nextRow   = document.getElementById('nextRow');
+const nextLabels= document.getElementById('nextLabels');
+const cmpCount  = document.getElementById('cmpCount');
+const stepBtn   = document.getElementById('stepBtn');
+const autoBtn   = document.getElementById('autoBtn');
+const resetBtn  = document.getElementById('resetBtn');
+const speedEl   = document.getElementById('speed');
+
+const CELL_W = 28, CELL_GAP = 2, PAD = 8;
+let mode = 'naive';
+let events = [];
+let cursor = -1;
+let timer = null;
+let compares = 0;
+
+function buildText() {
+  textRow.innerHTML = '';
+  for (let i = 0; i < TEXT.length; i++) {
+    const c = document.createElement('div');
+    c.className = 'ch';
+    c.dataset.idx = i;
+    c.textContent = TEXT[i];
+    textRow.appendChild(c);
+  }
+}
+function buildPattern() {
+  patWindow.innerHTML = '';
+  for (let j = 0; j < PATTERN.length; j++) {
+    const c = document.createElement('div');
+    c.className = 'ch';
+    c.dataset.idx = j;
+    c.textContent = PATTERN[j];
+    patWindow.appendChild(c);
+  }
+}
+function buildNext() {
+  nextRow.innerHTML = '';
+  nextLabels.innerHTML = '';
+  for (let j = 0; j < PATTERN.length; j++) {
+    const lbl = document.createElement('div');
+    lbl.className = 'next-label';
+    lbl.textContent = PATTERN[j];
+    nextLabels.appendChild(lbl);
+    const c = document.createElement('div');
+    c.className = 'next-cell';
+    c.dataset.idx = j;
+    c.textContent = NEXT[j];
+    nextRow.appendChild(c);
+  }
+}
+
+function patStartLeftPx(patStart) {
+  return PAD + patStart * (CELL_W + CELL_GAP);
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  events = mode === 'naive' ? naiveEvents() : kmpEvents();
+  cursor = -1;
+  compares = 0;
+  cmpCount.textContent = '0';
+  buildText();
+  buildPattern();
+  patWindow.style.left = patStartLeftPx(0) + 'px';
+  noteEl.textContent = '';
+  nextBox.style.display = mode === 'kmp' ? 'block' : 'none';
+  if (mode === 'kmp') buildNext();
+  paint();
+}
+
+function clearMarks() {
+  textRow.querySelectorAll('.ch').forEach(c => c.classList.remove('cmp', 'match', 'miss', 'found'));
+  patWindow.querySelectorAll('.ch').forEach(c => c.classList.remove('cmp', 'match', 'miss', 'found'));
+  if (mode === 'kmp') nextRow.querySelectorAll('.next-cell').forEach(c => c.classList.remove('used'));
+}
+
+function paint() {
+  clearMarks();
+  if (cursor < 0) return;
+
+  // Apply state up to cursor: mark "match" classes on previously-matched chars, etc.
+  // Simpler: walk events and apply incrementally.
+  // For "match" carry-over: mark all positions that were 'compare' followed by no 'miss' before cursor.
+  // Actually we'll just paint based on the LAST event per pair.
+
+  // Compute committed matches up to cursor — pairs (textPos, patPos) that compared and were equal.
+  // For naive: until a 'miss' or successful match; once 'reset-shift' happens, prior matches are "forgotten" (shown as cleared).
+  // For KMP: matched prefix persists across mismatches that use kmp-jump (j stays).
+
+  // Simpler: replay through events.
+  let patStart = 0;
+  let curCompare = null;
+  let lastEv = null;
+  let foundAt = null;
+  let usedNext = null;
+  compares = 0;
+  for (let e = 0; e <= cursor; e++) {
+    const ev = events[e];
+    lastEv = ev;
+    if (ev.type === 'align') { patStart = ev.patStart; }
+    else if (ev.type === 'compare') {
+      curCompare = { textPos: ev.textPos, patPos: ev.patPos, patStart: ev.patStart };
+      compares++;
+      patStart = ev.patStart;
+    } else if (ev.type === 'miss') {
+      // Show as miss
+    } else if (ev.type === 'reset-shift') {
+      patStart = ev.to;
+    } else if (ev.type === 'kmp-jump') {
+      patStart = ev.newPatStart;
+      usedNext = ev.useNextIdx;
+    } else if (ev.type === 'no-match-here') {
+      // i++ in KMP when j=0 and mismatch
+    } else if (ev.type === 'found') {
+      foundAt = ev.patStart;
+      patStart = ev.patStart;
+    }
+  }
+
+  patWindow.style.left = patStartLeftPx(patStart) + 'px';
+
+  // Apply highlights based on the last event
+  if (lastEv) {
+    if (lastEv.type === 'compare') {
+      const tDom = textRow.children[lastEv.textPos];
+      const pDom = patWindow.children[lastEv.patPos];
+      if (tDom) tDom.classList.add('cmp');
+      if (pDom) pDom.classList.add('cmp');
+      // Also mark previously matched positions in this attempt
+      for (let pp = 0; pp < lastEv.patPos; pp++) {
+        const tD = textRow.children[lastEv.patStart + pp];
+        const pD = patWindow.children[pp];
+        if (tD) tD.classList.add('match');
+        if (pD) pD.classList.add('match');
+      }
+      noteEl.innerHTML = `比较 text[${lastEv.textPos}]=<strong>${TEXT[lastEv.textPos]}</strong> 与 pattern[${lastEv.patPos}]=<strong>${PATTERN[lastEv.patPos]}</strong>`;
+    } else if (lastEv.type === 'miss') {
+      const tDom = textRow.children[lastEv.textPos];
+      const pDom = patWindow.children[lastEv.patPos];
+      if (tDom) tDom.classList.add('miss');
+      if (pDom) pDom.classList.add('miss');
+      for (let pp = 0; pp < lastEv.patPos; pp++) {
+        const tD = textRow.children[lastEv.patStart + pp];
+        const pD = patWindow.children[pp];
+        if (tD) tD.classList.add('match');
+        if (pD) pD.classList.add('match');
+      }
+      noteEl.innerHTML = `<span style="color:#f87171">不匹配！</span>`;
+    } else if (lastEv.type === 'reset-shift') {
+      noteEl.innerHTML = `<span style="color:#f87171">朴素：模式串整体右移 1 位，<strong>j 重置为 0</strong>，i 也回退到 ${lastEv.to}</span>`;
+    } else if (lastEv.type === 'kmp-jump') {
+      const cell = nextRow.children[lastEv.useNextIdx];
+      if (cell) cell.classList.add('used');
+      noteEl.innerHTML = `<span style="color:#38bdf8">KMP：用 next[${lastEv.useNextIdx}]=${lastEv.newJ}，<strong>i 不回退！</strong> j 跳到 ${lastEv.newJ}，模式串往右滑</span>`;
+    } else if (lastEv.type === 'no-match-here') {
+      noteEl.innerHTML = `<span style="color:#a1a1a0">j 已经是 0，无前缀可用，i 前进一位</span>`;
+    } else if (lastEv.type === 'align') {
+      noteEl.innerHTML = `对齐：模式串从 text[${lastEv.patStart}] 开始尝试`;
+    } else if (lastEv.type === 'found') {
+      // Highlight all matched positions
+      for (let pp = 0; pp < PATTERN.length; pp++) {
+        const tD = textRow.children[lastEv.patStart + pp];
+        const pD = patWindow.children[pp];
+        if (tD) tD.classList.add('found');
+        if (pD) pD.classList.add('found');
+      }
+      noteEl.innerHTML = `<strong style="color:#4ade80">✓ 全部匹配！起始位置 ${lastEv.patStart}</strong>`;
+    }
+  }
+
+  cmpCount.textContent = compares;
+}
+
+function step() {
+  if (cursor + 1 >= events.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= events.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+reset();
+</script>
+</body>
+</html>

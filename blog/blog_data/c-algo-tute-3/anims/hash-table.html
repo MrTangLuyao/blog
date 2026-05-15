@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hash table</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 6px; }
+  .canvas {
+    flex: 1;
+    width: 100%;
+    overflow: auto;
+    padding: 6px 12px;
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .bkt-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 36px;
+    min-width: max-content;
+  }
+
+  .bkt-idx {
+    width: 22px;
+    flex-shrink: 0;
+    text-align: right;
+    font-size: 11px;
+    color: #888;
+    font-weight: 700;
+  }
+
+  .bkt {
+    width: 56px; height: 32px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    border: 1px solid #3a3a39;
+    background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    color: #c8c8c7;
+    transition: background 0.3s, border-color 0.3s, box-shadow 0.3s, color 0.3s;
+  }
+  .bkt.empty-slot { color: #555; }
+  .bkt.target  { background: rgba(217,119,87,0.22); border-color: #d97757; box-shadow: 0 0 0 2px rgba(217,119,87,0.3); }
+  .bkt.miss    { background: rgba(248,113,113,0.20); border-color: #f87171; }
+  .bkt.occupied {
+    background: linear-gradient(180deg, rgba(74,222,128,0.55), rgba(34,197,94,0.85));
+    border-color: rgba(74,222,128,0.7);
+    color: #fff;
+  }
+  .bkt.target.occupied {
+    box-shadow: 0 0 0 2px rgba(217,119,87,0.4), 0 4px 10px rgba(217,119,87,0.3);
+  }
+
+  /* Chain entries — appear in flex flow to the right of the bucket */
+  .chain-arrow {
+    flex-shrink: 0;
+    color: rgba(74,222,128,0.6);
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 1px;
+    animation: arrIn 0.3s ease;
+  }
+  @keyframes arrIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .chent {
+    flex-shrink: 0;
+    width: 50px; height: 30px;
+    border-radius: 6px;
+    border: 1px solid rgba(74,222,128,0.5);
+    background: rgba(74,222,128,0.15);
+    color: #d8ffe1;
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.3s, transform 0.3s;
+    animation: chentIn 0.4s cubic-bezier(0.34, 1.5, 0.64, 1);
+  }
+  @keyframes chentIn {
+    from { opacity: 0; transform: translateX(-12px) scale(0.8); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .note {
+    text-align: center;
+    font-size: 12px;
+    padding: 4px;
+    min-height: 22px;
+  }
+  .note .mono { color: #fbbf24; font-weight: 700; }
+
+  .next-key {
+    display: inline-flex;
+    align-items: center; gap: 6px;
+    background: rgba(217,119,87,0.15);
+    border: 1px solid #d97757;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: #ffe4d4;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：哈希表（链地址 vs 开放寻址）</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button class="active" data-mode="chain">链地址法</button>
+    <button data-mode="oa">开放寻址（线性探测）</button>
+  </div>
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="300" max="2000" value="1100" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="canvas">
+    <div class="rows" id="rows"></div>
+  </div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">下一个待插入：</span><span class="next-key" id="nextKey">—</span></span>
+  <span><span class="stat-label">已插入：</span><span class="stat-value" id="insertedCount">0</span> / <span id="totalCount">0</span></span>
+  <span><span class="stat-label">哈希函数：</span><span class="mono" style="color:#38bdf8">key % 7</span></span>
+</div>
+
+<script>
+const KEYS = [10, 22, 3, 17, 8, 31, 14];
+const BUCKETS = 7;
+
+const rowsEl = document.getElementById('rows');
+const noteEl = document.getElementById('note');
+const nextKeyEl = document.getElementById('nextKey');
+const insertedCountEl = document.getElementById('insertedCount');
+const totalCountEl = document.getElementById('totalCount');
+const stepBtn = document.getElementById('stepBtn');
+const autoBtn = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedEl = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+totalCountEl.textContent = KEYS.length;
+
+let mode = 'chain';
+let cursor = 0;
+let timer = null;
+let chains = Array.from({ length: BUCKETS }, () => []);
+let oa = new Array(BUCKETS).fill(null);
+
+function buildBuckets() {
+  rowsEl.innerHTML = '';
+  for (let i = 0; i < BUCKETS; i++) {
+    const row = document.createElement('div');
+    row.className = 'bkt-row';
+    row.dataset.idx = i;
+    row.innerHTML = `
+      <div class="bkt-idx">${i}</div>
+      <div class="bkt empty-slot" data-idx="${i}">—</div>
+    `;
+    rowsEl.appendChild(row);
+  }
+}
+
+function clearMarks() {
+  rowsEl.querySelectorAll('.bkt').forEach(d => d.classList.remove('target', 'miss'));
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  cursor = 0;
+  chains = Array.from({ length: BUCKETS }, () => []);
+  oa = new Array(BUCKETS).fill(null);
+  buildBuckets();
+  insertedCountEl.textContent = '0';
+  nextKeyEl.textContent = KEYS[0] != null ? KEYS[0] : '—';
+  noteEl.innerHTML = `点 ▶ 看 7 个 key 怎么挤进 ${BUCKETS} 个桶`;
+}
+
+function bucketRow(i) {
+  return rowsEl.querySelector(`.bkt-row[data-idx="${i}"]`);
+}
+
+async function insertChain(key) {
+  const h = key % BUCKETS;
+  clearMarks();
+  const bktDom = rowsEl.querySelector(`.bkt[data-idx="${h}"]`);
+  if (bktDom) bktDom.classList.add('target');
+
+  const row = bucketRow(h);
+  // Chain arrow (only if there are existing entries; first entry connects from bucket)
+  const arr = document.createElement('span');
+  arr.className = 'chain-arrow';
+  arr.textContent = '→';
+  row.appendChild(arr);
+
+  const ent = document.createElement('div');
+  ent.className = 'chent';
+  ent.textContent = key;
+  row.appendChild(ent);
+
+  chains[h].push(key);
+  if (chains[h].length === 1) {
+    noteEl.innerHTML = `<span class="mono">${key} % 7 = ${h}</span> · bucket <strong style="color:#d97757">${h}</strong> 第一次有人 → 挂上去`;
+  } else {
+    noteEl.innerHTML = `<span class="mono">${key} % 7 = ${h}</span> · bucket <strong style="color:#d97757">${h}</strong> 已经有 <strong>${chains[h].length - 1}</strong> 个，<span style="color:#fbbf24">链上追加</span>`;
+  }
+}
+
+async function insertOA(key) {
+  const h = key % BUCKETS;
+  clearMarks();
+
+  let probe = h;
+  let probes = 0;
+  const probedList = [];
+  while (oa[probe] != null) {
+    const bk = rowsEl.querySelector(`.bkt[data-idx="${probe}"]`);
+    if (bk) bk.classList.add('miss');
+    probedList.push(probe);
+    await sleep(180);
+    probe = (probe + 1) % BUCKETS;
+    probes++;
+    if (probes >= BUCKETS) {
+      noteEl.innerHTML = '<span style="color:#f87171">表满了！需要 rehash</span>';
+      return;
+    }
+  }
+  // Place at probe — turn that bucket green
+  const bktDom = rowsEl.querySelector(`.bkt[data-idx="${probe}"]`);
+  if (bktDom) {
+    bktDom.classList.remove('miss', 'empty-slot', 'target');
+    bktDom.classList.add('occupied');
+    bktDom.textContent = key;
+  }
+
+  oa[probe] = key;
+  if (h === probe) {
+    noteEl.innerHTML = `<span class="mono">${key} % 7 = ${h}</span> · bucket <strong style="color:#d97757">${h}</strong> 是空的，直接放下`;
+  } else {
+    noteEl.innerHTML = `<span class="mono">${key} % 7 = ${h}</span>，但 bucket ${h} 被占了 → 往后探测 (经过 ${probedList.join('→')}) → 落在 <strong style="color:#4ade80">${probe}</strong>`;
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function step() {
+  if (cursor >= KEYS.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  const key = KEYS[cursor];
+  cursor++;
+  insertedCountEl.textContent = cursor;
+  nextKeyEl.textContent = cursor < KEYS.length ? KEYS[cursor] : '—';
+
+  if (mode === 'chain') await insertChain(key);
+  else                  await insertOA(key);
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor >= KEYS.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

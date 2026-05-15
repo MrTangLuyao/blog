@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>binary heap</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 6px; }
+
+  .tree-area {
+    flex: 2;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    min-height: 180px;
+  }
+  .tree-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .hedge {
+    stroke: rgba(255,255,255,0.15);
+    stroke-width: 2;
+    fill: none;
+    transition: d 0.4s, stroke 0.4s;
+  }
+
+  .hnode {
+    position: absolute;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1.5px solid #3a3a39;
+    background: linear-gradient(180deg, rgba(217,119,87,0.45), rgba(217,119,87,0.7));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+    transition:
+      left 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+      top 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.3s, opacity 0.4s,
+      background 0.3s, border-color 0.3s, box-shadow 0.3s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  .hnode.cmp     { transform: translateY(-5px); box-shadow: 0 0 0 2px rgba(251,191,36,0.7), 0 4px 10px rgba(245,158,11,0.4); background: linear-gradient(180deg, #fbbf24, #f59e0b); }
+  .hnode.swap    { transform: translateY(-9px); box-shadow: 0 0 0 2px rgba(248,113,113,0.7), 0 5px 14px rgba(239,68,68,0.45); background: linear-gradient(180deg, #f87171, #ef4444); }
+  .hnode.sorted  { background: linear-gradient(180deg, rgba(74,222,128,0.55), rgba(34,197,94,0.85)); border-color: rgba(74,222,128,0.6); }
+  .hnode.dim     { opacity: 0.35; filter: grayscale(0.4); }
+
+  .arr-area {
+    flex: 0 0 auto;
+    position: relative;
+    width: 100%;
+    height: 56px;
+    padding: 0 6px;
+  }
+  .arr-row {
+    position: relative;
+    height: 36px;
+    margin-top: 2px;
+  }
+  .arr-cell {
+    position: absolute;
+    width: 36px; height: 36px;
+    top: 0;
+    border-radius: 6px;
+    border: 1px solid #3a3a39;
+    background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #e8e8e8;
+    transition:
+      left 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+      background 0.3s, border-color 0.3s, transform 0.3s, opacity 0.4s;
+  }
+  .arr-cell.cmp    { background: rgba(251,191,36,0.3); border-color: #fbbf24; }
+  .arr-cell.swap   { background: rgba(248,113,113,0.3); border-color: #f87171; transform: translateY(-3px); }
+  .arr-cell.sorted { background: rgba(74,222,128,0.18); border-color: rgba(74,222,128,0.5); color: #d8ffe1; }
+  .arr-cell.dim    { opacity: 0.3; }
+  .arr-idx {
+    position: absolute;
+    top: 38px;
+    width: 36px;
+    text-align: center;
+    font-size: 10px;
+    color: #888;
+    transition: left 0.45s, color 0.3s;
+  }
+  .arr-idx.last-sorted { color: #4ade80; }
+
+  .label-row {
+    font-size: 11px;
+    color: #a1a1a0;
+    padding: 0 8px;
+    height: 14px;
+    line-height: 14px;
+  }
+
+  .note {
+    text-align: center;
+    font-size: 12px;
+    color: #d97757;
+    padding: 4px;
+    min-height: 22px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：二叉堆（同时显示树和数组）</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button class="active" data-mode="insert">插入构建</button>
+    <button data-mode="sort">堆排序</button>
+  </div>
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1100" value="650" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="label-row">树视图（最大堆：父 ≥ 子）</div>
+  <div class="tree-area" id="treeArea">
+    <svg class="tree-svg" id="svg"></svg>
+  </div>
+  <div class="label-row">数组视图（同一份数据，索引 i 的子节点是 2i+1 和 2i+2）</div>
+  <div class="arr-area" id="arrArea">
+    <div class="arr-row" id="arrRow"></div>
+  </div>
+</div>
+
+<script>
+/* Heap is shown as both a tree and an array. Each value has a stable id
+ * (its insertion order); when heapify swaps two values, the two nodes
+ * physically animate to each other's positions in BOTH views. */
+
+const INSERT_SEQUENCE = [4, 9, 7, 12, 3, 14, 8, 11];
+
+let heap = [];           // heap[i] = id at index i in the heap
+let valueOf = [];        // valueOf[id] = the actual value
+let cursor = -1;
+let events = [];
+let timer = null;
+let mode = 'insert';
+let sortedFromEnd = 0;   // for sort mode: how many cells at the end are 'sorted'
+
+const treeArea = document.getElementById('treeArea');
+const svg      = document.getElementById('svg');
+const arrRow   = document.getElementById('arrRow');
+const noteEl   = document.getElementById('note');
+const stepBtn  = document.getElementById('stepBtn');
+const autoBtn  = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedEl  = document.getElementById('speed');
+
+const NODE_SIZE = 38;
+const MAX_LEVELS = 4;
+
+function parent(i) { return (i - 1) >> 1; }
+function leftCh(i) { return 2 * i + 1; }
+function rightCh(i){ return 2 * i + 2; }
+
+function nodePosForIndex(i) {
+  // For heap index i, its level and slot
+  const level = Math.floor(Math.log2(i + 1));
+  const slotInLevel = i - (Math.pow(2, level) - 1);
+  const slotsAtLevel = Math.pow(2, level);
+  const W = treeArea.clientWidth;
+  const H = treeArea.clientHeight;
+  const usedLevels = Math.min(MAX_LEVELS, Math.floor(Math.log2(Math.max(1, heap.length))) + 1);
+  const levelHeight = (H - 30) / Math.max(1, usedLevels);
+  const x = ((slotInLevel + 0.5) / slotsAtLevel) * W - NODE_SIZE / 2;
+  const y = 10 + level * levelHeight;
+  return { x, y };
+}
+
+function arrCellLeft(i, n) {
+  // Center the row of cells in the array area
+  const W = document.getElementById('arrArea').clientWidth;
+  const totalW = n * 36 + (n - 1) * 4;
+  const startX = Math.max(6, (W - totalW) / 2);
+  return startX + i * 40;
+}
+
+/* ── Build event sequences ───────────────────────────────────── */
+
+function makeInsertEvents() {
+  const evs = [];
+  const data = [];
+  evs.push({ type: 'note', text: '依次把 ' + INSERT_SEQUENCE.join(', ') + ' 插入空堆' });
+  for (let k = 0; k < INSERT_SEQUENCE.length; k++) {
+    const v = INSERT_SEQUENCE[k];
+    data.push(v);
+    const i0 = data.length - 1;
+    evs.push({ type: 'add', value: v, atIdx: i0 });
+    let i = i0;
+    while (i > 0) {
+      const p = parent(i);
+      evs.push({ type: 'cmp', i, j: p, vChild: data[i], vParent: data[p] });
+      if (data[i] > data[p]) {
+        [data[i], data[p]] = [data[p], data[i]];
+        evs.push({ type: 'swap', i, j: p });
+        i = p;
+      } else {
+        evs.push({ type: 'no-swap', i });
+        break;
+      }
+    }
+  }
+  evs.push({ type: 'note', text: '✓ 完成。这就是 build_heap 的 O(n log n) 版本（每个插入 O(log n)）' });
+  return evs;
+}
+
+function makeSortEvents() {
+  // Start from a built max-heap and repeatedly extract max
+  // Use the same INSERT_SEQUENCE but pre-build.
+  const data = [];
+  // Build a max heap quickly using siftUp (we won't animate the building)
+  for (const v of INSERT_SEQUENCE) {
+    data.push(v);
+    let i = data.length - 1;
+    while (i > 0 && data[parent(i)] < data[i]) {
+      [data[i], data[parent(i)]] = [data[parent(i)], data[i]];
+      i = parent(i);
+    }
+  }
+
+  const evs = [];
+  evs.push({ type: 'init-sort', heap: data.slice() });
+  evs.push({ type: 'note', text: '已构建最大堆。重复取走根（最大值），放到数组末尾' });
+
+  let n = data.length;
+  while (n > 1) {
+    // Step 1: swap root with last-active
+    evs.push({ type: 'sort-extract', root: 0, last: n - 1, val: data[0] });
+    [data[0], data[n - 1]] = [data[n - 1], data[0]];
+    n--;
+    evs.push({ type: 'sort-mark', idx: n });    // mark heap[n] as sorted
+
+    // Step 2: heapify down from index 0 with size n
+    let i = 0;
+    while (true) {
+      const l = leftCh(i), r = rightCh(i);
+      let largest = i;
+      if (l < n && data[l] > data[largest]) largest = l;
+      if (r < n && data[r] > data[largest]) largest = r;
+      if (largest !== i) {
+        evs.push({ type: 'cmp', i: largest, j: i, vChild: data[largest], vParent: data[i] });
+        [data[i], data[largest]] = [data[largest], data[i]];
+        evs.push({ type: 'swap', i, j: largest });
+        i = largest;
+      } else {
+        break;
+      }
+    }
+  }
+  evs.push({ type: 'sort-mark', idx: 0 });
+  evs.push({ type: 'note', text: '✓ 排序完成' });
+  return evs;
+}
+
+/* ── Render ──────────────────────────────────────────────────── */
+
+function clearAll() {
+  treeArea.querySelectorAll('.hnode').forEach(d => d.remove());
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  arrRow.innerHTML = '';
+}
+
+function syncDOM() {
+  // Ensure each id has a tree node and array cell
+  const haveTree = new Set();
+  treeArea.querySelectorAll('.hnode').forEach(d => haveTree.add(+d.dataset.id));
+  const haveArr = new Set();
+  arrRow.querySelectorAll('.arr-cell').forEach(d => haveArr.add(+d.dataset.id));
+
+  // Unique ids = union of heap entries
+  const ids = new Set(heap);
+
+  for (const id of ids) {
+    if (!haveTree.has(id)) {
+      const d = document.createElement('div');
+      d.className = 'hnode';
+      d.dataset.id = id;
+      d.textContent = valueOf[id];
+      treeArea.appendChild(d);
+    }
+    if (!haveArr.has(id)) {
+      const d = document.createElement('div');
+      d.className = 'arr-cell';
+      d.dataset.id = id;
+      d.textContent = valueOf[id];
+      arrRow.appendChild(d);
+    }
+  }
+  // Remove DOM elements whose ids are no longer in heap
+  treeArea.querySelectorAll('.hnode').forEach(d => { if (!ids.has(+d.dataset.id)) d.remove(); });
+  arrRow.querySelectorAll('.arr-cell').forEach(d => { if (!ids.has(+d.dataset.id)) d.remove(); });
+
+  // Update array index labels
+  const existingIdx = arrRow.querySelectorAll('.arr-idx');
+  for (let k = existingIdx.length; k < heap.length; k++) {
+    const lbl = document.createElement('div');
+    lbl.className = 'arr-idx';
+    lbl.textContent = k;
+    arrRow.appendChild(lbl);
+  }
+  while (arrRow.querySelectorAll('.arr-idx').length > heap.length) {
+    const all = arrRow.querySelectorAll('.arr-idx');
+    all[all.length - 1].remove();
+  }
+}
+
+function layout(highlights = {}, dimAfter = null) {
+  syncDOM();
+  // Place each id at its current heap index in both views
+  for (let i = 0; i < heap.length; i++) {
+    const id = heap[i];
+    const tNode = treeArea.querySelector(`.hnode[data-id="${id}"]`);
+    const aCell = arrRow.querySelector(`.arr-cell[data-id="${id}"]`);
+    if (tNode) {
+      const p = nodePosForIndex(i);
+      tNode.style.left = p.x + 'px';
+      tNode.style.top  = p.y + 'px';
+      tNode.classList.remove('cmp', 'swap', 'sorted', 'dim');
+      if (dimAfter != null && i >= dimAfter) tNode.classList.add('sorted');
+      if (highlights.cmp && highlights.cmp.includes(i))   tNode.classList.add('cmp');
+      if (highlights.swap && highlights.swap.includes(i)) tNode.classList.add('swap');
+    }
+    if (aCell) {
+      aCell.style.left = arrCellLeft(i, heap.length) + 'px';
+      aCell.classList.remove('cmp', 'swap', 'sorted', 'dim');
+      if (dimAfter != null && i >= dimAfter) aCell.classList.add('sorted');
+      if (highlights.cmp && highlights.cmp.includes(i))   aCell.classList.add('cmp');
+      if (highlights.swap && highlights.swap.includes(i)) aCell.classList.add('swap');
+    }
+  }
+  // Update array index labels
+  arrRow.querySelectorAll('.arr-idx').forEach((lbl, k) => {
+    lbl.textContent = k;
+    lbl.style.left = arrCellLeft(k, heap.length) + 'px';
+    lbl.classList.toggle('last-sorted', dimAfter != null && k >= dimAfter);
+  });
+  // Redraw edges
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  for (let i = 0; i < heap.length; i++) {
+    const l = leftCh(i), r = rightCh(i);
+    const p = nodePosForIndex(i);
+    const drawEdge = (childIdx) => {
+      if (childIdx >= heap.length) return;
+      const c = nodePosForIndex(childIdx);
+      const x1 = p.x + NODE_SIZE / 2, y1 = p.y + NODE_SIZE;
+      const x2 = c.x + NODE_SIZE / 2, y2 = c.y;
+      const e = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      e.setAttribute('class', 'hedge');
+      e.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+      svg.appendChild(e);
+    };
+    drawEdge(l);
+    drawEdge(r);
+  }
+}
+
+function applyEvent(ev) {
+  if (ev.type === 'note') {
+    noteEl.innerHTML = ev.text;
+    return;
+  }
+  if (ev.type === 'add') {
+    const id = valueOf.length;
+    valueOf.push(ev.value);
+    heap.push(id);
+    layout({ cmp: [ev.atIdx] });
+    noteEl.innerHTML = `把 <strong style="color:#d97757">${ev.value}</strong> 加到数组末尾（树的最右下）`;
+    return;
+  }
+  if (ev.type === 'cmp') {
+    layout({ cmp: [ev.i, ev.j] }, sortedFromEnd > 0 ? heap.length - sortedFromEnd : null);
+    if (ev.vChild != null && ev.vParent != null) {
+      noteEl.innerHTML = `比较：<strong>${ev.vChild}</strong> ${ev.vChild > ev.vParent ? '&gt;' : '≤'} ${ev.vParent}`;
+    }
+    return;
+  }
+  if (ev.type === 'swap') {
+    [heap[ev.i], heap[ev.j]] = [heap[ev.j], heap[ev.i]];
+    layout({ swap: [ev.i, ev.j] }, sortedFromEnd > 0 ? heap.length - sortedFromEnd : null);
+    noteEl.innerHTML = `交换 heap[${ev.i}] 和 heap[${ev.j}]`;
+    return;
+  }
+  if (ev.type === 'no-swap') {
+    layout({}, sortedFromEnd > 0 ? heap.length - sortedFromEnd : null);
+    noteEl.innerHTML = `父节点已经更大 → 停止`;
+    return;
+  }
+  if (ev.type === 'init-sort') {
+    valueOf = [];
+    heap = [];
+    for (let i = 0; i < ev.heap.length; i++) {
+      valueOf.push(ev.heap[i]);
+      heap.push(i);
+    }
+    sortedFromEnd = 0;
+    layout();
+    return;
+  }
+  if (ev.type === 'sort-extract') {
+    [heap[ev.root], heap[ev.last]] = [heap[ev.last], heap[ev.root]];
+    layout({ swap: [ev.root, ev.last] }, heap.length - sortedFromEnd);
+    noteEl.innerHTML = `把根（最大值 <strong style="color:#4ade80">${ev.val}</strong>）和末尾交换 → 末尾就是排好的`;
+    return;
+  }
+  if (ev.type === 'sort-mark') {
+    sortedFromEnd = heap.length - ev.idx;
+    layout({}, ev.idx);
+    return;
+  }
+}
+
+function step() {
+  if (cursor + 1 >= events.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  applyEvent(events[cursor]);
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  clearAll();
+  heap = [];
+  valueOf = [];
+  sortedFromEnd = 0;
+  cursor = -1;
+  events = mode === 'insert' ? makeInsertEvents() : makeSortEvents();
+  noteEl.innerHTML = mode === 'insert'
+    ? '点 ▶ 把数列依次插入空堆'
+    : '点 ▶ 看堆排序怎么把已建堆变成有序数组';
+}
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= events.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+window.addEventListener('resize', () => layout({}, sortedFromEnd > 0 ? heap.length - sortedFromEnd : null));
+
+reset();
+</script>
+</body>
+</html>

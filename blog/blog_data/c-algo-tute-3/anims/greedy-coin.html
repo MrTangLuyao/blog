@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>greedy: coin change</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 8px; }
+
+  .target-row {
+    text-align: center;
+    padding: 8px;
+    font-size: 16px;
+    color: #a1a1a0;
+  }
+  .target-row .target-num {
+    display: inline-block;
+    min-width: 60px;
+    font-size: 28px;
+    font-weight: 800;
+    color: #d97757;
+    transition: color 0.3s, transform 0.3s;
+  }
+  .target-row.done .target-num {
+    color: #4ade80;
+    transform: scale(1.1);
+  }
+
+  .denom-row, .picked-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px;
+    min-height: 76px;
+  }
+
+  .denom-label, .picked-label {
+    text-align: center;
+    font-size: 12px;
+    color: #a1a1a0;
+    margin-top: 6px;
+  }
+
+  .coin {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 2px solid #3a3a39;
+    background: linear-gradient(180deg, rgba(217,119,87,0.4), rgba(217,119,87,0.7));
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 16px; font-weight: 800;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, background 0.3s;
+    position: relative;
+  }
+  .coin.too-big {
+    opacity: 0.3;
+    filter: grayscale(0.5);
+  }
+  .coin.choose {
+    transform: translateY(-8px) scale(1.12);
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 3px rgba(251,191,36,0.45), 0 8px 18px rgba(245,158,11,0.4);
+  }
+  .coin.picked {
+    background: linear-gradient(180deg, rgba(74,222,128,0.55), rgba(34,197,94,0.85));
+    border-color: rgba(74,222,128,0.7);
+    animation: coinDrop 0.5s cubic-bezier(0.34, 1.5, 0.64, 1);
+  }
+  @keyframes coinDrop {
+    from { opacity: 0; transform: translateY(-40px) scale(0.7); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .note {
+    text-align: center;
+    font-size: 12px;
+    padding: 4px;
+    min-height: 22px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：贪心 — 用最少的硬币凑出 N 元</div>
+
+<div class="controls">
+  <span class="label">凑：</span>
+  <input type="number" id="targetIn" value="87" min="1" max="999" style="width: 68px;">
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1400" value="900" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="target-row" id="targetRow">还差 <span class="target-num" id="targetNum">87</span> 元</div>
+
+  <div class="denom-label">每次贪心选<strong>不超过剩余金额的最大面值</strong>（黄色高亮的）</div>
+  <div class="denom-row" id="denomRow"></div>
+
+  <div class="picked-label">已选硬币（按选取顺序）</div>
+  <div class="picked-row" id="pickedRow"></div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">已用硬币数：</span><span class="stat-value" id="coinCount">0</span></span>
+  <span><span class="stat-label">合计：</span><span class="stat-value" id="totalSum">0</span> 元</span>
+</div>
+
+<script>
+const DENOMS = [100, 50, 25, 10, 5, 1];
+let target = 87;
+let remaining = target;
+let timer = null;
+
+const denomRow = document.getElementById('denomRow');
+const pickedRow = document.getElementById('pickedRow');
+const targetNum = document.getElementById('targetNum');
+const targetRow = document.getElementById('targetRow');
+const noteEl = document.getElementById('note');
+const targetIn = document.getElementById('targetIn');
+const stepBtn = document.getElementById('stepBtn');
+const autoBtn = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const coinCountEl = document.getElementById('coinCount');
+const totalSumEl = document.getElementById('totalSum');
+const speedEl = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+function buildDenoms() {
+  denomRow.innerHTML = '';
+  // Display in ascending order so visual reads naturally (1, 5, 10, ...)
+  const asc = [...DENOMS].reverse();
+  for (const d of asc) {
+    const c = document.createElement('div');
+    c.className = 'coin';
+    c.dataset.d = d;
+    c.textContent = d;
+    denomRow.appendChild(c);
+  }
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  target = Math.max(1, Math.min(999, +targetIn.value || 87));
+  remaining = target;
+  buildDenoms();
+  pickedRow.innerHTML = '';
+  targetNum.textContent = remaining;
+  targetRow.classList.remove('done');
+  coinCountEl.textContent = '0';
+  totalSumEl.textContent = '0';
+  noteEl.innerHTML = `要凑 <strong>${target}</strong> 元 — 点 ▶ 看贪心怎么挑`;
+  refreshDenomStates();
+}
+
+function refreshDenomStates() {
+  // Mark denoms that don't fit (> remaining) as 'too-big'; mark the chosen one as 'choose'
+  denomRow.querySelectorAll('.coin').forEach(c => c.classList.remove('too-big', 'choose'));
+  if (remaining <= 0) return;
+  // Find the largest denom ≤ remaining
+  const chosen = DENOMS.find(d => d <= remaining);
+  for (const c of denomRow.querySelectorAll('.coin')) {
+    const d = +c.dataset.d;
+    if (d > remaining) c.classList.add('too-big');
+    if (d === chosen) c.classList.add('choose');
+  }
+}
+
+function step() {
+  if (remaining <= 0) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  // Pick the largest denom ≤ remaining
+  const d = DENOMS.find(x => x <= remaining);
+  if (d == null) {
+    noteEl.innerHTML = `<span style="color:#f87171">没有面值能凑 ${remaining} 元</span>`;
+    return;
+  }
+  // Animate: drop a coin into pickedRow
+  const coin = document.createElement('div');
+  coin.className = 'coin picked';
+  coin.textContent = d;
+  pickedRow.appendChild(coin);
+
+  remaining -= d;
+  targetNum.textContent = remaining;
+
+  const used = pickedRow.children.length;
+  coinCountEl.textContent = used;
+  totalSumEl.textContent = target - remaining;
+
+  if (remaining === 0) {
+    noteEl.innerHTML = `<strong style="color:#4ade80">✓ 凑齐 ${target} 元，共用了 ${used} 个硬币</strong>`;
+    targetRow.classList.add('done');
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  } else {
+    noteEl.innerHTML = `挑一个 <strong style="color:#fbbf24">${d}</strong>（剩余 ${remaining + d} 元里最大的不超过它的面值），还差 <strong>${remaining}</strong>`;
+  }
+  refreshDenomStates();
+}
+
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+targetIn.addEventListener('change', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (remaining <= 0) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

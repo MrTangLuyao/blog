@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tree traversal</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 6px; }
+  .tree-area {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    min-height: 220px;
+  }
+  .tree-svg {
+    position: absolute; inset: 0; pointer-events: none; overflow: visible;
+  }
+  .tedge {
+    stroke: rgba(255,255,255,0.18);
+    stroke-width: 2;
+    fill: none;
+    transition: stroke 0.4s, stroke-width 0.4s;
+  }
+  .tedge.passed {
+    stroke: rgba(74,222,128,0.55);
+  }
+  .tedge.descending {
+    stroke: #d97757;
+    stroke-width: 3;
+    stroke-dasharray: 4 4;
+    animation: dashflow 0.7s linear infinite;
+  }
+  @keyframes dashflow { to { stroke-dashoffset: -16; } }
+
+  .tnode {
+    position: absolute;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1.5px solid #3a3a39;
+    background: rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center; justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #c8c8c7;
+    transition:
+      border-color 0.35s,
+      background 0.35s,
+      color 0.35s,
+      transform 0.35s cubic-bezier(0.34, 1.5, 0.64, 1),
+      box-shadow 0.35s;
+  }
+  .tnode.visited { border-color: rgba(74,222,128,0.55); background: rgba(74,222,128,0.13); color: #d8ffe1; }
+  .tnode.current {
+    border-color: #d97757;
+    background: rgba(217,119,87,0.25);
+    color: #ffe4d4;
+    transform: scale(1.18);
+    box-shadow: 0 0 0 3px rgba(217,119,87,0.3), 0 4px 14px rgba(217,119,87,0.4);
+  }
+
+  .visited-row {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 6px 8px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .vchip {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    min-width: 28px; height: 28px;
+    padding: 0 8px;
+    border-radius: 14px;
+    background: rgba(74,222,128,0.18);
+    border: 1px solid rgba(74,222,128,0.5);
+    color: #d8ffe1;
+    font-weight: 700;
+    font-size: 13px;
+    animation: chipIn 0.32s cubic-bezier(0.34, 1.5, 0.64, 1);
+  }
+  .vchip.cur {
+    background: rgba(217,119,87,0.25);
+    border-color: #d97757;
+    color: #ffe4d4;
+  }
+  @keyframes chipIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.7); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .visited-label {
+    font-size: 11px;
+    color: #a1a1a0;
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：二叉树的 4 种遍历</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button class="active" data-mode="pre">前序</button>
+    <button data-mode="in">中序</button>
+    <button data-mode="post">后序</button>
+    <button data-mode="level">层序</button>
+  </div>
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="200" max="1500" value="700" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="stage">
+  <div class="tree-area" id="treeArea">
+    <svg class="tree-svg" id="svg"></svg>
+  </div>
+  <div class="visited-row" id="visited">
+    <span class="visited-label">访问顺序：</span>
+  </div>
+</div>
+
+<script>
+/* Tree:
+ *           4
+ *          / \
+ *         2   6
+ *        / \ / \
+ *       1  3 5  7
+ */
+const NODES = [
+  { id: 4, level: 0, slot: 0 },
+  { id: 2, level: 1, slot: 0, parent: 4, isLeft: true },
+  { id: 6, level: 1, slot: 1, parent: 4, isLeft: false },
+  { id: 1, level: 2, slot: 0, parent: 2, isLeft: true },
+  { id: 3, level: 2, slot: 1, parent: 2, isLeft: false },
+  { id: 5, level: 2, slot: 2, parent: 6, isLeft: true },
+  { id: 7, level: 2, slot: 3, parent: 6, isLeft: false },
+];
+
+const SLOTS_AT_LEVEL = [1, 2, 4];
+const NODE_SIZE = 38;
+
+function lr(id) {
+  const left  = NODES.find(n => n.parent === id && n.isLeft);
+  const right = NODES.find(n => n.parent === id && !n.isLeft);
+  return { left: left?.id, right: right?.id };
+}
+
+function preOrder(id, out = []) {
+  if (id == null) return out;
+  out.push(id);
+  const { left, right } = lr(id);
+  preOrder(left, out);
+  preOrder(right, out);
+  return out;
+}
+function inOrder(id, out = []) {
+  if (id == null) return out;
+  const { left, right } = lr(id);
+  inOrder(left, out);
+  out.push(id);
+  inOrder(right, out);
+  return out;
+}
+function postOrder(id, out = []) {
+  if (id == null) return out;
+  const { left, right } = lr(id);
+  postOrder(left, out);
+  postOrder(right, out);
+  out.push(id);
+  return out;
+}
+function levelOrder() {
+  const out = [];
+  const q = [4];
+  while (q.length) {
+    const id = q.shift();
+    out.push(id);
+    const { left, right } = lr(id);
+    if (left  != null) q.push(left);
+    if (right != null) q.push(right);
+  }
+  return out;
+}
+
+const treeArea = document.getElementById('treeArea');
+const svg      = document.getElementById('svg');
+const visited  = document.getElementById('visited');
+const stepBtn  = document.getElementById('stepBtn');
+const autoBtn  = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedEl  = document.getElementById('speed');
+
+const nodeEls = new Map();   // id -> div
+const edgeEls = new Map();   // childId -> path
+let mode = 'pre';
+let order = [];
+let cursor = -1;
+let timer = null;
+
+function buildTree() {
+  treeArea.querySelectorAll('.tnode').forEach(d => d.remove());
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  nodeEls.clear();
+  edgeEls.clear();
+
+  const W = treeArea.clientWidth;
+  const H = treeArea.clientHeight;
+  const levelHeight = (H - 36) / 3;
+
+  // Compute node positions
+  const positions = new Map();
+  for (const n of NODES) {
+    const slots = SLOTS_AT_LEVEL[n.level];
+    const x = ((n.slot + 0.5) / slots) * W - NODE_SIZE / 2;
+    const y = 14 + n.level * levelHeight;
+    positions.set(n.id, { x, y });
+  }
+
+  // Edges
+  for (const n of NODES) {
+    if (n.parent == null) continue;
+    const p = positions.get(n.parent);
+    const c = positions.get(n.id);
+    const x1 = p.x + NODE_SIZE/2, y1 = p.y + NODE_SIZE;
+    const x2 = c.x + NODE_SIZE/2, y2 = c.y;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('class', 'tedge');
+    path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+    svg.appendChild(path);
+    edgeEls.set(n.id, path);
+  }
+
+  // Nodes
+  for (const n of NODES) {
+    const pos = positions.get(n.id);
+    const dom = document.createElement('div');
+    dom.className = 'tnode';
+    dom.dataset.id = n.id;
+    dom.textContent = n.id;
+    dom.style.left = pos.x + 'px';
+    dom.style.top  = pos.y + 'px';
+    treeArea.appendChild(dom);
+    nodeEls.set(n.id, dom);
+  }
+}
+
+function computeOrder() {
+  order = mode === 'pre'   ? preOrder(4)
+        : mode === 'in'    ? inOrder(4)
+        : mode === 'post'  ? postOrder(4)
+        : levelOrder();
+}
+
+function paint() {
+  // Reset all classes
+  for (const dom of nodeEls.values()) dom.classList.remove('visited', 'current');
+  for (const path of edgeEls.values()) path.classList.remove('passed', 'descending');
+
+  // Mark visited up to cursor
+  for (let i = 0; i < cursor; i++) {
+    const id = order[i];
+    nodeEls.get(id).classList.add('visited');
+    const e = edgeEls.get(id);
+    if (e) e.classList.add('passed');
+  }
+  // Current
+  if (cursor >= 0 && cursor < order.length) {
+    const id = order[cursor];
+    nodeEls.get(id).classList.add('current');
+  }
+
+  // Visited row
+  visited.innerHTML = '<span class="visited-label">访问顺序：</span>';
+  for (let i = 0; i <= cursor; i++) {
+    if (i >= order.length) break;
+    const chip = document.createElement('span');
+    chip.className = 'vchip' + (i === cursor ? ' cur' : '');
+    chip.textContent = order[i];
+    visited.appendChild(chip);
+  }
+}
+
+function step() {
+  if (cursor + 1 >= order.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  buildTree();
+  computeOrder();
+  cursor = -1;
+  paint();
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= order.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+window.addEventListener('resize', () => reset());
+
+reset();
+</script>
+</body>
+</html>

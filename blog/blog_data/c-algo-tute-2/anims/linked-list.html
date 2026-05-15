@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>linked list</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; align-items: stretch; gap: 8px; }
+  .canvas {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .canvas-inner {
+    position: relative;
+    height: 100%;
+    min-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ll-node {
+    position: absolute;
+    width: 56px; height: 60px;
+    display: flex; flex-direction: column;
+    align-items: stretch; justify-content: stretch;
+    border-radius: 8px;
+    border: 1px solid #3a3a39;
+    background: rgba(255,255,255,0.06);
+    transition:
+      left 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+      top 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.4s cubic-bezier(0.34, 1.5, 0.64, 1),
+      opacity 0.4s, border-color 0.3s, background 0.3s, box-shadow 0.3s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .ll-node.entering { animation: nodeIn 0.45s cubic-bezier(0.34, 1.5, 0.64, 1); }
+  .ll-node.leaving  { animation: nodeOut 0.4s ease forwards; pointer-events: none; }
+  .ll-node.active   { border-color: #d97757; background: rgba(217,119,87,0.13); box-shadow: 0 0 0 2px rgba(217,119,87,0.25); }
+  .ll-node.target   { border-color: #fbbf24; background: rgba(251,191,36,0.14); box-shadow: 0 0 0 2px rgba(251,191,36,0.4); transform: translateY(-6px); }
+  .ll-node .val {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; color: #e8e8e8;
+    border-bottom: 1px solid #3a3a39;
+  }
+  .ll-node .ptrs {
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    font-size: 9px;
+    color: #a1a1a0;
+    background: rgba(0,0,0,0.18);
+    border-radius: 0 0 7px 7px;
+  }
+  .ll-node .ptrs .pn { color: #4ade80; }
+  .ll-node .ptrs .pp { color: #38bdf8; }
+
+  .ll-null {
+    position: absolute;
+    width: 56px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    border: 1px dashed #3a3a39;
+    color: #666;
+    font-size: 11px;
+    font-weight: 600;
+    transition: left 0.45s, opacity 0.4s;
+  }
+
+  .ll-head {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 700;
+    color: #d97757;
+    top: 6px;
+    transform: translateX(-50%);
+    transition: left 0.45s, opacity 0.3s;
+    pointer-events: none;
+  }
+
+  @keyframes nodeIn {
+    from { opacity: 0; transform: translateY(-30px) scale(0.7); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes nodeOut {
+    from { opacity: 1; transform: none; }
+    to   { opacity: 0; transform: translateY(28px) scale(0.7); }
+  }
+
+  /* SVG arrow layer for next/prev pointers */
+  .ll-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .ll-edge {
+    stroke: #888;
+    stroke-width: 2;
+    fill: none;
+    transition: stroke 0.4s, opacity 0.4s, d 0.45s;
+    marker-end: url(#arrowHead);
+  }
+  .ll-edge.next  { stroke: rgba(74,222,128,0.7); }
+  .ll-edge.prev  { stroke: rgba(56,189,248,0.7); }
+  .ll-edge.dim   { opacity: 0.18; stroke-dasharray: 4 3; }
+  .ll-edge.flash {
+    stroke: #fbbf24;
+    stroke-width: 3;
+    animation: edgeFlash 0.5s ease;
+  }
+  @keyframes edgeFlash {
+    0%   { stroke: #fbbf24; }
+    100% { stroke: var(--final-stroke, rgba(74,222,128,0.7)); }
+  }
+
+  .note { padding: 0 6px; }
+</style>
+</head>
+<body>
+
+<div class="title">案例：链表（指针拆接）</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button class="active" data-mode="single">单链表</button>
+    <button data-mode="double">双链表</button>
+  </div>
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1100" value="700" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="canvas">
+    <div class="canvas-inner" id="canvasInner">
+      <svg class="ll-svg" id="svg">
+        <defs>
+          <marker id="arrowHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#888" />
+          </marker>
+        </defs>
+      </svg>
+      <div class="ll-head" id="headPtr">head ↓</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const svg     = document.getElementById('svg');
+const inner   = document.getElementById('canvasInner');
+const headPtr = document.getElementById('headPtr');
+const noteEl  = document.getElementById('note');
+const stepBtn = document.getElementById('stepBtn');
+const autoBtn = document.getElementById('autoBtn');
+const resetBtn= document.getElementById('resetBtn');
+const speedEl = document.getElementById('speed');
+
+const NODE_W = 56;
+const GAP    = 36;
+const NODE_TOP = 30;
+
+let mode = 'single';
+let timer = null;
+let cursor = -1;
+let scenario = [];   // sequence of operations to demonstrate
+let state = null;    // current list state
+
+/* Node identities — each value gets a stable id so we can animate it across ops */
+let idCounter = 0;
+function newId() { return idCounter++; }
+
+function makeScenario(modeIn) {
+  // Demonstrate: build [3, 7, 2], insert 5 at head, insert 8 between 7 and 2, delete 7
+  return [
+    { kind: 'init', vals: [3, 7, 2] },
+    { kind: 'insert-head', val: 5 },
+    { kind: 'insert-after', afterVal: 7, val: 8 },
+    { kind: 'delete', val: 7 },
+  ];
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  cursor = -1;
+  scenario = makeScenario(mode);
+  state = null;
+  inner.querySelectorAll('.ll-node, .ll-null').forEach(d => d.remove());
+  while (svg.querySelector('.ll-edge')) svg.querySelector('.ll-edge').remove();
+  headPtr.style.opacity = '0';
+  noteEl.innerHTML = '';
+}
+
+function step() {
+  if (cursor + 1 >= scenario.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  const op = scenario[cursor];
+
+  if (op.kind === 'init') {
+    state = op.vals.map(v => ({ id: newId(), v }));
+    noteEl.textContent = '从一个 3 元素的链表开始';
+  } else if (op.kind === 'insert-head') {
+    state.unshift({ id: newId(), v: op.val });
+    noteEl.innerHTML = `<strong style="color:#d97757">在头部插入 ${op.val}</strong>：新节点的 next 指向原 head，head 指针改指向新节点`;
+  } else if (op.kind === 'insert-after') {
+    const idx = state.findIndex(n => n.v === op.afterVal);
+    if (idx >= 0) {
+      state.splice(idx + 1, 0, { id: newId(), v: op.val });
+      noteEl.innerHTML = `<strong style="color:#d97757">在 ${op.afterVal} 之后插入 ${op.val}</strong>：把 ${op.afterVal}.next 重接到新节点，新节点 next 接到 ${state[idx+2]?.v ?? 'NULL'}`;
+    }
+  } else if (op.kind === 'delete') {
+    const idx = state.findIndex(n => n.v === op.val);
+    if (idx >= 0) {
+      state.splice(idx, 1);
+      noteEl.innerHTML = `<strong style="color:#d97757">删除 ${op.val}</strong>：让前一个节点的 next 越过它，直接指向后面那个`;
+    }
+  }
+
+  render();
+}
+
+function render() {
+  if (!state) return;
+  const totalW = state.length * NODE_W + (state.length) * GAP + NODE_W; // include trailing NULL
+  inner.style.minWidth = totalW + 'px';
+
+  const startX = Math.max(20, (inner.clientWidth - totalW) / 2);
+
+  // Track the existing DOM nodes by id; create new ones as needed
+  const existingMap = new Map();
+  inner.querySelectorAll('.ll-node').forEach(d => existingMap.set(+d.dataset.id, d));
+  const used = new Set();
+
+  for (let i = 0; i < state.length; i++) {
+    const { id, v } = state[i];
+    used.add(id);
+    let dom = existingMap.get(id);
+    if (!dom) {
+      dom = document.createElement('div');
+      dom.className = 'll-node entering';
+      dom.dataset.id = id;
+      dom.innerHTML = `
+        <div class="val">${v}</div>
+        <div class="ptrs">${mode === 'double' ? '<span class="pp">prev</span><span class="pn">next</span>' : '<span class="pn">next</span>'}</div>
+      `;
+      inner.appendChild(dom);
+    }
+    const x = startX + i * (NODE_W + GAP);
+    dom.style.left = x + 'px';
+    dom.style.top  = NODE_TOP + 'px';
+  }
+
+  // Remove nodes that are no longer in state (animate out then remove)
+  existingMap.forEach((dom, id) => {
+    if (!used.has(id)) {
+      dom.classList.add('leaving');
+      setTimeout(() => dom.remove(), 400);
+    }
+  });
+
+  // NULL terminator
+  let nullDom = inner.querySelector('.ll-null');
+  if (!nullDom) {
+    nullDom = document.createElement('div');
+    nullDom.className = 'll-null';
+    nullDom.textContent = 'NULL';
+    inner.appendChild(nullDom);
+  }
+  const nullX = startX + state.length * (NODE_W + GAP);
+  nullDom.style.left = nullX + 'px';
+  nullDom.style.top  = (NODE_TOP + 16) + 'px';
+
+  // Head pointer label
+  if (state.length > 0) {
+    headPtr.style.opacity = '1';
+    headPtr.style.left = (startX + NODE_W / 2) + 'px';
+  } else {
+    headPtr.style.opacity = '0';
+  }
+
+  // Edges (next pointers, optionally prev for doubly)
+  // Clear existing edges then redraw
+  while (svg.querySelector('.ll-edge')) svg.querySelector('.ll-edge').remove();
+  for (let i = 0; i < state.length; i++) {
+    const x1 = startX + i * (NODE_W + GAP) + NODE_W;
+    const y  = NODE_TOP + 60 - 10;  // bottom-ish of the node
+    const x2 = startX + (i + 1) * (NODE_W + GAP);
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    e.setAttribute('class', 'll-edge next');
+    e.setAttribute('d', `M ${x1} ${y} L ${x2 - 4} ${y}`);
+    svg.appendChild(e);
+
+    if (mode === 'double' && i > 0) {
+      const prevY = NODE_TOP + 6;
+      const px1 = startX + i * (NODE_W + GAP);
+      const px2 = startX + (i - 1) * (NODE_W + GAP) + NODE_W;
+      const ep = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      ep.setAttribute('class', 'll-edge prev');
+      ep.setAttribute('d', `M ${px1} ${prevY} L ${px2 + 4} ${prevY}`);
+      svg.appendChild(ep);
+    }
+  }
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= scenario.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+window.addEventListener('resize', () => { if (state) render(); });
+
+reset();
+</script>
+</body>
+</html>

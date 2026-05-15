@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>naive vs kmp vs bmh</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 8px; }
+  .text-row {
+    display: flex;
+    gap: 2px;
+  }
+  .ch {
+    width: 28px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #3a3a39;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.04);
+    font-size: 14px;
+    font-weight: 700;
+    color: #c8c8c7;
+    transition: background 0.25s, color 0.25s, border-color 0.25s, transform 0.25s, box-shadow 0.3s;
+    flex-shrink: 0;
+  }
+  .ch.cmp     { background: rgba(251,191,36,0.25); border-color: #fbbf24; color: #fef3c7; transform: translateY(-3px); box-shadow: 0 4px 10px rgba(245,158,11,0.3); }
+  .ch.match   { background: rgba(74,222,128,0.22); border-color: rgba(74,222,128,0.65); color: #d8ffe1; }
+  .ch.miss    { background: rgba(248,113,113,0.25); border-color: #f87171; color: #fecaca; }
+  .ch.found   { background: rgba(74,222,128,0.4); border-color: #4ade80; color: #d8ffe1; box-shadow: 0 0 0 2px rgba(74,222,128,0.4); }
+  .ch.trigger { background: rgba(56,189,248,0.3); border-color: #38bdf8; color: #cce8ff; }
+
+  .pat-track {
+    position: relative;
+    padding: 4px 8px;
+    height: 38px;
+  }
+  .pat-window {
+    position: absolute;
+    display: flex;
+    gap: 2px;
+    transition: left 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+    top: 4px;
+  }
+
+  .text-track {
+    padding: 4px 8px;
+    position: relative;
+  }
+
+  .lane {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+    padding: 6px;
+  }
+  .lane-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 0 6px;
+  }
+  .lane-title { font-size: 12px; font-weight: 700; color: #d97757; }
+  .lane-stat { font-size: 11px; color: #a1a1a0; }
+  .lane-stat strong { color: #d97757; }
+
+  /* Side table — used for both BMH shift table and KMP next[] table */
+  .table-box {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(56,189,248,0.05);
+  }
+  .table-title {
+    font-size: 11px;
+    color: #38bdf8;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  /* BMH shift table: list of key→value pills */
+  .shift-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .shift-cell {
+    display: inline-flex;
+    align-items: center; gap: 6px;
+    border: 1px solid #3a3a39;
+    border-radius: 6px;
+    padding: 4px 10px;
+    background: rgba(56,189,248,0.10);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    transition: background 0.3s, transform 0.3s, box-shadow 0.3s;
+  }
+  .shift-cell .key { color: #fef3c7; font-weight: 700; }
+  .shift-cell .arr { color: #888; }
+  .shift-cell .val { color: #38bdf8; font-weight: 700; }
+  .shift-cell.used {
+    background: rgba(56,189,248,0.4);
+    transform: translateY(-3px) scale(1.08);
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.5), 0 4px 10px rgba(14,165,233,0.4);
+  }
+
+  /* KMP next[] table: 2-row strip (pattern char on top, next[] value below) */
+  .next-strip {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .next-line {
+    display: flex;
+    gap: 2px;
+  }
+  .next-cell {
+    width: 28px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #3a3a39;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    transition: background 0.3s, transform 0.3s, box-shadow 0.3s;
+  }
+  .next-cell.head { background: rgba(255,255,255,0.04); color: #c8c8c7; }
+  .next-cell.val  { background: rgba(56,189,248,0.10); color: #38bdf8; }
+  .next-cell.used {
+    background: rgba(56,189,248,0.4);
+    transform: translateY(-3px) scale(1.1);
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.5);
+  }
+
+  .note {
+    text-align: center;
+    font-size: 12px;
+    padding: 4px;
+    min-height: 22px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：字符串匹配 — 朴素 vs KMP vs BMH</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button data-mode="naive">朴素</button>
+    <button data-mode="kmp">KMP</button>
+    <button class="active" data-mode="bmh">BMH</button>
+  </div>
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1400" value="800" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="lane">
+    <div class="lane-head">
+      <span class="lane-title">主串（黄=正在比较 · 蓝=触发跳跃的字符）</span>
+      <span class="lane-stat">比较次数 <strong id="cmpCount">0</strong></span>
+    </div>
+    <div class="text-track">
+      <div class="text-row" id="textRow"></div>
+    </div>
+    <div class="pat-track" id="patTrack">
+      <div class="pat-window" id="patWindow"></div>
+    </div>
+  </div>
+
+  <!-- KMP next[] table (shown only in KMP mode) -->
+  <div class="table-box" id="nextBox" style="display:none;">
+    <div class="table-title">KMP 失败函数 next[] · 不匹配时让 j 跳到 next[j-1]，i 不回退</div>
+    <div class="next-strip" id="nextStrip"></div>
+  </div>
+
+  <!-- BMH shift table (shown only in BMH mode) -->
+  <div class="table-box" id="shiftBox" style="display:none;">
+    <div class="table-title">BMH 滑表 shift[c] · 不匹配时整段 pattern 往右滑（不在表里的默认 = 模式串长度 m）</div>
+    <div class="shift-row" id="shiftRow"></div>
+  </div>
+</div>
+
+<script>
+const TEXT    = "ABCABCABCDEF";
+const PATTERN = "ABCABCDEF";
+
+function computeNext(p) {
+  const m = p.length;
+  const next = new Array(m).fill(0);
+  let k = 0;
+  for (let i = 1; i < m; i++) {
+    while (k > 0 && p[i] !== p[k]) k = next[k - 1];
+    if (p[i] === p[k]) k++;
+    next[i] = k;
+  }
+  return next;
+}
+function buildShift(p) {
+  const m = p.length;
+  const tbl = {};
+  for (let i = 0; i < m - 1; i++) tbl[p[i]] = m - 1 - i;
+  return tbl;
+}
+const NEXT  = computeNext(PATTERN);
+const SHIFT = buildShift(PATTERN);
+
+function naiveEvents() {
+  const evs = [];
+  const n = TEXT.length, m = PATTERN.length;
+  outer: for (let i = 0; i <= n - m; i++) {
+    evs.push({ type: 'align', patStart: i });
+    for (let j = 0; j < m; j++) {
+      evs.push({ type: 'cmp', textPos: i + j, patPos: j, patStart: i });
+      if (TEXT[i + j] !== PATTERN[j]) {
+        evs.push({ type: 'miss', textPos: i + j, patPos: j, patStart: i });
+        evs.push({ type: 'shift1', from: i, to: i + 1 });
+        break;
+      }
+      if (j === m - 1) {
+        evs.push({ type: 'found', patStart: i });
+        break outer;
+      }
+    }
+  }
+  return evs;
+}
+
+function kmpEvents() {
+  const evs = [];
+  const n = TEXT.length, m = PATTERN.length;
+  let i = 0, j = 0;
+  evs.push({ type: 'align', patStart: 0 });
+  while (i < n) {
+    evs.push({ type: 'cmp', textPos: i, patPos: j, patStart: i - j });
+    if (TEXT[i] === PATTERN[j]) {
+      i++; j++;
+      if (j === m) { evs.push({ type: 'found', patStart: i - m }); break; }
+    } else {
+      evs.push({ type: 'miss', textPos: i, patPos: j, patStart: i - j });
+      if (j > 0) {
+        const newJ = NEXT[j - 1];
+        evs.push({ type: 'kmp-jump', useNextIdx: j - 1, newJ, newPatStart: i - newJ });
+        j = newJ;
+      } else {
+        i++;
+        if (i <= n - m) evs.push({ type: 'align', patStart: i });
+      }
+    }
+  }
+  return evs;
+}
+
+function bmhEvents() {
+  const evs = [];
+  const n = TEXT.length, m = PATTERN.length;
+  evs.push({ type: 'align', patStart: 0 });
+  let i = 0;
+  while (i <= n - m) {
+    let matched = true;
+    for (let j = m - 1; j >= 0; j--) {
+      evs.push({ type: 'cmp', textPos: i + j, patPos: j, patStart: i });
+      if (TEXT[i + j] !== PATTERN[j]) {
+        evs.push({ type: 'miss', textPos: i + j, patPos: j, patStart: i });
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      evs.push({ type: 'found', patStart: i });
+      return evs;
+    }
+    const triggerChar = TEXT[i + m - 1];
+    const shift = (triggerChar in SHIFT) ? SHIFT[triggerChar] : m;
+    evs.push({ type: 'bmh-shift', triggerPos: i + m - 1, triggerChar, amount: shift, from: i, to: i + shift });
+    i += shift;
+    if (i <= n - m) evs.push({ type: 'align', patStart: i });
+  }
+  return evs;
+}
+
+const textRow = document.getElementById('textRow');
+const patWindow = document.getElementById('patWindow');
+const shiftBox = document.getElementById('shiftBox');
+const shiftRow = document.getElementById('shiftRow');
+const nextBox = document.getElementById('nextBox');
+const nextStrip = document.getElementById('nextStrip');
+const noteEl = document.getElementById('note');
+const cmpCountEl = document.getElementById('cmpCount');
+const stepBtn = document.getElementById('stepBtn');
+const autoBtn = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedEl = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+const CELL_W = 28, CELL_GAP = 2, PAD = 8;
+let mode = 'bmh';
+let events = [];
+let cursor = -1;
+let timer = null;
+let compares = 0;
+
+function buildText() {
+  textRow.innerHTML = '';
+  for (let i = 0; i < TEXT.length; i++) {
+    const c = document.createElement('div');
+    c.className = 'ch';
+    c.dataset.idx = i;
+    c.textContent = TEXT[i];
+    textRow.appendChild(c);
+  }
+}
+function buildPattern() {
+  patWindow.innerHTML = '';
+  for (let j = 0; j < PATTERN.length; j++) {
+    const c = document.createElement('div');
+    c.className = 'ch';
+    c.dataset.idx = j;
+    c.textContent = PATTERN[j];
+    patWindow.appendChild(c);
+  }
+}
+function buildShiftRow() {
+  shiftRow.innerHTML = '';
+  for (const [k, v] of Object.entries(SHIFT)) {
+    const cell = document.createElement('div');
+    cell.className = 'shift-cell';
+    cell.dataset.key = k;
+    cell.innerHTML = `<span class="key">${k}</span><span class="arr">→</span><span class="val">${v}</span>`;
+    shiftRow.appendChild(cell);
+  }
+  const cell = document.createElement('div');
+  cell.className = 'shift-cell';
+  cell.dataset.key = '__default';
+  cell.innerHTML = `<span class="key">其他</span><span class="arr">→</span><span class="val">${PATTERN.length}</span>`;
+  shiftRow.appendChild(cell);
+}
+function buildNextStrip() {
+  nextStrip.innerHTML = '';
+  const headLine = document.createElement('div');
+  headLine.className = 'next-line';
+  for (let j = 0; j < PATTERN.length; j++) {
+    const c = document.createElement('div');
+    c.className = 'next-cell head';
+    c.textContent = PATTERN[j];
+    headLine.appendChild(c);
+  }
+  nextStrip.appendChild(headLine);
+
+  const valLine = document.createElement('div');
+  valLine.className = 'next-line';
+  for (let j = 0; j < PATTERN.length; j++) {
+    const c = document.createElement('div');
+    c.className = 'next-cell val';
+    c.dataset.idx = j;
+    c.textContent = NEXT[j];
+    valLine.appendChild(c);
+  }
+  nextStrip.appendChild(valLine);
+}
+
+function patStartLeftPx(patStart) {
+  return PAD + patStart * (CELL_W + CELL_GAP);
+}
+
+function clearMarks() {
+  textRow.querySelectorAll('.ch').forEach(c => c.classList.remove('cmp', 'match', 'miss', 'found', 'trigger'));
+  patWindow.querySelectorAll('.ch').forEach(c => c.classList.remove('cmp', 'match', 'miss', 'found'));
+  shiftRow.querySelectorAll('.shift-cell').forEach(c => c.classList.remove('used'));
+  nextStrip.querySelectorAll('.next-cell').forEach(c => c.classList.remove('used'));
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  events = mode === 'naive' ? naiveEvents()
+         : mode === 'kmp'   ? kmpEvents()
+         :                    bmhEvents();
+  cursor = -1;
+  compares = 0;
+  cmpCountEl.textContent = '0';
+  buildText();
+  buildPattern();
+  buildShiftRow();
+  buildNextStrip();
+  patWindow.style.left = patStartLeftPx(0) + 'px';
+  shiftBox.style.display = mode === 'bmh' ? 'block' : 'none';
+  nextBox.style.display  = mode === 'kmp' ? 'block' : 'none';
+  if (mode === 'naive')      noteEl.textContent = '朴素：从左往右扫；失败时整体右移 1 位';
+  else if (mode === 'kmp')   noteEl.textContent = 'KMP：从左往右扫；失败时用 next[] 让 j 跳过已匹配的前缀，i 不回退';
+  else                       noteEl.textContent = 'BMH：从右往左扫；失败时用 shift 表让 pattern 一次右滑很多位';
+}
+
+function paint() {
+  clearMarks();
+  if (cursor < 0) return;
+
+  let patStart = 0;
+  let lastEv = null;
+  compares = 0;
+  let lastShiftKey = null;
+  let lastNextIdx = null;
+  for (let e = 0; e <= cursor; e++) {
+    const ev = events[e];
+    lastEv = ev;
+    if (ev.type === 'align') patStart = ev.patStart;
+    else if (ev.type === 'cmp') compares++;
+    else if (ev.type === 'shift1') patStart = ev.to;
+    else if (ev.type === 'kmp-jump') {
+      patStart = ev.newPatStart;
+      lastNextIdx = ev.useNextIdx;
+    }
+    else if (ev.type === 'bmh-shift') {
+      patStart = ev.to;
+      lastShiftKey = (ev.triggerChar in SHIFT) ? ev.triggerChar : '__default';
+    }
+  }
+
+  patWindow.style.left = patStartLeftPx(patStart) + 'px';
+
+  if (lastEv) {
+    if (lastEv.type === 'cmp') {
+      const tDom = textRow.children[lastEv.textPos];
+      const pDom = patWindow.children[lastEv.patPos];
+      if (tDom) tDom.classList.add('cmp');
+      if (pDom) pDom.classList.add('cmp');
+      if (mode === 'bmh') {
+        for (let pp = lastEv.patPos + 1; pp < PATTERN.length; pp++) {
+          const tD = textRow.children[lastEv.patStart + pp];
+          const pD = patWindow.children[pp];
+          if (tD) tD.classList.add('match');
+          if (pD) pD.classList.add('match');
+        }
+      } else {
+        for (let pp = 0; pp < lastEv.patPos; pp++) {
+          const tD = textRow.children[lastEv.patStart + pp];
+          const pD = patWindow.children[pp];
+          if (tD) tD.classList.add('match');
+          if (pD) pD.classList.add('match');
+        }
+      }
+      noteEl.innerHTML = `比较 text[${lastEv.textPos}]=<strong>${TEXT[lastEv.textPos]}</strong> 与 pattern[${lastEv.patPos}]=<strong>${PATTERN[lastEv.patPos]}</strong>`;
+    } else if (lastEv.type === 'miss') {
+      const tDom = textRow.children[lastEv.textPos];
+      const pDom = patWindow.children[lastEv.patPos];
+      if (tDom) tDom.classList.add('miss');
+      if (pDom) pDom.classList.add('miss');
+      noteEl.innerHTML = `<span style="color:#f87171">不匹配</span>`;
+    } else if (lastEv.type === 'shift1') {
+      noteEl.innerHTML = `<span style="color:#f87171">朴素：</span>整体右移 <strong>1</strong> 位，j 重置为 0`;
+    } else if (lastEv.type === 'kmp-jump') {
+      const cell = nextStrip.querySelector(`.next-cell[data-idx="${lastEv.useNextIdx}"]`);
+      if (cell) cell.classList.add('used');
+      noteEl.innerHTML = `<span style="color:#38bdf8">KMP：</span>查 next[${lastEv.useNextIdx}] = <strong>${lastEv.newJ}</strong>，j 跳到 ${lastEv.newJ}，<strong>i 不回退</strong>`;
+    } else if (lastEv.type === 'bmh-shift') {
+      const tDom = textRow.children[lastEv.triggerPos];
+      if (tDom) tDom.classList.add('trigger');
+      if (lastShiftKey) {
+        const sCell = shiftRow.querySelector(`.shift-cell[data-key="${CSS.escape(lastShiftKey)}"]`);
+        if (sCell) sCell.classList.add('used');
+      }
+      noteEl.innerHTML = `<span style="color:#38bdf8">BMH：</span>窗口最右字符 <strong>${lastEv.triggerChar}</strong> → 查表 <strong style="color:#38bdf8">shift = ${lastEv.amount}</strong>，pattern 一次右滑 <strong>${lastEv.amount}</strong> 位`;
+    } else if (lastEv.type === 'align') {
+      noteEl.innerHTML = `对齐：模式串从 text[${lastEv.patStart}] 开始尝试`;
+    } else if (lastEv.type === 'found') {
+      for (let pp = 0; pp < PATTERN.length; pp++) {
+        const tD = textRow.children[lastEv.patStart + pp];
+        const pD = patWindow.children[pp];
+        if (tD) tD.classList.add('found');
+        if (pD) pD.classList.add('found');
+      }
+      noteEl.innerHTML = `<strong style="color:#4ade80">✓ 匹配成功，起始位置 ${lastEv.patStart}（共 ${compares} 次比较）</strong>`;
+    }
+  }
+
+  cmpCountEl.textContent = compares;
+}
+
+function step() {
+  if (cursor + 1 >= events.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= events.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

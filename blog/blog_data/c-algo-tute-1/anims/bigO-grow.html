@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big O — growth comparison</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { flex-direction: column; gap: 4px; align-items: stretch; padding: 4px 0; }
+  .row-grow {
+    display: grid;
+    grid-template-columns: 88px 1fr 110px;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 4px;
+    border-radius: 6px;
+  }
+  .row-grow .label-cls {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    color: #e8e8e8;
+    font-weight: 600;
+  }
+  .track {
+    height: 24px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .fill {
+    height: 100%;
+    width: 0;
+    border-radius: 4px;
+    transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .fill.O1     { background: linear-gradient(90deg, #4ade80, #22c55e); }
+  .fill.OlogN  { background: linear-gradient(90deg, #38bdf8, #0ea5e9); }
+  .fill.On     { background: linear-gradient(90deg, #facc15, #eab308); }
+  .fill.OnlogN { background: linear-gradient(90deg, #fb923c, #f97316); }
+  .fill.On2    { background: linear-gradient(90deg, #f87171, #ef4444); }
+  .num {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: #d97757;
+    font-weight: 700;
+    text-align: right;
+  }
+  .num.dim { color: #a1a1a0; font-weight: 500; }
+  .winning .num { color: #4ade80; }
+</style>
+</head>
+<body>
+
+<div class="title">案例：增长率对比</div>
+
+<div class="controls">
+  <span class="label">n =</span>
+  <span class="value" id="nVal" style="min-width: 56px;">10</span>
+  <input type="range" id="nSlider" min="1" max="500" value="10" style="flex:1; min-width: 140px;">
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="resetBtn" class="ghost">重置</button>
+</div>
+
+<div class="stage" id="stage"></div>
+
+<script>
+const ROWS = [
+  { id: 'O1',     label: 'O(1)',       fn: (n) => 1 },
+  { id: 'OlogN',  label: 'O(log n)',   fn: (n) => Math.max(1, Math.ceil(Math.log2(Math.max(2, n)))) },
+  { id: 'On',     label: 'O(n)',       fn: (n) => n },
+  { id: 'OnlogN', label: 'O(n log n)', fn: (n) => Math.max(1, Math.round(n * Math.log2(Math.max(2, n)))) },
+  { id: 'On2',    label: 'O(n²)',      fn: (n) => n * n },
+];
+
+const stage = document.getElementById('stage');
+stage.innerHTML = ROWS.map(r => `
+  <div class="row-grow" data-row="${r.id}">
+    <div class="label-cls">${r.label}</div>
+    <div class="track"><div class="fill ${r.id}" data-fill="${r.id}"></div></div>
+    <div class="num" data-num="${r.id}">0</div>
+  </div>
+`).join('');
+
+const nVal = document.getElementById('nVal');
+const slider = document.getElementById('nSlider');
+
+function fmt(x) {
+  if (x >= 1e9) return (x / 1e9).toFixed(2) + 'B';
+  if (x >= 1e6) return (x / 1e6).toFixed(2) + 'M';
+  if (x >= 1e3) return (x / 1e3).toFixed(1) + 'k';
+  return x.toLocaleString();
+}
+
+function update(n) {
+  nVal.textContent = n;
+  const vals = ROWS.map(r => ({ id: r.id, v: r.fn(n) }));
+  const max = Math.max(...vals.map(x => x.v));
+  const logMax = Math.log10(max + 1);
+  for (const { id, v } of vals) {
+    const w = Math.max(1.5, Math.log10(v + 1) / logMax * 100);
+    document.querySelector(`[data-fill="${id}"]`).style.width = w + '%';
+    document.querySelector(`[data-num="${id}"]`).textContent = fmt(v);
+  }
+}
+
+slider.addEventListener('input', () => update(+slider.value));
+update(+slider.value);
+
+let timer = null;
+const autoBtn = document.getElementById('autoBtn');
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动';
+    autoBtn.classList.add('primary');
+    return;
+  }
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(() => {
+    let n = +slider.value;
+    n = n >= +slider.max ? +slider.min : n + 1;
+    slider.value = n;
+    update(n);
+  }, 40);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  slider.value = 10;
+  update(10);
+});
+</script>
+</body>
+</html>

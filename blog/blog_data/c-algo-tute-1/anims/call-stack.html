@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>factorial</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; }
+
+  .stack {
+    flex: 1;
+    width: 100%;
+    position: relative;                /* anchor for op-pill */
+    display: flex;
+    flex-direction: column-reverse;    /* newest frame visually on top */
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 16px 12px;
+    overflow-y: auto;
+  }
+
+  .frame {
+    min-width: 240px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid #3a3a39;
+    background: rgba(255,255,255,0.04);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    color: #c8c8c7;
+  }
+  .frame.entering {
+    animation: frameIn 0.4s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  .frame.leaving {
+    animation: frameOut 0.4s ease forwards;
+    pointer-events: none;
+  }
+  /* Top of stack: orange — the frame currently doing work */
+  .frame.top {
+    border-color: #d97757;
+    background: rgba(217,119,87,0.13);
+    color: #ffe4d4;
+    box-shadow: 0 4px 14px rgba(217,119,87,0.18);
+  }
+  /* Just got a return value — green flash */
+  .frame.flash .ret {
+    animation: valueFlash 0.7s ease;
+  }
+  .frame .ret {
+    font-weight: 600;
+    color: #888;
+    transition: color 0.4s;
+  }
+  .frame.has-value .ret {
+    color: #4ade80;
+    font-weight: 700;
+  }
+
+  @keyframes frameIn {
+    from { opacity: 0; transform: translateY(-30px) scale(0.85); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes frameOut {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(-30px) scale(0.85); }
+  }
+  @keyframes valueFlash {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.6); color: #4ade80; text-shadow: 0 0 12px rgba(74,222,128,0.5); }
+    100% { transform: scale(1); }
+  }
+
+  /* Tiny operator pill that flies in when a frame computes its value */
+  .op-pill {
+    position: absolute;
+    pointer-events: none;
+    font-size: 11px;
+    color: #4ade80;
+    background: rgba(74,222,128,0.12);
+    border: 1px solid rgba(74,222,128,0.5);
+    padding: 2px 8px;
+    border-radius: 999px;
+    opacity: 0;
+    z-index: 10;
+    animation: opPill 0.95s ease forwards;
+  }
+  @keyframes opPill {
+    0%   { opacity: 0; transform: translate(-50%, 8px); }
+    20%  { opacity: 1; transform: translate(-50%, 0); }
+    80%  { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, -8px); }
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：factorial(n)</div>
+
+<div class="controls">
+  <span class="label">n =</span>
+  <input type="number" id="nIn" min="1" max="6" value="4" />
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="200" max="1500" value="850" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="stage">
+  <div class="stack" id="stack"></div>
+</div>
+
+<script>
+const stack    = document.getElementById('stack');
+const stepBtn  = document.getElementById('stepBtn');
+const autoBtn  = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const nIn      = document.getElementById('nIn');
+const speedEl  = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+let steps  = [];
+let cursor = -1;
+let timer  = null;
+let frames = [];   // [{n, val, dom}]
+
+function fact(k) { let r = 1; for (let i = 2; i <= k; i++) r *= i; return r; }
+
+function buildSteps(n) {
+  steps = [];
+  for (let k = n; k >= 1; k--) {
+    if (k === 1) steps.push({ kind: 'push-base', n: 1, val: 1 });
+    else         steps.push({ kind: 'push',       n: k });
+  }
+  for (let k = 2; k <= n; k++) {
+    steps.push({ kind: 'compute', n: k, val: fact(k), prev: fact(k - 1) });
+  }
+}
+
+function frameDom(n, val) {
+  const div = document.createElement('div');
+  div.className = 'frame entering' + (val != null ? ' has-value' : '');
+  div.dataset.n = n;
+  div.innerHTML = `
+    <span>factorial(${n})</span>
+    <span class="ret">${val != null ? '= ' + val : '= ?'}</span>
+  `;
+  return div;
+}
+
+function refreshTop() {
+  // With column-reverse, last DOM child is visually on top
+  const live = [...stack.children].filter(d => !d.classList.contains('leaving'));
+  live.forEach(d => d.classList.remove('top'));
+  if (live.length) live[live.length - 1].classList.add('top');
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  const n = Math.min(6, Math.max(1, +nIn.value || 4));
+  buildSteps(n);
+  cursor = -1;
+  frames = [];
+  stack.innerHTML = '';
+}
+
+function step() {
+  if (cursor + 1 >= steps.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  const s = steps[cursor];
+
+  if (s.kind === 'push' || s.kind === 'push-base') {
+    const dom = frameDom(s.n, s.kind === 'push-base' ? s.val : null);
+    stack.appendChild(dom);
+    frames.push({ n: s.n, val: s.kind === 'push-base' ? s.val : null, dom });
+  } else if (s.kind === 'compute') {
+    // Top frame returns its value; the frame below computes its own.
+    if (frames.length) {
+      const top = frames[frames.length - 1];
+      // Show the operation pill above the new top (the parent doing the math)
+      if (frames.length >= 2) {
+        const parent = frames[frames.length - 2];
+        const pill = document.createElement('div');
+        pill.className = 'op-pill';
+        pill.textContent = `${s.n} × ${s.prev} = ${s.val}`;
+        const r = parent.dom.getBoundingClientRect();
+        const stageR = stack.getBoundingClientRect();
+        pill.style.left = (r.left + r.width / 2 - stageR.left) + 'px';
+        pill.style.top  = (r.top - stageR.top - 4) + 'px';
+        stack.appendChild(pill);
+        setTimeout(() => pill.remove(), 1000);
+      }
+      // Top slides away
+      top.dom.classList.add('leaving');
+      const dyingDom = top.dom;
+      setTimeout(() => dyingDom.remove(), 400);
+      frames.pop();
+    }
+    // Parent gets the new value
+    if (frames.length) {
+      const parent = frames[frames.length - 1];
+      parent.val = s.val;
+      const ret = parent.dom.querySelector('.ret');
+      ret.textContent = '= ' + s.val;
+      parent.dom.classList.add('has-value', 'flash');
+      setTimeout(() => parent.dom.classList.remove('flash'), 720);
+    }
+  }
+
+  refreshTop();
+}
+
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+nIn.addEventListener('change', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= steps.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

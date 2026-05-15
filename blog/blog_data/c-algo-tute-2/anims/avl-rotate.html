@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>avl rotate</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; align-items: stretch; gap: 8px; }
+  .tree-area {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    min-height: 260px;
+  }
+  .tree-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .ae {
+    stroke: rgba(255,255,255,0.25);
+    stroke-width: 2;
+    stroke-linecap: round;
+    fill: none;
+    transition: d 0.6s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s, opacity 0.4s;
+  }
+  .ae.active { stroke: #d97757; stroke-width: 3; }
+
+  .anode {
+    position: absolute;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    border: 2px solid #3a3a39;
+    background: rgba(255,255,255,0.06);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: #c8c8c7;
+    transition:
+      left 0.65s cubic-bezier(0.4, 0, 0.2, 1),
+      top 0.65s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.4s, opacity 0.4s,
+      border-color 0.4s, background 0.4s, color 0.4s, box-shadow 0.4s;
+  }
+  .anode.unbalanced { border-color: #f87171; background: rgba(248,113,113,0.16); color: #fecaca; box-shadow: 0 0 0 3px rgba(248,113,113,0.3), 0 0 24px rgba(248,113,113,0.25); }
+  .anode.pivot      { border-color: #fbbf24; background: rgba(251,191,36,0.20); color: #fef3c7; box-shadow: 0 0 0 2px rgba(251,191,36,0.4); }
+  .anode.balanced   { border-color: #4ade80; background: rgba(74,222,128,0.16); color: #d8ffe1; box-shadow: 0 0 0 2px rgba(74,222,128,0.25); }
+  .anode .bf {
+    position: absolute;
+    top: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 10px;
+    color: #888;
+    font-weight: 600;
+    transition: color 0.3s;
+    white-space: nowrap;
+  }
+  .anode.unbalanced .bf { color: #f87171; }
+  .anode.balanced   .bf { color: #4ade80; }
+  .anode.pivot .bf      { color: #fbbf24; }
+
+  .step-label {
+    text-align: center;
+    font-size: 12px;
+    color: #d97757;
+    font-weight: 700;
+    padding: 4px;
+    min-height: 22px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：AVL 树的旋转（如何把"歪了"的树掰回来）</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button class="active" data-mode="LL">右旋（LL 失衡）</button>
+    <button data-mode="RR">左旋（RR 失衡）</button>
+  </div>
+  <button id="autoBtn" class="primary">▶ 演示</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="400" max="2200" value="1300" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="step-label" id="stepLabel">点 ▶ 演示开始</div>
+
+<div class="stage">
+  <div class="tree-area" id="treeArea">
+    <svg class="tree-svg" id="svg"></svg>
+  </div>
+</div>
+
+<script>
+/* Simpler layout: nodes positioned by (level, dx) where dx is offset from
+ * the horizontal CENTER in COL_W units. This keeps the tree visually centered
+ * regardless of which case (LL / RR) is shown.
+ *
+ *  LL initial (right rotation undoes left-left lean):
+ *         z (dx=0, level=0)
+ *        /
+ *       y (dx=-1, level=1)
+ *      /
+ *    x   (dx=-2, level=2)
+ *
+ *  After right rotation:
+ *           y (0, 0)
+ *          / \
+ *         x   z   ← both at level 1, dx=-1 and +1
+ *
+ *  RR is the mirror: x→y→z chain leaning right; left rotation balances it. */
+
+const NODE_SIZE = 48;
+const COL_W = 56;
+const ROW_H = 78;
+const TOP_PAD = 28;
+
+const CASES = {
+  LL: {
+    initial: [
+      { id: 'z', val: 30, level: 0, dx:  0 },
+      { id: 'y', val: 20, level: 1, dx: -1 },
+      { id: 'x', val: 10, level: 2, dx: -2 },
+    ],
+    initEdges: [['z', 'y'], ['y', 'x']],
+    final: [
+      { id: 'y', val: 20, level: 0, dx:  0 },
+      { id: 'x', val: 10, level: 1, dx: -1 },
+      { id: 'z', val: 30, level: 1, dx:  1 },
+    ],
+    finalEdges: [['y', 'x'], ['y', 'z']],
+    unbalanced: 'z',
+    pivot: 'y',
+    rotation: '右旋（围绕 z）',
+    descBefore: 'z 的左子树深 2 层、右子树空 → 失衡',
+    descAfter:  'y 升上来当根，z 变成 y 的右子；树重新平衡',
+    bfOnUnbalanced: '+2',
+  },
+  RR: {
+    initial: [
+      { id: 'x', val: 10, level: 0, dx:  0 },
+      { id: 'y', val: 20, level: 1, dx:  1 },
+      { id: 'z', val: 30, level: 2, dx:  2 },
+    ],
+    initEdges: [['x', 'y'], ['y', 'z']],
+    final: [
+      { id: 'y', val: 20, level: 0, dx:  0 },
+      { id: 'x', val: 10, level: 1, dx: -1 },
+      { id: 'z', val: 30, level: 1, dx:  1 },
+    ],
+    finalEdges: [['y', 'x'], ['y', 'z']],
+    unbalanced: 'x',
+    pivot: 'y',
+    rotation: '左旋（围绕 x）',
+    descBefore: 'x 的右子树深 2 层、左子树空 → 失衡',
+    descAfter:  'y 升上来当根，x 变成 y 的左子；树重新平衡',
+    bfOnUnbalanced: '−2',
+  },
+};
+
+const treeArea = document.getElementById('treeArea');
+const svg      = document.getElementById('svg');
+const stepLabel= document.getElementById('stepLabel');
+const stepBtn  = document.getElementById('stepBtn');
+const autoBtn  = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedEl  = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+let mode = 'LL';
+let timer = null;
+let phase = 0;     // 0 = initial; 1 = unbalanced highlighted; 2 = post-rotation
+
+function nodePos(level, dx) {
+  const W = treeArea.clientWidth;
+  const cx = W / 2;
+  return {
+    x: cx + dx * COL_W - NODE_SIZE / 2,
+    y: TOP_PAD + level * ROW_H,
+  };
+}
+
+function clearTree() {
+  treeArea.querySelectorAll('.anode').forEach(d => d.remove());
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+}
+
+function drawCase(state) {
+  const c = CASES[mode];
+  const layout = state === 'final' ? c.final : c.initial;
+  const edges  = state === 'final' ? c.finalEdges : c.initEdges;
+
+  const existing = new Map();
+  treeArea.querySelectorAll('.anode').forEach(d => existing.set(d.dataset.nid, d));
+
+  const posOf = new Map();
+  for (const n of layout) posOf.set(n.id, nodePos(n.level, n.dx));
+
+  for (const n of layout) {
+    let dom = existing.get(n.id);
+    if (!dom) {
+      dom = document.createElement('div');
+      dom.className = 'anode';
+      dom.dataset.nid = n.id;
+      dom.innerHTML = `<span class="bf"></span>${n.val}`;
+      treeArea.appendChild(dom);
+    }
+    dom.classList.remove('unbalanced', 'pivot', 'balanced');
+    const pos = posOf.get(n.id);
+    dom.style.left = pos.x + 'px';
+    dom.style.top  = pos.y + 'px';
+  }
+
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  for (const [pId, cId] of edges) {
+    const p = posOf.get(pId), q = posOf.get(cId);
+    const x1 = p.x + NODE_SIZE / 2, y1 = p.y + NODE_SIZE;
+    const x2 = q.x + NODE_SIZE / 2, y2 = q.y;
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    e.setAttribute('class', 'ae');
+    e.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+    svg.appendChild(e);
+  }
+}
+
+function highlightUnbalanced() {
+  const c = CASES[mode];
+  treeArea.querySelectorAll('.anode').forEach(d => d.classList.remove('unbalanced', 'pivot', 'balanced'));
+  treeArea.querySelectorAll('.anode .bf').forEach(b => b.textContent = '');
+  const u = treeArea.querySelector(`.anode[data-nid="${c.unbalanced}"]`);
+  const p = treeArea.querySelector(`.anode[data-nid="${c.pivot}"]`);
+  if (u) {
+    u.classList.add('unbalanced');
+    u.querySelector('.bf').textContent = `BF=${c.bfOnUnbalanced}`;
+  }
+  if (p) p.classList.add('pivot');
+}
+
+function highlightBalanced() {
+  treeArea.querySelectorAll('.anode').forEach(d => {
+    d.classList.remove('unbalanced', 'pivot');
+    d.classList.add('balanced');
+    d.querySelector('.bf').textContent = 'BF=0';
+  });
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 演示'; autoBtn.classList.add('primary'); }
+  phase = 0;
+  clearTree();
+  drawCase('initial');
+  treeArea.querySelectorAll('.anode .bf').forEach(b => b.textContent = '');
+  stepLabel.textContent = `${CASES[mode].descBefore} — 点 ▶ 演示`;
+}
+
+function step() {
+  if (phase === 0) {
+    phase = 1;
+    highlightUnbalanced();
+    stepLabel.innerHTML = `<span style="color:#f87171">检测到失衡</span>：${CASES[mode].descBefore}`;
+  } else if (phase === 1) {
+    phase = 2;
+    drawCase('final');
+    setTimeout(highlightBalanced, 650);
+    stepLabel.innerHTML = `<span style="color:#4ade80">${CASES[mode].rotation}</span> · ${CASES[mode].descAfter}`;
+  } else {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 演示'; autoBtn.classList.add('primary'); }
+  }
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 演示'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (phase >= 2) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+window.addEventListener('resize', () => {
+  if (phase === 2) drawCase('final');
+  else drawCase('initial');
+  if (phase === 1) highlightUnbalanced();
+  if (phase === 2) highlightBalanced();
+});
+
+reset();
+</script>
+</body>
+</html>

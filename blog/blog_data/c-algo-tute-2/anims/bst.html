@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>binary search tree</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; align-items: stretch; gap: 6px; }
+  .tree-area {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    min-height: 220px;
+  }
+  .tree-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .bedge {
+    stroke: rgba(255,255,255,0.18);
+    stroke-width: 2;
+    fill: none;
+    transition: stroke 0.4s, stroke-width 0.4s, opacity 0.4s;
+  }
+  .bedge.path {
+    stroke: #d97757;
+    stroke-width: 3;
+  }
+  .bedge.entering {
+    animation: edgeFadeIn 0.4s ease;
+  }
+  @keyframes edgeFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .bnode {
+    position: absolute;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid #3a3a39;
+    background: rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center; justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #c8c8c7;
+    transition:
+      left 0.4s, top 0.4s,
+      border-color 0.35s, background 0.35s, color 0.35s,
+      transform 0.35s cubic-bezier(0.34, 1.5, 0.64, 1),
+      box-shadow 0.35s, opacity 0.4s;
+  }
+  .bnode.visited { border-color: rgba(217,119,87,0.55); background: rgba(217,119,87,0.12); color: #ffe4d4; }
+  .bnode.current {
+    border-color: #d97757; background: rgba(217,119,87,0.28); color: #ffe4d4;
+    transform: scale(1.18);
+    box-shadow: 0 0 0 3px rgba(217,119,87,0.3), 0 4px 14px rgba(217,119,87,0.4);
+  }
+  .bnode.found {
+    border-color: #4ade80; background: rgba(74,222,128,0.25); color: #d8ffe1;
+    transform: scale(1.25);
+    box-shadow: 0 0 0 4px rgba(74,222,128,0.35), 0 6px 16px rgba(74,222,128,0.4);
+    animation: foundPulse 0.6s ease;
+  }
+  .bnode.notfound {
+    border-color: #f87171; background: rgba(248,113,113,0.25); color: #fecaca;
+    box-shadow: 0 0 0 3px rgba(248,113,113,0.3);
+  }
+  .bnode.entering {
+    animation: nodeIn 0.5s cubic-bezier(0.34, 1.5, 0.64, 1);
+  }
+
+  @keyframes foundPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
+    50%  { box-shadow: 0 0 0 16px rgba(74,222,128,0.0); }
+    100% { box-shadow: 0 0 0 4px rgba(74,222,128,0.35); }
+  }
+  @keyframes nodeIn {
+    from { opacity: 0; transform: translateY(-30px) scale(0.6); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .gh-marker {
+    position: absolute;
+    pointer-events: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fbbf24;
+    background: rgba(251,191,36,0.15);
+    border: 1px dashed rgba(251,191,36,0.5);
+    border-radius: 50%;
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.3s, left 0.3s, top 0.3s;
+    opacity: 0;
+  }
+  .gh-marker.shown { opacity: 1; }
+
+  .note { padding: 4px 8px; min-height: 20px; }
+</style>
+</head>
+<body>
+
+<div class="title">案例：二叉搜索树（BST）</div>
+
+<div class="controls">
+  <div class="btn-group" id="modeGroup">
+    <button class="active" data-mode="search">查找</button>
+    <button data-mode="insert">插入</button>
+  </div>
+  <span class="label">值</span>
+  <input type="number" id="targetIn" value="60" style="width: 60px;">
+  <button id="autoBtn" class="primary">▶ 开始</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="200" max="1500" value="700" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="tree-area" id="treeArea">
+    <svg class="tree-svg" id="svg"></svg>
+    <div class="gh-marker" id="ghost"></div>
+  </div>
+</div>
+
+<script>
+/* Initial BST:
+ *           50
+ *          /  \
+ *        30    70
+ *        / \   / \
+ *       20 40 60 80
+ */
+let tree = {
+  50: { left: 30, right: 70 },
+  30: { left: 20, right: 40 },
+  70: { left: 60, right: 80 },
+  20: {}, 40: {}, 60: {}, 80: {},
+};
+const ROOT = 50;
+const INITIAL = JSON.stringify(tree);
+
+const treeArea = document.getElementById('treeArea');
+const svg      = document.getElementById('svg');
+const ghost    = document.getElementById('ghost');
+const noteEl   = document.getElementById('note');
+const targetIn = document.getElementById('targetIn');
+const stepBtn  = document.getElementById('stepBtn');
+const autoBtn  = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedEl  = document.getElementById('speed');
+
+let mode = 'search';
+let cursor = -1;
+let timer = null;
+let path = [];          // [{ id, action, child? }]
+let target = 60;
+let insertedId = null;
+
+function nodeStruct() {
+  const all = [];
+  function walk(id, level, slot) {
+    if (id == null || tree[id] == null) return;
+    all.push({ id, level, slot });
+    walk(tree[id].left,  level + 1, slot * 2);
+    walk(tree[id].right, level + 1, slot * 2 + 1);
+  }
+  walk(ROOT, 0, 0);
+  return all;
+}
+
+function maxLevel() {
+  return Math.max(...nodeStruct().map(n => n.level));
+}
+
+function nodePos(level, slot) {
+  const W = treeArea.clientWidth;
+  const H = treeArea.clientHeight;
+  const ml = Math.max(2, maxLevel());
+  const levelHeight = (H - 60) / ml;
+  const slots = Math.pow(2, level);
+  const x = ((slot + 0.5) / slots) * W - 20;
+  const y = 12 + level * levelHeight;
+  return { x, y };
+}
+
+function rebuildTree() {
+  treeArea.querySelectorAll('.bnode').forEach(d => d.remove());
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const all = nodeStruct();
+  const posOf = new Map();
+  for (const n of all) posOf.set(n.id, nodePos(n.level, n.slot));
+
+  // Edges first
+  for (const n of all) {
+    const t = tree[n.id];
+    if (!t) continue;
+    if (t.left != null) drawEdge(posOf.get(n.id), posOf.get(t.left));
+    if (t.right != null) drawEdge(posOf.get(n.id), posOf.get(t.right));
+  }
+  // Nodes
+  for (const n of all) {
+    const p = posOf.get(n.id);
+    const dom = document.createElement('div');
+    dom.className = 'bnode';
+    if (n.id === insertedId) dom.classList.add('entering');
+    dom.dataset.id = n.id;
+    dom.textContent = n.id;
+    dom.style.left = p.x + 'px';
+    dom.style.top  = p.y + 'px';
+    treeArea.appendChild(dom);
+  }
+}
+
+function drawEdge(p, c) {
+  const x1 = p.x + 20, y1 = p.y + 40;
+  const x2 = c.x + 20, y2 = c.y;
+  const e = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  e.setAttribute('class', 'bedge');
+  e.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+  e.dataset.from = posKey(p);
+  e.dataset.to   = posKey(c);
+  svg.appendChild(e);
+}
+function posKey(p) { return Math.round(p.x) + ',' + Math.round(p.y); }
+
+function computePath(t) {
+  // Returns { steps: [{id, decision: 'eq'|'go-left'|'go-right'|'null-left'|'null-right'}], finalAction }
+  const steps = [];
+  let cur = ROOT;
+  while (cur != null && tree[cur] != null) {
+    if (cur === t) {
+      steps.push({ id: cur, decision: 'eq' });
+      return { steps, finalAction: 'found' };
+    }
+    if (t < cur) {
+      const child = tree[cur].left;
+      if (child == null) {
+        steps.push({ id: cur, decision: 'null-left' });
+        return { steps, finalAction: 'null', insertParent: cur, insertSide: 'left' };
+      }
+      steps.push({ id: cur, decision: 'go-left' });
+      cur = child;
+    } else {
+      const child = tree[cur].right;
+      if (child == null) {
+        steps.push({ id: cur, decision: 'null-right' });
+        return { steps, finalAction: 'null', insertParent: cur, insertSide: 'right' };
+      }
+      steps.push({ id: cur, decision: 'go-right' });
+      cur = child;
+    }
+  }
+  return { steps, finalAction: 'empty' };
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 开始'; autoBtn.classList.add('primary'); }
+  tree = JSON.parse(INITIAL);
+  insertedId = null;
+  cursor = -1;
+  path = null;
+  target = +targetIn.value || 60;
+  noteEl.innerHTML = mode === 'search' ? `准备查找 <strong>${target}</strong>。` : `准备插入 <strong>${target}</strong>。`;
+  rebuildTree();
+  ghost.classList.remove('shown');
+}
+
+function buildPath() {
+  target = +targetIn.value || 60;
+  path = computePath(target);
+  cursor = -1;
+}
+
+function paint() {
+  // Reset highlights
+  treeArea.querySelectorAll('.bnode').forEach(d => d.classList.remove('visited', 'current', 'found', 'notfound'));
+  svg.querySelectorAll('.bedge').forEach(e => e.classList.remove('path'));
+  ghost.classList.remove('shown');
+
+  if (!path) return;
+
+  // Up to cursor: visited + paths
+  for (let i = 0; i < cursor; i++) {
+    const s = path.steps[i];
+    const dom = treeArea.querySelector(`.bnode[data-id="${s.id}"]`);
+    if (dom) dom.classList.add('visited');
+    // Mark edge from this node to next as path
+    if (i + 1 < path.steps.length) {
+      const next = path.steps[i + 1];
+      markEdge(s.id, next.id);
+    }
+  }
+  // Current
+  if (cursor >= 0 && cursor < path.steps.length) {
+    const s = path.steps[cursor];
+    const dom = treeArea.querySelector(`.bnode[data-id="${s.id}"]`);
+    if (dom) dom.classList.add('current');
+
+    // Note about decision
+    if (s.decision === 'eq') {
+      noteEl.innerHTML = `<strong style="color:#4ade80">${s.id} == ${target}</strong>，找到了！`;
+    } else if (s.decision === 'go-left') {
+      noteEl.innerHTML = `${target} &lt; ${s.id} → 往<strong>左</strong>走`;
+    } else if (s.decision === 'go-right') {
+      noteEl.innerHTML = `${target} &gt; ${s.id} → 往<strong>右</strong>走`;
+    } else if (s.decision === 'null-left' || s.decision === 'null-right') {
+      const side = s.decision === 'null-left' ? '左' : '右';
+      const cmp  = s.decision === 'null-left' ? '&lt;' : '&gt;';
+      noteEl.innerHTML = `${target} ${cmp} ${s.id}，但${side}子为空 — ${mode === 'search' ? '查找失败' : '在此处新增节点'}`;
+      // Show ghost slot where new node would go
+      if (mode === 'insert') showGhost(s.id, s.decision === 'null-left' ? 'left' : 'right');
+    }
+  }
+
+  // Final state — after all steps shown
+  if (cursor >= path.steps.length - 1) {
+    if (path.finalAction === 'found') {
+      const dom = treeArea.querySelector(`.bnode[data-id="${target}"]`);
+      if (dom) { dom.classList.remove('current'); dom.classList.add('found'); }
+    } else if (path.finalAction === 'null') {
+      const lastId = path.steps[path.steps.length - 1].id;
+      const dom = treeArea.querySelector(`.bnode[data-id="${lastId}"]`);
+      if (dom) dom.classList.add('notfound');
+      if (mode === 'insert') showGhost(lastId, path.insertSide);
+    }
+  }
+}
+
+function markEdge(parentId, childId) {
+  // find the SVG edge whose y1/y2 corresponds to parent → child
+  // For simplicity, recompute positions and match
+  const all = nodeStruct();
+  const pn = all.find(n => n.id === parentId);
+  const cn = all.find(n => n.id === childId);
+  if (!pn || !cn) return;
+  const p = nodePos(pn.level, pn.slot);
+  const c = nodePos(cn.level, cn.slot);
+  const x1 = p.x + 20, y1 = p.y + 40;
+  const x2 = c.x + 20, y2 = c.y;
+  const target = `M ${x1} ${y1} L ${x2} ${y2}`;
+  for (const e of svg.querySelectorAll('.bedge')) {
+    if (e.getAttribute('d') === target) { e.classList.add('path'); break; }
+  }
+}
+
+function showGhost(parentId, side) {
+  const all = nodeStruct();
+  const pn = all.find(n => n.id === parentId);
+  if (!pn) return;
+  const childLevel = pn.level + 1;
+  const childSlot  = pn.slot * 2 + (side === 'left' ? 0 : 1);
+  const p = nodePos(childLevel, childSlot);
+  ghost.style.left = p.x + 'px';
+  ghost.style.top  = p.y + 'px';
+  ghost.textContent = target;
+  ghost.classList.add('shown');
+}
+
+function step() {
+  if (!path) buildPath();
+  if (cursor + 1 >= path.steps.length) {
+    // All steps done. If insert mode and final is null, do the insert.
+    if (mode === 'insert' && path.finalAction === 'null' && insertedId == null) {
+      insertedId = target;
+      const parent = path.insertParent;
+      const side = path.insertSide;
+      tree[parent] = tree[parent] || {};
+      tree[parent][side] = insertedId;
+      tree[insertedId] = {};
+      cursor++;
+      ghost.classList.remove('shown');
+      rebuildTree();
+      paint();
+      // Highlight new node as found-like
+      setTimeout(() => {
+        const dom = treeArea.querySelector(`.bnode[data-id="${insertedId}"]`);
+        if (dom) dom.classList.add('found');
+      }, 100);
+      noteEl.innerHTML = `<strong style="color:#4ade80">已插入 ${insertedId}</strong>`;
+      if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 开始'; autoBtn.classList.add('primary'); }
+      return;
+    }
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 开始'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+document.getElementById('modeGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mode = e.target.dataset.mode;
+  document.querySelectorAll('#modeGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+targetIn.addEventListener('change', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 开始'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (!path) buildPath();
+  if (cursor + 1 >= path.steps.length && !(mode === 'insert' && path.finalAction === 'null' && insertedId == null)) {
+    reset(); buildPath();
+  }
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+window.addEventListener('resize', () => { rebuildTree(); paint(); });
+
+reset();
+</script>
+</body>
+</html>

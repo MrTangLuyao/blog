@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dp lcs</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: center; gap: 6px; }
+
+  .grid-wrap {
+    flex: 1;
+    width: 100%;
+    overflow: auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 6px 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .gh, .gv, .corner {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    color: #888;
+  }
+  .gh { color: #38bdf8; }
+  .gv { color: #fbbf24; }
+  .corner { color: #555; font-size: 11px; }
+
+  .cell {
+    width: 32px; height: 32px;
+    border-radius: 5px;
+    border: 1px solid #2a2a29;
+    background: rgba(255,255,255,0.03);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    color: #c8c8c7;
+    transition: background 0.3s, border-color 0.3s, color 0.3s, transform 0.25s, box-shadow 0.3s;
+    position: relative;
+  }
+  .cell.base    { color: #555; background: rgba(255,255,255,0.02); }
+  .cell.cur     { background: rgba(251,191,36,0.30); border-color: #fbbf24; color: #fef3c7; transform: scale(1.15); box-shadow: 0 0 0 2px rgba(251,191,36,0.4), 0 4px 10px rgba(245,158,11,0.3); z-index: 5; }
+  .cell.src     { background: rgba(56,189,248,0.22); border-color: #38bdf8; color: #cce8ff; }
+  .cell.match   { background: rgba(74,222,128,0.20); border-color: rgba(74,222,128,0.6); color: #d8ffe1; }
+  .cell.path    { background: linear-gradient(180deg, rgba(217,119,87,0.5), rgba(217,119,87,0.85)); border-color: #d97757; color: #fff; box-shadow: 0 0 0 2px rgba(217,119,87,0.4); }
+  .cell.path.match { background: linear-gradient(180deg, #4ade80, #22c55e); border-color: #4ade80; color: #fff; }
+
+  .lcs-display {
+    font-size: 13px;
+    color: #a1a1a0;
+    padding: 4px;
+    text-align: center;
+  }
+  .lcs-display .ch {
+    display: inline-block;
+    width: 22px; height: 24px;
+    line-height: 24px;
+    margin: 0 1px;
+    border-radius: 4px;
+    background: rgba(74,222,128,0.20);
+    color: #d8ffe1;
+    font-weight: 700;
+    animation: ch-in 0.32s cubic-bezier(0.34, 1.5, 0.64, 1);
+  }
+  @keyframes ch-in {
+    from { opacity: 0; transform: scale(0.6); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  .note {
+    text-align: center;
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 22px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：动态规划 — 最长公共子序列（LCS）</div>
+
+<div class="controls">
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="120" max="1000" value="450" style="width:90px">
+  <span class="label">快</span>
+</div>
+
+<div class="note" id="note"></div>
+
+<div class="stage">
+  <div class="grid-wrap">
+    <div class="grid" id="grid"></div>
+  </div>
+  <div class="lcs-display" id="lcsDisplay">回溯到的 LCS：<span id="lcsChars"></span></div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">X = </span><strong id="xStr"></strong></span>
+  <span><span class="stat-label">Y = </span><strong id="yStr"></strong></span>
+  <span><span class="stat-label">LCS 长度：</span><span class="stat-value green" id="lcsLen">—</span></span>
+</div>
+
+<script>
+const X = "ABCBDAB";
+const Y = "BDCAB";
+const M = X.length, N = Y.length;
+document.getElementById('xStr').textContent = X;
+document.getElementById('yStr').textContent = Y;
+
+const grid = document.getElementById('grid');
+const noteEl = document.getElementById('note');
+const lcsCharsEl = document.getElementById('lcsChars');
+const lcsLenEl = document.getElementById('lcsLen');
+const stepBtn = document.getElementById('stepBtn');
+const autoBtn = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedEl = document.getElementById('speed');
+
+let dp;            // dp[i][j]
+let cells;         // cells[i][j] = DOM
+let events = [];
+let cursor = -1;
+let timer = null;
+let lcsPath = [];
+
+function buildGrid() {
+  grid.innerHTML = '';
+  // grid has (N+2) cols (corner + Y header + N values), wait better:
+  // Layout: header row + dp rows
+  //   row 0: [corner, "ε", Y0, Y1, ..., Yn-1]
+  //   row 1: [empty, "ε" (i=0), dp[0][0..N]]
+  // Hmm let me simplify with grid-template-columns:
+  grid.style.gridTemplateColumns = `32px 32px repeat(${N + 1}, 32px)`;
+  grid.style.gridTemplateRows    = `32px 32px repeat(${M + 1}, 32px)`;
+
+  // Row 0: top-left corner, then "" then Y chars
+  // We'll lay out row by row using normal child order with the grid
+  const addCell = (cls, content, gridArea) => {
+    const c = document.createElement('div');
+    c.className = cls;
+    c.textContent = content;
+    if (gridArea) c.style.gridArea = gridArea;
+    grid.appendChild(c);
+    return c;
+  };
+
+  // Row 0: corner + j-index header
+  addCell('corner', '', '1 / 1 / 2 / 2');
+  addCell('corner', 'j', '1 / 2 / 2 / 3');
+  for (let j = 0; j < N; j++) {
+    addCell('corner', j + 1, `1 / ${3 + j} / 2 / ${4 + j}`);
+  }
+
+  // Row 1: blank + ε corner + Y characters
+  addCell('corner', 'i', '2 / 1 / 3 / 2');
+  addCell('corner', 'ε', '2 / 2 / 3 / 3');
+  for (let j = 0; j < N; j++) {
+    addCell('gh', Y[j], `2 / ${3 + j} / 3 / ${4 + j}`);
+  }
+
+  // Rows 2..M+2: i-index + X char + dp cells
+  cells = [];
+  for (let i = 0; i <= M; i++) {
+    cells[i] = [];
+    const r = 3 + i;
+    if (i === 0) {
+      addCell('corner', '0', `${r} / 1 / ${r + 1} / 2`);
+      addCell('corner', 'ε', `${r} / 2 / ${r + 1} / 3`);
+    } else {
+      addCell('corner', i, `${r} / 1 / ${r + 1} / 2`);
+      addCell('gv', X[i - 1], `${r} / 2 / ${r + 1} / 3`);
+    }
+    for (let j = 0; j <= N; j++) {
+      const c = document.createElement('div');
+      c.className = 'cell';
+      if (i === 0 || j === 0) {
+        c.classList.add('base');
+        c.textContent = '0';
+      } else {
+        c.textContent = '';
+      }
+      c.style.gridArea = `${r} / ${3 + j} / ${r + 1} / ${4 + j}`;
+      grid.appendChild(c);
+      cells[i][j] = c;
+    }
+  }
+}
+
+function buildEvents() {
+  const evs = [];
+  dp = Array.from({ length: M + 1 }, () => new Array(N + 1).fill(0));
+  for (let i = 1; i <= M; i++) {
+    for (let j = 1; j <= N; j++) {
+      const isMatch = X[i - 1] === Y[j - 1];
+      let value, source;
+      if (isMatch) {
+        value = dp[i - 1][j - 1] + 1;
+        source = 'diag';
+      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+        value = dp[i - 1][j];
+        source = 'up';
+      } else {
+        value = dp[i][j - 1];
+        source = 'left';
+      }
+      dp[i][j] = value;
+      evs.push({ type: 'fill', i, j, value, source, isMatch });
+    }
+  }
+  // Traceback
+  const path = [];
+  let i = M, j = N;
+  while (i > 0 && j > 0) {
+    if (X[i - 1] === Y[j - 1]) {
+      path.push({ i, j, char: X[i - 1] });
+      i--; j--;
+    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  path.reverse();
+  evs.push({ type: 'trace-start' });
+  for (const p of path) evs.push({ type: 'trace-step', ...p });
+  evs.push({ type: 'trace-done', path });
+  return evs;
+}
+
+function clearMarks(includePath) {
+  for (let i = 0; i <= M; i++) {
+    for (let j = 0; j <= N; j++) {
+      cells[i][j].classList.remove('cur', 'src');
+      if (includePath) cells[i][j].classList.remove('path');
+    }
+  }
+}
+
+function paint() {
+  clearMarks(false);
+
+  // Replay events up to cursor for "filled values"
+  for (let e = 0; e <= cursor; e++) {
+    const ev = events[e];
+    if (ev.type === 'fill') {
+      const c = cells[ev.i][ev.j];
+      c.textContent = ev.value;
+      c.classList.remove('base');
+      c.classList.toggle('match', ev.isMatch);
+    }
+    if (ev.type === 'trace-step') {
+      const c = cells[ev.i][ev.j];
+      c.classList.add('path');
+    }
+  }
+
+  if (cursor < 0) return;
+  const ev = events[cursor];
+
+  if (ev.type === 'fill') {
+    cells[ev.i][ev.j].classList.add('cur');
+    if (ev.source === 'diag') {
+      cells[ev.i - 1][ev.j - 1].classList.add('src');
+      noteEl.innerHTML = `<strong>X[${ev.i - 1}]=${X[ev.i - 1]} = Y[${ev.j - 1}]=${Y[ev.j - 1]}</strong> 字符相同 → dp[${ev.i}][${ev.j}] = dp[${ev.i - 1}][${ev.j - 1}] + 1 = <span style="color:#4ade80;font-weight:700">${ev.value}</span>`;
+    } else {
+      cells[ev.i - 1][ev.j].classList.add('src');
+      cells[ev.i][ev.j - 1].classList.add('src');
+      const used = ev.source === 'up' ? `dp[${ev.i - 1}][${ev.j}]=${dp[ev.i - 1][ev.j]}` : `dp[${ev.i}][${ev.j - 1}]=${dp[ev.i][ev.j - 1]}`;
+      noteEl.innerHTML = `字符不同 → dp[${ev.i}][${ev.j}] = max(dp[${ev.i - 1}][${ev.j}], dp[${ev.i}][${ev.j - 1}]) = <span style="color:#d97757;font-weight:700">${ev.value}</span>（来自 ${used}）`;
+    }
+  } else if (ev.type === 'trace-start') {
+    noteEl.innerHTML = `<strong style="color:#d97757">回溯：</strong>从右下角 dp[${M}][${N}] 出发，按"哪个 src 决定了 dp 值"反向走，遇到对角线就把那个字符加进 LCS`;
+    lcsCharsEl.innerHTML = '';
+  } else if (ev.type === 'trace-step') {
+    cells[ev.i][ev.j].classList.add('path', 'match');
+    const ch = document.createElement('span');
+    ch.className = 'ch';
+    ch.textContent = ev.char;
+    lcsCharsEl.appendChild(ch);
+    noteEl.innerHTML = `经过 dp[${ev.i}][${ev.j}]：X[${ev.i - 1}]=Y[${ev.j - 1}]=<strong>${ev.char}</strong>，加入 LCS`;
+  } else if (ev.type === 'trace-done') {
+    const lcs = ev.path.map(p => p.char).join('');
+    noteEl.innerHTML = `<strong style="color:#4ade80">完成。</strong>LCS = "${lcs}"，长度 ${lcs.length}`;
+    lcsLenEl.textContent = lcs.length;
+  }
+}
+
+function step() {
+  if (cursor + 1 >= events.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  buildGrid();
+  events = buildEvents();
+  cursor = -1;
+  lcsCharsEl.innerHTML = '';
+  lcsLenEl.textContent = '—';
+  noteEl.innerHTML = '点 ▶ 看 DP 表逐格填充，最后回溯出 LCS';
+}
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= events.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

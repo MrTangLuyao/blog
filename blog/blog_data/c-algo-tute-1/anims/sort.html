@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>O(n²) sorts visualization</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 6px 0 0;
+    gap: 8px;
+  }
+  .bar-wrap {
+    flex: 1;
+    position: relative;
+    padding-top: 36px;
+    padding-bottom: 8px;
+    min-height: 0;
+  }
+  /* Each bar is absolutely positioned and slides via CSS transition on `left`.
+   * Identity (data-id) is persistent across the whole animation, so the same
+   * physical bar travels to its new position rather than two bars instantly
+   * swapping their values. */
+  .sbar {
+    position: absolute;
+    bottom: 8px;
+    border-radius: 4px 4px 0 0;
+    background: linear-gradient(180deg, rgba(217,119,87,0.55), rgba(217,119,87,0.88));
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.95);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition:
+      left      0.42s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.30s cubic-bezier(0.34, 1.5, 0.64, 1),
+      background 0.22s,
+      box-shadow 0.22s,
+      opacity   0.22s;
+    will-change: left, transform;
+  }
+  .sbar.compare {
+    background: linear-gradient(180deg, #fbbf24, #f59e0b);
+  }
+  .sbar.swap {
+    background: linear-gradient(180deg, #f87171, #ef4444);
+    transform: translateY(-14px);
+    z-index: 4;
+    box-shadow: 0 8px 16px rgba(239, 68, 68, 0.35);
+  }
+  .sbar.swap-down {
+    background: linear-gradient(180deg, #fb923c, #f97316);
+    transform: translateY(7px);
+    z-index: 3;
+  }
+  .sbar.key {
+    background: linear-gradient(180deg, #38bdf8, #0ea5e9);
+    transform: translateY(-30px);
+    z-index: 6;
+    box-shadow: 0 8px 18px rgba(14, 165, 233, 0.45);
+  }
+  .sbar.sorted {
+    background: linear-gradient(180deg, #4ade80, #22c55e);
+    box-shadow: 0 1px 2px rgba(34, 197, 94, 0.3);
+  }
+  .note { padding: 2px 4px; }
+  .legend {
+    display: flex; gap: 14px; font-size: 11px; color: #a1a1a0;
+    flex-wrap: wrap;
+  }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; margin-right: 4px; }
+  .sw-cmp { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
+  .sw-swp { background: linear-gradient(180deg, #f87171, #ef4444); }
+  .sw-key { background: linear-gradient(180deg, #38bdf8, #0ea5e9); }
+  .sw-sor { background: linear-gradient(180deg, #4ade80, #22c55e); }
+</style>
+</head>
+<body>
+
+<div class="title">案例：排序</div>
+
+<div class="controls">
+  <div class="btn-group" id="algoGroup">
+    <button class="active" data-algo="bubble">冒泡</button>
+    <button data-algo="selection">选择</button>
+    <button data-algo="insertion">插入</button>
+  </div>
+  <button id="playBtn" class="primary">▶ 播放</button>
+  <button id="stepBtn">下一步</button>
+  <button id="shuffleBtn">打乱</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1100" value="800" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="stage">
+  <div class="bar-wrap" id="bars"></div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">算法：</span><span class="stat-value" id="algoLabel">冒泡排序</span></span>
+  <span><span class="stat-label">比较：</span><span class="stat-value" id="compares">0</span></span>
+  <span><span class="stat-label">交换/移动：</span><span class="stat-value" id="swaps">0</span></span>
+  <span><span class="stat-label">第几轮：</span><span class="stat-value" id="passNum">0</span></span>
+</div>
+
+<script>
+/* Identity-based animation:
+ *   - Each value gets a persistent "id" — its original index in the unsorted array.
+ *   - bars[id] is the DOM element for that value; it never moves in DOM, only its
+ *     `left` (and sometimes its transform-Y) animates.
+ *   - Frames carry xOf[id] = current position 0..n-1 of bar `id`.
+ *   - A swap frame applies a class that lifts the involved bars upward while their
+ *     `left` transitions to each other's positions — so the eye clearly sees them
+ *     traveling instead of magically changing height in place.
+ */
+
+let original = [5, 2, 4, 1, 3, 8, 6, 9, 7];
+const N_DEFAULT = original.length;
+let n = original.length;
+
+let bars = [];     // bars[id] = DOM element
+let frames = [];
+let cursor = -1;
+let algo = 'bubble';
+let timer = null;
+
+const wrap = document.getElementById('bars');
+const algoLabel = document.getElementById('algoLabel');
+const comparesEl = document.getElementById('compares');
+const swapsEl = document.getElementById('swaps');
+const passNumEl = document.getElementById('passNum');
+const playBtn = document.getElementById('playBtn');
+const speedEl = document.getElementById('speed');
+
+function shuffle() {
+  const used = new Set();
+  const arr = [];
+  while (arr.length < N_DEFAULT) {
+    const v = 1 + Math.floor(Math.random() * 30);
+    if (!used.has(v)) { used.add(v); arr.push(v); }
+  }
+  original = arr;
+  n = original.length;
+}
+
+function buildBars() {
+  wrap.innerHTML = '';
+  bars = [];
+  const max = Math.max(...original);
+  for (let id = 0; id < n; id++) {
+    const b = document.createElement('div');
+    b.className = 'sbar';
+    b.dataset.id = id;
+    b.textContent = original[id];
+    b.style.width = `calc(${100/n}% - 4px)`;
+    b.style.height = (original[id] / max * 96) + '%';
+    b.style.left = `calc(${id * (100/n)}% + 2px)`;
+    wrap.appendChild(b);
+    bars.push(b);
+  }
+}
+
+/* ── Frame builders ──────────────────────────────────────────── */
+
+function bubbleFrames(orig) {
+  const data = orig.slice();
+  const perm = orig.map((_, i) => i);   // perm[pos] = id at this position
+  const f = [];
+  let pass = 0;
+
+  function snap(highlights, sortedIds, note, counters = {}) {
+    const xOf = new Array(n);
+    for (let p = 0; p < n; p++) if (perm[p] != null) xOf[perm[p]] = p;
+    return { xOf, highlights: { ...highlights, sorted: sortedIds }, pass, note, counters };
+  }
+
+  for (let i = 0; i < n - 1; i++) {
+    pass = i + 1;
+    let swapped = false;
+    for (let j = 0; j < n - 1 - i; j++) {
+      const sortedSet = [];
+      for (let p = n - i; p < n; p++) sortedSet.push(perm[p]);
+      f.push(snap({ compare: [perm[j], perm[j + 1]] }, sortedSet,
+        `第 ${pass} 轮：比较 a[${j}]=${data[j]} 和 a[${j+1}]=${data[j+1]}`,
+        { compare: 1 }));
+      if (data[j] > data[j + 1]) {
+        // tag which bar arcs OVER (lifting up) and which arcs UNDER (slight dip)
+        // — visually clearer than both jumping the same amount.
+        const idLeft  = perm[j];      // moving right
+        const idRight = perm[j + 1];  // moving left
+        [data[j], data[j + 1]] = [data[j + 1], data[j]];
+        [perm[j], perm[j + 1]] = [perm[j + 1], perm[j]];
+        swapped = true;
+        const sortedAfter = [];
+        for (let p = n - i; p < n; p++) sortedAfter.push(perm[p]);
+        f.push(snap(
+          { swap: [idLeft], swapDown: [idRight] },
+          sortedAfter,
+          `${data[j+1]} > ${data[j]} → 交换：橙柱左移、红柱右移`,
+          { swap: 1 }));
+      }
+    }
+    if (!swapped) {
+      f.push(snap({}, perm.slice(), '本轮无交换 → 已经有序，提前结束'));
+      return f;
+    }
+  }
+  f.push(snap({}, perm.slice(), '排序完成'));
+  return f;
+}
+
+function selectionFrames(orig) {
+  const data = orig.slice();
+  const perm = orig.map((_, i) => i);
+  const f = [];
+
+  function snap(highlights, sortedIds, pass, note, counters = {}) {
+    const xOf = new Array(n);
+    for (let p = 0; p < n; p++) if (perm[p] != null) xOf[perm[p]] = p;
+    return { xOf, highlights: { ...highlights, sorted: sortedIds }, pass, note, counters };
+  }
+
+  for (let i = 0; i < n - 1; i++) {
+    const pass = i + 1;
+    let minIdx = i;
+    const sortedSet = [];
+    for (let p = 0; p < i; p++) sortedSet.push(perm[p]);
+
+    f.push(snap({ key: [perm[i]] }, sortedSet, pass,
+      `第 ${pass} 轮：a[${i}]=${data[i]} 暂为最小`));
+
+    for (let j = i + 1; j < n; j++) {
+      f.push(snap({ key: [perm[minIdx]], compare: [perm[j]] }, sortedSet, pass,
+        `比较 a[${j}]=${data[j]} 与当前最小 a[${minIdx}]=${data[minIdx]}`,
+        { compare: 1 }));
+      if (data[j] < data[minIdx]) {
+        minIdx = j;
+        f.push(snap({ key: [perm[minIdx]] }, sortedSet, pass,
+          `更新最小位置为 ${minIdx}（值 ${data[minIdx]}）`));
+      }
+    }
+    if (minIdx !== i) {
+      const idLeft  = perm[i];
+      const idRight = perm[minIdx];
+      [data[i], data[minIdx]] = [data[minIdx], data[i]];
+      [perm[i], perm[minIdx]] = [perm[minIdx], perm[i]];
+      f.push(snap({ swap: [idRight], swapDown: [idLeft] }, sortedSet, pass,
+        `把最小值（${data[i]}）交换到位置 ${i}（红柱 ${data[i]} 滑到 ${i}，橙柱 ${data[minIdx]} 滑到 ${minIdx}）`,
+        { swap: 1 }));
+    }
+    const sortedAfter = [];
+    for (let p = 0; p <= i; p++) sortedAfter.push(perm[p]);
+    f.push(snap({}, sortedAfter, pass, `位置 ${i} 已就位（${data[i]}）`));
+  }
+  f.push(snap({}, perm.slice(), n - 1, '排序完成'));
+  return f;
+}
+
+function insertionFrames(orig) {
+  const data = orig.slice();
+  const perm = orig.map((_, i) => i);   // null = hole
+  const f = [];
+
+  /* For insertion sort the "key" bar floats above the array (translateY high)
+   * while other bars shift right under it. At the very end we drop the key
+   * down into the hole — which makes both the placement AND every shift
+   * obvious because nothing is happening in-place height-wise. */
+  function snap(highlights, sortedIds, pass, note, counters = {}, opts = {}) {
+    const xOf = new Array(n);
+    for (let p = 0; p < n; p++) if (perm[p] != null) xOf[perm[p]] = p;
+    if (opts.floatingId != null) {
+      xOf[opts.floatingId] = opts.floatX != null ? opts.floatX : 0;
+      const keyArr = highlights.key ? highlights.key.slice() : [];
+      keyArr.push(opts.floatingId);
+      highlights = { ...highlights, key: keyArr };
+    }
+    return { xOf, highlights: { ...highlights, sorted: sortedIds }, pass, note, counters };
+  }
+
+  // initial state
+  f.push(snap({}, [perm[0]], 0, 'a[0] 视为已排序前缀'));
+
+  for (let i = 1; i < n; i++) {
+    const key = data[i];
+    const keyId = perm[i];
+
+    const sortedBefore = [];
+    for (let p = 0; p < i; p++) sortedBefore.push(perm[p]);
+
+    // Lift the key out of position i. perm[i] becomes a hole.
+    perm[i] = null;
+    f.push(snap({}, sortedBefore, i,
+      `第 ${i} 轮：抓出 a[${i}] = ${key}（蓝柱悬空）`,
+      {},
+      { floatingId: keyId, floatX: i }));
+
+    let j = i - 1;
+    while (j >= 0 && data[j] > key) {
+      // Compare against the bar at position j
+      f.push(snap({ compare: [perm[j]] }, sortedBefore, i,
+        `比较 a[${j}]=${data[j]} vs key=${key}：a[${j}] 大，需右移`,
+        { compare: 1 },
+        { floatingId: keyId, floatX: i }));
+
+      // Shift: bar at position j slides right to position j+1
+      const movedId = perm[j];
+      perm[j + 1] = perm[j];
+      perm[j] = null;
+      data[j + 1] = data[j];
+
+      f.push(snap({ swap: [movedId] }, sortedBefore, i,
+        `${data[j+1]} 右移到位置 ${j+1}`,
+        { swap: 1 },
+        { floatingId: keyId, floatX: i }));
+
+      j--;
+    }
+    if (j >= 0) {
+      // Final compare that returned false — show the comparison happened
+      f.push(snap({ compare: [perm[j]] }, sortedBefore, i,
+        `比较 a[${j}]=${data[j]} vs key=${key}：a[${j}] 不大于 key，停止`,
+        { compare: 1 },
+        { floatingId: keyId, floatX: i }));
+    }
+    // Place the key at j+1: it slides horizontally AND drops down (translateY → 0)
+    perm[j + 1] = keyId;
+    data[j + 1] = key;
+
+    const sortedAfter = [];
+    for (let p = 0; p <= i; p++) sortedAfter.push(perm[p]);
+    f.push(snap({}, sortedAfter, i,
+      `蓝柱滑到位置 ${j+1} 并落下（key=${key} 已插入）`,
+      { swap: 1 }));
+  }
+
+  f.push(snap({}, perm.slice(), n - 1, '排序完成'));
+  return f;
+}
+
+/* ── Render ──────────────────────────────────────────────────── */
+
+function paint(frame) {
+  for (let id = 0; id < n; id++) {
+    const bar = bars[id];
+    bar.className = 'sbar';
+    bar.style.left = `calc(${frame.xOf[id] * (100 / n)}% + 2px)`;
+  }
+  const h = frame.highlights || {};
+  (h.compare  || []).forEach(id => bars[id]?.classList.add('compare'));
+  (h.swap     || []).forEach(id => bars[id]?.classList.add('swap'));
+  (h.swapDown || []).forEach(id => bars[id]?.classList.add('swap-down'));
+  (h.key      || []).forEach(id => bars[id]?.classList.add('key'));
+  (h.sorted   || []).forEach(id => bars[id]?.classList.add('sorted'));
+
+  let cmp = 0, sw = 0;
+  for (let i = 0; i <= cursor; i++) {
+    cmp += frames[i]?.counters?.compare || 0;
+    sw  += frames[i]?.counters?.swap || 0;
+  }
+  comparesEl.textContent = cmp;
+  swapsEl.textContent = sw;
+  passNumEl.textContent = frame.pass || 0;
+}
+
+function makeFrames() {
+  const fns = { bubble: bubbleFrames, selection: selectionFrames, insertion: insertionFrames };
+  return fns[algo](original);
+}
+
+function step() {
+  if (cursor + 1 >= frames.length) {
+    if (timer) { clearInterval(timer); timer = null; playBtn.textContent = '▶ 播放'; }
+    return;
+  }
+  cursor++;
+  paint(frames[cursor]);
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; playBtn.textContent = '▶ 播放'; }
+  buildBars();
+  frames = makeFrames();
+  cursor = -1;
+  comparesEl.textContent = '0';
+  swapsEl.textContent = '0';
+  passNumEl.textContent = '0';
+  algoLabel.textContent = ({ bubble: '冒泡排序', selection: '选择排序', insertion: '插入排序' })[algo];
+}
+
+document.getElementById('algoGroup').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  algo = e.target.dataset.algo;
+  document.querySelectorAll('#algoGroup button').forEach(b => b.classList.toggle('active', b === e.target));
+  reset();
+});
+
+document.getElementById('stepBtn').addEventListener('click', step);
+document.getElementById('resetBtn').addEventListener('click', reset);
+document.getElementById('shuffleBtn').addEventListener('click', () => { shuffle(); reset(); });
+
+// Slider direction is inverted: leftmost = slowest (longest interval),
+// rightmost = fastest (shortest). The slider value itself stays linear,
+// we just invert it when computing the interval.
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+playBtn.addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null; playBtn.textContent = '▶ 播放'; return; }
+  if (cursor + 1 >= frames.length) reset();
+  playBtn.textContent = '⏸ 暂停';
+  timer = setInterval(step, intervalMs());
+});
+
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

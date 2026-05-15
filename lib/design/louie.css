@@ -1,0 +1,147 @@
+/* ============================================================
+ * lib/design/louie.css
+ * Common design tokens & components shared across
+ * index.html · blog.html · learn.html
+ *
+ * Page-specific overrides (body extensions, page layouts,
+ * reader prose, etc.) stay inline in each page's <style> block.
+ * ============================================================ */
+
+/* ─── Design tokens ─── */
+:root {
+  --bg: #1f1f1e;
+  --surface: #2a2a29;
+  --surface-high: #333332;
+  --border: #3a3a39;
+  --outline: #4a4a49;
+  --text: #e8e8e8;
+  --muted: #a1a1a0;
+  --accent: #d97757;
+  --accent-dim: rgba(217, 119, 87, 0.15);
+  --accent-on: #ffb49d;
+}
+
+/* ─── Body base ─── */
+body {
+  font-family: 'JetBrains Mono', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif !important;
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ─── Ripple ─── */
+.ripple-surface { position: relative; overflow: hidden; }
+.ripple {
+  position: absolute; border-radius: 50%; transform: scale(0);
+  animation: ripple 600ms linear; pointer-events: none;
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.ripple-primary .ripple { background-color: rgba(255, 255, 255, 0.3); }
+.ripple-surface-variant .ripple { background-color: rgba(255, 255, 255, 0.08); }
+@keyframes ripple { to { transform: scale(4); opacity: 0; } }
+
+/* ─── M3 Card ─── */
+.m3-card { transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease; }
+.m3-card:hover {
+  background-color: var(--surface-high);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  transform: translateY(-3px);
+}
+
+/* ─── Navbar ─── */
+#navbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; padding: 0 24px;
+  background: rgba(31, 31, 30, 0.95);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-brand-wrap { position: relative; }
+
+#brand-dropdown-btn {
+  position: relative; overflow: hidden;
+  display: inline-flex; align-items: center;
+  padding: 8px 12px; border-radius: 9999px;
+  border: none; background: transparent;
+  font-family: inherit; font-size: 18px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.05em;
+  transition: background 0.2s ease;
+}
+#brand-dropdown-btn:hover { background: var(--accent-dim); }
+#brand-dropdown-btn .b-static { color: var(--text); }
+#brand-dropdown-btn .b-page { color: rgba(232, 232, 232, 0.6); font-weight: 500; }
+
+.b-dot {
+  background: linear-gradient(90deg, #d97757, #ffb49d);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+#brand-dropdown-icon {
+  width: 16px; height: 16px; margin-left: 6px;
+  color: rgba(232, 232, 232, 0.6); transition: transform 0.2s ease;
+}
+
+#brand-dropdown-menu {
+  position: absolute; top: 100%; left: 0; margin-top: 8px;
+  width: 192px; background: var(--surface); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); border: 1px solid var(--border);
+  padding: 8px 0; overflow: hidden;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 110;
+}
+#brand-dropdown-menu.is-open { opacity: 1; pointer-events: auto; }
+
+.nav-dd-item {
+  position: relative; overflow: hidden;
+  display: block; padding: 12px 16px;
+  font-size: 14px; font-weight: 500; text-decoration: none; color: var(--muted);
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.nav-dd-item:hover { color: var(--text); background: var(--surface-high); }
+.nav-dd-item.nav-active { color: var(--accent); background: var(--accent-dim); }
+
+.nav-right { display: flex; align-items: center; gap: 8px; }
+.nav-divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+
+#lang-toggle {
+  background: none; border: 1px solid var(--outline);
+  color: var(--accent); font-family: inherit; font-size: 13.5px; font-weight: 500;
+  padding: 9px 18px; border-radius: 9999px; cursor: pointer; letter-spacing: 0.1em;
+  position: relative; overflow: hidden;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 40px; box-sizing: border-box;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+#lang-toggle:hover { background: var(--accent-dim); border-color: rgba(217, 119, 87, 0.5); }
+
+/* Circular M3-style icon button (GitHub link).
+ * Same height as the brand button on the left so the navbar reads as one
+ * unified row. State layer on hover provides M3 feel. */
+#github-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: transparent; border: 1px solid var(--outline);
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+  position: relative; overflow: hidden;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+#github-btn:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(217, 119, 87, 0.5);
+}
+#github-btn svg { width: 18px; height: 18px; display: block; }
+
+/* On mobile, collapse the language toggle into a circular icon button that
+ * mirrors #github-btn — drop the "EN ⇄ 文" label and keep only the icon. */
+@media (max-width: 767px) {
+  #lang-toggle {
+    width: 40px; padding: 0; gap: 0;
+    justify-content: center; letter-spacing: 0;
+  }
+  #lang-toggle #lang-label { display: none; }
+  #lang-toggle svg { width: 18px; height: 18px; }
+}

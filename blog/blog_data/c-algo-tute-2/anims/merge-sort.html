@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>merge sort</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 4px; }
+  .label-row {
+    font-size: 11px;
+    color: #a1a1a0;
+    padding: 0 8px;
+    height: 16px;
+    line-height: 16px;
+  }
+  .bar-area {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    --top-y: 54%;
+    --tmp-y: 4px;
+  }
+  .row-divider {
+    position: absolute;
+    left: 6px; right: 6px;
+    top: 51%;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    pointer-events: none;
+  }
+  .scope {
+    position: absolute;
+    top: 4px;
+    height: 4px;
+    border-radius: 2px;
+    transition: left 0.4s, width 0.4s, opacity 0.3s, background 0.3s;
+    opacity: 0;
+  }
+  .scope.active { opacity: 1; }
+
+  /* Bars: persistent identity. Their `left` (column) and `bottom` (row)
+   * animate smoothly so the eye can track each value as it moves between
+   * the array (top) and the temp buffer (bottom). */
+  .mbar {
+    position: absolute;
+    border-radius: 4px 4px 0 0;
+    background: linear-gradient(180deg, rgba(217,119,87,0.55), rgba(217,119,87,0.88));
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.95);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition:
+      left   0.42s cubic-bezier(0.4, 0, 0.2, 1),
+      bottom 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+      background 0.25s,
+      transform 0.25s,
+      box-shadow 0.25s;
+  }
+  .mbar.row-top { bottom: var(--top-y); }
+  .mbar.row-tmp { bottom: var(--tmp-y); }
+
+  .mbar.left-half {
+    background: linear-gradient(180deg, rgba(251,146,60,0.65), rgba(249,115,22,0.92));
+  }
+  .mbar.right-half {
+    background: linear-gradient(180deg, rgba(56,189,248,0.65), rgba(14,165,233,0.92));
+  }
+  .mbar.compare {
+    transform: translateY(-7px);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.4), 0 6px 14px rgba(0,0,0,0.3);
+  }
+  .mbar.picked {
+    background: linear-gradient(180deg, #fbbf24, #f59e0b) !important;
+    box-shadow: 0 0 0 2px rgba(251,191,36,0.7), 0 6px 14px rgba(245,158,11,0.5);
+  }
+  .mbar.in-tmp {
+    background: linear-gradient(180deg, rgba(74,222,128,0.45), rgba(34,197,94,0.78)) !important;
+  }
+  .mbar.done {
+    background: linear-gradient(180deg, rgba(74,222,128,0.7), rgba(34,197,94,0.95)) !important;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：归并排序</div>
+
+<div class="controls">
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="shuffleBtn">打乱</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1100" value="650" style="width: 100px">
+  <span class="label">快</span>
+</div>
+
+<div class="stage">
+  <div class="label-row">数组 — 橙=左半 · 蓝=右半 · 黄=被挑出</div>
+  <div class="bar-area" id="barArea">
+    <div class="scope" id="scope"></div>
+    <div class="row-divider"></div>
+  </div>
+  <div class="label-row">临时缓冲区（temp，按顺序填入）</div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">比较：</span><span class="stat-value" id="compares">0</span></span>
+  <span><span class="stat-label">写入：</span><span class="stat-value" id="writes">0</span></span>
+  <span><span class="stat-label">第 <span id="stepIdx">0</span> 步</span></span>
+</div>
+
+<script>
+let original = [5, 2, 4, 1, 3, 8, 6, 7];
+const N_DEFAULT = original.length;
+let n = original.length;
+
+let bars = [];
+let events = [];
+let cursor = -1;
+let timer = null;
+
+const barArea  = document.getElementById('barArea');
+const scope    = document.getElementById('scope');
+const stepBtn  = document.getElementById('stepBtn');
+const autoBtn  = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const speedEl  = document.getElementById('speed');
+const comparesEl = document.getElementById('compares');
+const writesEl = document.getElementById('writes');
+const stepIdxEl = document.getElementById('stepIdx');
+
+function shuffle() {
+  const used = new Set(), arr = [];
+  while (arr.length < N_DEFAULT) {
+    const v = 1 + Math.floor(Math.random() * 30);
+    if (!used.has(v)) { used.add(v); arr.push(v); }
+  }
+  original = arr;
+  n = arr.length;
+}
+
+function makeEvents(arrIn) {
+  const arr = arrIn.slice();
+  const evs = [];
+  function ms(lo, hi) {
+    if (lo >= hi) return;
+    const mid = (lo + hi) >> 1;
+    ms(lo, mid);
+    ms(mid + 1, hi);
+    evs.push({ type: 'enter', lo, mid, hi });
+    const tmp = [];
+    let i = lo, j = mid + 1;
+    while (i <= mid && j <= hi) {
+      evs.push({ type: 'compare', i, j });
+      if (arr[i] <= arr[j]) {
+        evs.push({ type: 'pick', side: 'left',  from: i, k: tmp.length });
+        tmp.push(arr[i++]);
+      } else {
+        evs.push({ type: 'pick', side: 'right', from: j, k: tmp.length });
+        tmp.push(arr[j++]);
+      }
+    }
+    while (i <= mid) { evs.push({ type: 'pick', side: 'left',  from: i, k: tmp.length }); tmp.push(arr[i++]); }
+    while (j <= hi)  { evs.push({ type: 'pick', side: 'right', from: j, k: tmp.length }); tmp.push(arr[j++]); }
+    evs.push({ type: 'copy-back', lo, hi, len: tmp.length });
+    for (let t = 0; t < tmp.length; t++) arr[lo + t] = tmp[t];
+    evs.push({ type: 'exit' });
+  }
+  ms(0, arr.length - 1);
+  return evs;
+}
+
+function buildBars() {
+  barArea.querySelectorAll('.mbar').forEach(b => b.remove());
+  bars = [];
+  const max = Math.max(...original);
+  for (let id = 0; id < n; id++) {
+    const b = document.createElement('div');
+    b.className = 'mbar row-top';
+    b.dataset.id = id;
+    b.textContent = original[id];
+    b.style.width = `calc(${100/n}% - 4px)`;
+    // Floor at 14% so even the smallest value's bar is taller than its label
+    const heightPct = 14 + (original[id] / max) * 24;
+    b.style.height = heightPct + '%';
+    b.style.left = `calc(${id * (100/n)}% + 2px)`;
+    barArea.appendChild(b);
+    bars.push(b);
+  }
+}
+
+function replay(upto) {
+  const permTop = Array(n).fill(null);
+  const permTmp = Array(n).fill(null);
+  for (let i = 0; i < n; i++) permTop[i] = i;
+  let active = null, cmp = null, pickEv = null;
+  let compares = 0, writes = 0;
+  for (let e = 0; e <= upto; e++) {
+    const ev = events[e];
+    if (!ev) break;
+    if (ev.type === 'enter') {
+      active = { lo: ev.lo, mid: ev.mid, hi: ev.hi }; cmp = null; pickEv = null;
+    } else if (ev.type === 'compare') {
+      cmp = { i: ev.i, j: ev.j };
+      compares++;
+    } else if (ev.type === 'pick') {
+      const id = permTop[ev.from];
+      permTop[ev.from] = null;
+      permTmp[ev.k] = id;
+      pickEv = { id, side: ev.side };
+      writes++;
+    } else if (ev.type === 'copy-back') {
+      for (let t = 0; t < ev.len; t++) {
+        permTop[ev.lo + t] = permTmp[t];
+        permTmp[t] = null;
+      }
+      pickEv = null;
+      writes += ev.len;
+    } else if (ev.type === 'exit') {
+      active = null; cmp = null; pickEv = null;
+    }
+  }
+  return { permTop, permTmp, active, cmp, pickEv, compares, writes };
+}
+
+function paint() {
+  const state = replay(cursor);
+  const widthPct = 100 / n;
+
+  for (let id = 0; id < n; id++) {
+    const bar = bars[id];
+    bar.classList.remove('row-top', 'row-tmp', 'left-half', 'right-half', 'compare', 'picked', 'in-tmp', 'done');
+    let row = null, pos = null;
+    for (let p = 0; p < n; p++) {
+      if (state.permTop[p] === id) { row = 'top'; pos = p; break; }
+      if (state.permTmp[p] === id) { row = 'tmp'; pos = p; break; }
+    }
+    if (row === null) continue;
+
+    bar.style.left = `calc(${pos * widthPct}% + 2px)`;
+    bar.classList.add(row === 'top' ? 'row-top' : 'row-tmp');
+
+    if (row === 'tmp') bar.classList.add('in-tmp');
+
+    if (state.active) {
+      const { lo, mid, hi } = state.active;
+      if (row === 'top' && pos >= lo && pos <= mid) bar.classList.add('left-half');
+      if (row === 'top' && pos > mid && pos <= hi)  bar.classList.add('right-half');
+    }
+    if (state.cmp && row === 'top' && (pos === state.cmp.i || pos === state.cmp.j)) {
+      bar.classList.add('compare');
+    }
+    if (state.pickEv && state.pickEv.id === id) {
+      bar.classList.add('picked');
+    }
+  }
+
+  if (state.active) {
+    const { lo, mid, hi } = state.active;
+    const left  = lo * widthPct;
+    const right = (hi + 1) * widthPct;
+    scope.style.left  = `calc(${left}% + 2px)`;
+    scope.style.width = `calc(${right - left}% - 4px)`;
+    const midPct = ((mid - lo + 1) / (hi - lo + 1)) * 100;
+    scope.style.background =
+      `linear-gradient(90deg, rgba(251,146,60,0.85) 0%, rgba(251,146,60,0.85) ${midPct}%, ` +
+      `rgba(56,189,248,0.85) ${midPct}%, rgba(56,189,248,0.85) 100%)`;
+    scope.classList.add('active');
+  } else {
+    scope.classList.remove('active');
+  }
+
+  if (cursor === events.length - 1) {
+    bars.forEach(b => b.classList.add('done'));
+  }
+
+  comparesEl.textContent = state.compares;
+  writesEl.textContent   = state.writes;
+  stepIdxEl.textContent  = (cursor + 1);
+}
+
+function step() {
+  if (cursor + 1 >= events.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  buildBars();
+  events = makeEvents(original);
+  cursor = -1;
+  paint();
+}
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+shuffleBtn.addEventListener('click', () => { shuffle(); reset(); });
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= events.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quick sort</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { padding: 0; flex-direction: column; align-items: stretch; gap: 4px; }
+  .label-row {
+    font-size: 11px;
+    color: #a1a1a0;
+    padding: 0 8px;
+    height: 18px;
+    line-height: 18px;
+  }
+  .bar-area {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    padding-top: 28px;
+    padding-bottom: 28px;
+  }
+  .qbar {
+    position: absolute;
+    bottom: 28px;
+    border-radius: 4px 4px 0 0;
+    background: linear-gradient(180deg, rgba(217,119,87,0.55), rgba(217,119,87,0.88));
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.95);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition:
+      left 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.3s cubic-bezier(0.34, 1.5, 0.64, 1),
+      background 0.25s,
+      box-shadow 0.25s,
+      opacity 0.25s;
+  }
+  .qbar.in-range  { box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.07); }
+  .qbar.out-range { opacity: 0.45; }
+  .qbar.pivot     { background: linear-gradient(180deg, #f87171, #ef4444); box-shadow: 0 0 0 2px rgba(248,113,113,0.5), 0 4px 14px rgba(239,68,68,0.4); }
+  .qbar.lt        { background: linear-gradient(180deg, rgba(74,222,128,0.5), rgba(34,197,94,0.78)); }
+  .qbar.gt        { background: linear-gradient(180deg, rgba(56,189,248,0.5), rgba(14,165,233,0.78)); }
+  .qbar.examining { transform: translateY(-7px); box-shadow: 0 0 0 2px rgba(251,191,36,0.7), 0 6px 14px rgba(245,158,11,0.4); background: linear-gradient(180deg, #fbbf24, #f59e0b) !important; }
+  .qbar.swap      { transform: translateY(-12px); box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 6px 14px rgba(0,0,0,0.4); }
+  .qbar.placed    { background: linear-gradient(180deg, rgba(74,222,128,0.85), rgba(22,163,74,0.95)) !important; transform: translateY(0); animation: placedPulse 0.55s ease; }
+  .qbar.done      { background: linear-gradient(180deg, rgba(74,222,128,0.7), rgba(22,163,74,0.95)) !important; }
+
+  @keyframes placedPulse {
+    0%   { box-shadow: 0 0 0 0   rgba(74,222,128,0.6); }
+    50%  { box-shadow: 0 0 0 8px rgba(74,222,128,0.25); }
+    100% { box-shadow: 0 0 0 16px rgba(74,222,128,0); }
+  }
+
+  .qptr {
+    position: absolute;
+    top: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    transform: translateX(-50%);
+    transition: left 0.4s, opacity 0.25s, top 0.25s;
+    pointer-events: none;
+    opacity: 0;
+    white-space: nowrap;
+  }
+  .qptr.shown { opacity: 1; }
+  .qptr.pivot { background: rgba(239,68,68,0.25);  color: #fecaca; border: 1px solid #ef4444; }
+  .qptr.iptr  { background: rgba(74,222,128,0.22); color: #d8ffe1; border: 1px solid #4ade80; }
+  .qptr.jptr  { background: rgba(251,191,36,0.22); color: #fef3c7; border: 1px solid #fbbf24; }
+  .qptr.iptr  { top: 22px; }
+</style>
+</head>
+<body>
+
+<div class="title">案例：快速排序（Lomuto，最右元素作 pivot）</div>
+
+<div class="controls">
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="shuffleBtn">打乱</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1100" value="650" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="stage">
+  <div class="label-row">红=pivot · 绿=已确定 ≤ pivot · 蓝=已确定 &gt; pivot · 黄=正在比较</div>
+  <div class="bar-area" id="barArea">
+    <div class="qptr pivot" id="ptrPivot">pivot</div>
+    <div class="qptr iptr"  id="ptrI">i</div>
+    <div class="qptr jptr"  id="ptrJ">j</div>
+  </div>
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">比较：</span><span class="stat-value" id="compares">0</span></span>
+  <span><span class="stat-label">交换：</span><span class="stat-value" id="swaps">0</span></span>
+  <span><span class="stat-label">第 <span id="stepIdx">0</span> 步</span></span>
+</div>
+
+<script>
+let original = [5, 2, 8, 1, 4, 7, 3, 6];
+const N_DEFAULT = original.length;
+let n = original.length;
+
+let bars = [];
+let events = [];
+let cursor = -1;
+let timer = null;
+
+const barArea  = document.getElementById('barArea');
+const ptrPivot = document.getElementById('ptrPivot');
+const ptrI     = document.getElementById('ptrI');
+const ptrJ     = document.getElementById('ptrJ');
+const stepBtn  = document.getElementById('stepBtn');
+const autoBtn  = document.getElementById('autoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const speedEl  = document.getElementById('speed');
+const comparesEl = document.getElementById('compares');
+const swapsEl  = document.getElementById('swaps');
+const stepIdxEl = document.getElementById('stepIdx');
+
+function shuffle() {
+  const used = new Set(), arr = [];
+  while (arr.length < N_DEFAULT) {
+    const v = 1 + Math.floor(Math.random() * 30);
+    if (!used.has(v)) { used.add(v); arr.push(v); }
+  }
+  original = arr;
+  n = arr.length;
+}
+
+function makeEvents(arrIn) {
+  const arr = arrIn.slice();
+  const evs = [];
+  function qs(lo, hi) {
+    if (lo > hi) return;
+    if (lo === hi) {
+      evs.push({ type: 'mark-sorted', pos: lo });
+      return;
+    }
+    evs.push({ type: 'enter', lo, hi });
+    const pivotPos = hi;
+    evs.push({ type: 'choose-pivot', pos: pivotPos });
+    let i = lo - 1;
+    for (let j = lo; j < hi; j++) {
+      evs.push({ type: 'examine', i, j, pivotPos });
+      if (arr[j] <= arr[pivotPos]) {
+        i++;
+        if (i !== j) {
+          evs.push({ type: 'p-swap', a: i, b: j });
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        } else {
+          evs.push({ type: 'advance-i', i });
+        }
+      } else {
+        evs.push({ type: 'skip', j });
+      }
+    }
+    evs.push({ type: 'final-swap', a: i + 1, b: pivotPos });
+    [arr[i + 1], arr[pivotPos]] = [arr[pivotPos], arr[i + 1]];
+    evs.push({ type: 'mark-sorted', pos: i + 1 });
+    evs.push({ type: 'exit' });
+    qs(lo, i);
+    qs(i + 2, hi);
+  }
+  qs(0, arr.length - 1);
+  return evs;
+}
+
+function buildBars() {
+  barArea.querySelectorAll('.qbar').forEach(b => b.remove());
+  bars = [];
+  const max = Math.max(...original);
+  for (let id = 0; id < n; id++) {
+    const b = document.createElement('div');
+    b.className = 'qbar';
+    b.dataset.id = id;
+    b.textContent = original[id];
+    b.style.width = `calc(${100/n}% - 4px)`;
+    // Pure percentage with a 25% floor so small values still show + don't overlap pointers
+    const heightPct = 25 + (original[id] / max) * 40;
+    b.style.height = heightPct + '%';
+    b.style.left = `calc(${id * (100/n)}% + 2px)`;
+    barArea.appendChild(b);
+    bars.push(b);
+  }
+}
+
+function replay(upto) {
+  const perm = original.map((_, i) => i);
+  const sorted = new Set();
+  const regions = new Array(n).fill(null); // 'lt' | 'gt' | 'pivot' | null
+  let active = null, pivotPos = null;
+  let iPos = null, jPos = null;
+  let lastEv = null;
+  let compares = 0, swaps = 0;
+
+  for (let e = 0; e <= upto; e++) {
+    const ev = events[e];
+    if (!ev) break;
+    lastEv = ev;
+    switch (ev.type) {
+      case 'enter':
+        active = { lo: ev.lo, hi: ev.hi };
+        // Clear regions in this range
+        for (let p = ev.lo; p <= ev.hi; p++) regions[p] = null;
+        break;
+      case 'choose-pivot':
+        pivotPos = ev.pos;
+        regions[pivotPos] = 'pivot';
+        iPos = active.lo - 1;
+        jPos = active.lo;
+        break;
+      case 'examine':
+        iPos = ev.i; jPos = ev.j;
+        compares++;
+        break;
+      case 'p-swap': {
+        const a = perm[ev.a], b = perm[ev.b];
+        perm[ev.a] = b; perm[ev.b] = a;
+        regions[ev.a] = 'lt';
+        regions[ev.b] = 'gt';
+        iPos = ev.a;
+        swaps++;
+        break;
+      }
+      case 'advance-i':
+        iPos = ev.i;
+        regions[iPos] = 'lt';
+        break;
+      case 'skip':
+        regions[ev.j] = 'gt';
+        break;
+      case 'final-swap': {
+        const a = perm[ev.a], b = perm[ev.b];
+        perm[ev.a] = b; perm[ev.b] = a;
+        // Old pivot value now at ev.a; old a-position value now at ev.b
+        regions[ev.a] = 'pivot';
+        regions[ev.b] = 'gt';
+        pivotPos = ev.a;
+        iPos = null; jPos = null;
+        swaps++;
+        break;
+      }
+      case 'mark-sorted':
+        sorted.add(ev.pos);
+        regions[ev.pos] = null;
+        break;
+      case 'exit':
+        active = null; pivotPos = null;
+        iPos = null; jPos = null;
+        break;
+    }
+  }
+  return { perm, sorted, regions, active, pivotPos, iPos, jPos, lastEv, compares, swaps };
+}
+
+function paint() {
+  const state = replay(cursor);
+  const widthPct = 100 / n;
+
+  for (let id = 0; id < n; id++) {
+    const bar = bars[id];
+    bar.className = 'qbar';
+    const pos = state.perm.indexOf(id);
+    bar.style.left = `calc(${pos * widthPct}% + 2px)`;
+
+    if (state.sorted.has(pos)) {
+      bar.classList.add('done');
+    } else if (state.active && pos >= state.active.lo && pos <= state.active.hi) {
+      bar.classList.add('in-range');
+      const r = state.regions[pos];
+      if (r === 'pivot') bar.classList.add('pivot');
+      else if (r === 'lt') bar.classList.add('lt');
+      else if (r === 'gt') bar.classList.add('gt');
+    } else if (state.active) {
+      bar.classList.add('out-range');
+    }
+
+    // Per-event highlights
+    const ev = state.lastEv;
+    if (ev) {
+      if (ev.type === 'examine' && pos === ev.j) bar.classList.add('examining');
+      if (ev.type === 'p-swap' && (pos === ev.a || pos === ev.b)) bar.classList.add('swap');
+      if (ev.type === 'final-swap' && (pos === ev.a || pos === ev.b)) bar.classList.add('swap');
+      if (ev.type === 'mark-sorted' && pos === ev.pos) bar.classList.add('placed');
+    }
+  }
+
+  // Pointers
+  function placePtr(el, pos, visible) {
+    if (!visible || pos == null || pos < 0 || pos >= n) {
+      el.classList.remove('shown');
+    } else {
+      el.style.left = `calc(${pos * widthPct + widthPct / 2}%)`;
+      el.classList.add('shown');
+    }
+  }
+  placePtr(ptrPivot, state.pivotPos, state.active != null && state.pivotPos != null);
+  placePtr(ptrI, state.iPos, state.active != null && state.iPos != null && state.iPos >= state.active.lo);
+  placePtr(ptrJ, state.jPos, state.active != null && state.jPos != null && state.jPos < (state.active ? state.active.hi : n));
+
+  comparesEl.textContent = state.compares;
+  swapsEl.textContent = state.swaps;
+  stepIdxEl.textContent = (cursor + 1);
+}
+
+function step() {
+  if (cursor + 1 >= events.length) {
+    if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+    return;
+  }
+  cursor++;
+  paint();
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary'); }
+  buildBars();
+  events = makeEvents(original);
+  cursor = -1;
+  paint();
+}
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+stepBtn.addEventListener('click', step);
+resetBtn.addEventListener('click', reset);
+shuffleBtn.addEventListener('click', () => { shuffle(); reset(); });
+autoBtn.addEventListener('click', () => {
+  if (timer) {
+    clearInterval(timer); timer = null;
+    autoBtn.textContent = '▶ 自动'; autoBtn.classList.add('primary');
+    return;
+  }
+  if (cursor + 1 >= events.length) reset();
+  autoBtn.textContent = '⏸ 暂停';
+  autoBtn.classList.remove('primary');
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>

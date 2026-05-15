@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linear vs binary search</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .stage { flex-direction: column; gap: 18px; padding: 8px 0 18px; }
+  .lane {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .lane-title {
+    font-size: 12px;
+    color: #a1a1a0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .lane-title .step-count {
+    font-family: ui-monospace, monospace;
+    color: #d97757;
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .cells-row {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 22px 0 30px;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">案例：找一个数</div>
+
+<div class="controls">
+  <span class="label">目标 =</span>
+  <input type="number" id="target" value="22" />
+  <button id="autoBtn" class="primary">▶ 自动</button>
+  <button id="stepBtn">下一步</button>
+  <button id="resetBtn" class="ghost">重置</button>
+  <span class="label" style="margin-left:auto">慢</span>
+  <input type="range" id="speed" min="180" max="1400" value="700" style="width:100px">
+  <span class="label">快</span>
+</div>
+
+<div class="stage">
+
+  <div class="lane">
+    <div class="lane-title">
+      <span>线性搜索 — O(n)</span>
+      <span class="step-count">步数 <span id="lCount">0</span></span>
+    </div>
+    <div class="cells-row" id="lRow"></div>
+  </div>
+
+  <div class="lane">
+    <div class="lane-title">
+      <span>二分搜索 — O(log n)</span>
+      <span class="step-count">步数 <span id="bCount">0</span></span>
+    </div>
+    <div class="cells-row" id="bRow"></div>
+  </div>
+
+</div>
+
+<div class="stats">
+  <span><span class="stat-label">数组：</span><span class="mono" id="arrShow">[1, 3, 4, 7, 9, 12, 15, 18, 22, 25]</span></span>
+  <span id="resultMsg"></span>
+</div>
+
+<script>
+const data = [1, 3, 4, 7, 9, 12, 15, 18, 22, 25];
+
+const lRow = document.getElementById('lRow');
+const bRow = document.getElementById('bRow');
+const lCount = document.getElementById('lCount');
+const bCount = document.getElementById('bCount');
+const resultMsg = document.getElementById('resultMsg');
+
+let target;
+let lSteps = [], bSteps = [];
+let li = -1, bi = -1;
+let timer = null;
+
+function buildCells(rowEl) {
+  rowEl.innerHTML = '';
+  data.forEach((v, idx) => {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.dataset.idx = idx;
+    c.innerHTML = `
+      <span class="idx">${idx}</span>
+      <span>${v}</span>
+    `;
+    rowEl.appendChild(c);
+  });
+}
+
+function buildSteps(t) {
+  // linear
+  lSteps = [];
+  for (let i = 0; i < data.length; i++) {
+    lSteps.push({ at: i, found: data[i] === t });
+    if (data[i] === t) break;
+    if (i === data.length - 1) lSteps.push({ at: -1, fail: true });
+  }
+  if (data.indexOf(t) === -1 && lSteps.length === data.length) {
+    lSteps.push({ at: -1, fail: true });
+  }
+  // binary
+  bSteps = [];
+  let lo = 0, hi = data.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    bSteps.push({ lo, hi, mid, val: data[mid], compare: data[mid] === t ? 'eq' : (data[mid] < t ? 'lt' : 'gt') });
+    if (data[mid] === t) break;
+    if (data[mid] < t) lo = mid + 1; else hi = mid - 1;
+  }
+  if (data.indexOf(t) === -1) bSteps.push({ fail: true });
+}
+
+function clearMarks() {
+  [...lRow.children, ...bRow.children].forEach(c => {
+    c.classList.remove('compare', 'active', 'found', 'eliminated');
+    const ptr = c.querySelector('.ptr');
+    if (ptr) ptr.remove();
+  });
+}
+
+function reset() {
+  if (timer) { clearInterval(timer); timer = null; document.getElementById('autoBtn').textContent = '自动'; }
+  target = +document.getElementById('target').value;
+  buildCells(lRow);
+  buildCells(bRow);
+  buildSteps(target);
+  li = -1; bi = -1;
+  lCount.textContent = '0';
+  bCount.textContent = '0';
+  resultMsg.innerHTML = '';
+  clearMarks();
+}
+
+function setPtr(cell, label, cls) {
+  const p = document.createElement('span');
+  p.className = 'ptr ' + cls;
+  p.textContent = label;
+  cell.appendChild(p);
+}
+
+function stepLinear() {
+  if (li + 1 >= lSteps.length) return false;
+  li++;
+  const s = lSteps[li];
+  // clear active states (keep eliminated logic minimal here)
+  [...lRow.children].forEach(c => c.classList.remove('compare', 'active', 'found'));
+  if (s.fail) {
+    resultMsg.innerHTML = '<span class="stat-value" style="color:#f87171">线性：未找到</span>';
+    return true;
+  }
+  const cell = lRow.children[s.at];
+  if (s.found) cell.classList.add('found');
+  else cell.classList.add('compare');
+  lCount.textContent = (li + 1);
+  if (s.found) {
+    resultMsg.innerHTML = `<span class="stat-value green">线性 ${li+1} 步找到（位置 ${s.at}）</span>`;
+  }
+  return true;
+}
+
+function stepBinary() {
+  if (bi + 1 >= bSteps.length) return false;
+  bi++;
+  const s = bSteps[bi];
+  // remove ptrs from prior step
+  [...bRow.children].forEach(c => {
+    c.classList.remove('compare', 'active', 'found');
+    const p = c.querySelector('.ptr'); if (p) p.remove();
+  });
+  if (s.fail) {
+    resultMsg.innerHTML = '<span class="stat-value" style="color:#f87171">二分：未找到</span>';
+    return true;
+  }
+  // mark eliminated cells outside [lo, hi]
+  [...bRow.children].forEach((c, idx) => {
+    if (idx < s.lo || idx > s.hi) c.classList.add('eliminated');
+    else c.classList.remove('eliminated');
+  });
+  // ptrs
+  setPtr(bRow.children[s.lo],  'lo',  'lo');
+  setPtr(bRow.children[s.hi],  'hi',  'hi');
+  setPtr(bRow.children[s.mid], 'mid', 'mid');
+  if (s.compare === 'eq') {
+    bRow.children[s.mid].classList.add('found');
+    resultMsg.innerHTML += ` · <span class="stat-value green">二分 ${bi+1} 步找到（位置 ${s.mid}）</span>`;
+  } else {
+    bRow.children[s.mid].classList.add('compare');
+  }
+  bCount.textContent = (bi + 1);
+  return true;
+}
+
+function step() {
+  let any = stepLinear() | stepBinary();
+  if (!any) {
+    if (timer) { clearInterval(timer); timer = null; document.getElementById('autoBtn').textContent = '自动'; }
+  }
+}
+
+document.getElementById('stepBtn').addEventListener('click', step);
+document.getElementById('resetBtn').addEventListener('click', reset);
+document.getElementById('target').addEventListener('change', reset);
+
+const autoBtn = document.getElementById('autoBtn');
+const speedEl = document.getElementById('speed');
+
+function intervalMs() {
+  return (+speedEl.min) + (+speedEl.max) - (+speedEl.value);
+}
+
+autoBtn.addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = '自动'; return; }
+  autoBtn.textContent = '⏸ 暂停';
+  timer = setInterval(step, intervalMs());
+});
+speedEl.addEventListener('input', () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = setInterval(step, intervalMs());
+  }
+});
+
+reset();
+</script>
+</body>
+</html>
