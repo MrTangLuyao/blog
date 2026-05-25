@@ -23,6 +23,12 @@
  * ============================================================ */
 
 function route() {
+  // Clear any leftover ripple spans before swapping views. A finished ripple
+  // sitting on a persistent element (e.g. the reader "back" button) would
+  // otherwise replay its CSS animation when its container toggles back from
+  // display:none to block on navigation.
+  document.querySelectorAll('.ripple').forEach(r => r.remove());
+
   const slug = location.hash.replace(/^#/, '').trim();
   const list = document.getElementById('view-list');
   const reader = document.getElementById('view-reader');

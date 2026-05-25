@@ -81,8 +81,8 @@ function renderList() {
     const initial = (pickLang(post.title) || post.slug).trim().charAt(0).toUpperCase();
 
     const coverHtml = cover
-      ? `<div class="w-full sm:w-40 sm:h-40 h-56 shrink-0 rounded-m3-md overflow-hidden bg-m3-surface flex items-center justify-center border border-m3-outlineVariant/50"><img src="${cover}" alt="" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'text-3xl font-bold text-m3-primary/50\\'>${initial}</span>'"></div>`
-      : `<div class="w-full sm:w-40 sm:h-40 h-56 shrink-0 rounded-m3-md bg-m3-primaryContainer/10 flex items-center justify-center border border-m3-primary/10"><span class="text-3xl font-bold text-m3-primary/50">${initial}</span></div>`;
+      ? `<div class="w-full sm:w-28 sm:h-28 h-40 shrink-0 rounded-m3-md overflow-hidden bg-m3-surface flex items-center justify-center border border-m3-outlineVariant/50"><img src="${cover}" alt="" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'text-3xl font-bold text-m3-primary/50\\'>${initial}</span>'"></div>`
+      : `<div class="w-full sm:w-28 sm:h-28 h-40 shrink-0 rounded-m3-md bg-m3-primaryContainer/10 flex items-center justify-center border border-m3-primary/10"><span class="text-3xl font-bold text-m3-primary/50">${initial}</span></div>`;
 
     const tagsHtml = (post.tags || []).map(t => `<span class="px-2.5 py-0.5 rounded-m3-sm text-[11px] font-mono text-m3-primary bg-m3-primaryContainer/30 border border-m3-primary/20">${t}</span>`).join('');
     const minLabel = tt['reader-min'] || 'min';
@@ -96,17 +96,20 @@ function renderList() {
       : '';
 
     return `
-      <a class="ripple-surface group m3-card flex flex-col sm:flex-row gap-6 bg-m3-surfaceContainer rounded-m3-xl p-6 md:p-8 border border-m3-outlineVariant fade-in ${post.pinned ? 'border-m3-primary/30 bg-[#352c28]' : ''}" href="#${post.slug}">
+      <a class="ripple-surface group m3-card flex flex-col sm:flex-row gap-5 bg-m3-surfaceContainer rounded-m3-xl p-5 md:p-6 border border-m3-outlineVariant fade-in ${post.pinned ? 'border-m3-primary/30 bg-[#352c28]' : ''}" href="#${post.slug}">
         ${coverHtml}
-        <div class="flex flex-col min-w-0 py-1">
-          <div class="flex flex-wrap items-center gap-3 text-xs text-m3-onSurfaceVariant tracking-wider mb-3">
-            ${pinHtml}
-            <span class="font-bold text-m3-primary tabular-nums">${formatDate(post.date)}</span>
-            ${updatedHtml}
-            ${post.readingTime ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span>${post.readingTime} ${minLabel}</span>` : ''}
+        <div class="flex flex-col min-w-0 flex-1">
+          <div class="flex items-start justify-between gap-3 mb-2">
+            <div class="flex flex-wrap items-center gap-3 text-xs text-m3-onSurfaceVariant tracking-wider">
+              ${pinHtml}
+              <span class="font-bold text-m3-primary tabular-nums">${formatDate(post.date)}</span>
+              ${updatedHtml}
+              ${post.readingTime ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span>${post.readingTime} ${minLabel}</span>` : ''}
+            </div>
+            <span class="shrink-0 px-2 py-0.5 rounded-m3-sm text-[10px] font-mono uppercase tracking-wider text-m3-onSurfaceVariant/60 border border-m3-outlineVariant">${post.type === 'md' ? 'Markdown' : 'HTML'}</span>
           </div>
-          <h2 class="text-2xl font-bold text-m3-onSurface leading-snug mb-3 group-hover:text-m3-primary transition-colors">${pickLang(post.title)}</h2>
-          <p class="text-sm text-m3-onSurfaceVariant leading-relaxed line-clamp-2 mb-4 flex-grow">${pickLang(post.excerpt)}</p>
+          <h2 class="text-xl font-bold text-m3-onSurface leading-snug mb-2 group-hover:text-m3-primary transition-colors">${pickLang(post.title)}</h2>
+          <p class="text-sm text-m3-onSurfaceVariant leading-relaxed line-clamp-2 mb-3 flex-grow">${pickLang(post.excerpt)}</p>
           ${tagsHtml ? `<div class="flex flex-wrap gap-2 mt-auto">${tagsHtml}</div>` : ''}
         </div>
       </a>
@@ -116,10 +119,33 @@ function renderList() {
   bindRipples();
 }
 
-/* ─── Post body loader ─── */
+/* ─── Post body loader ─────────────────────────────────────────
+ * type 'html' (default): inject <script src=post.<lang>.js>, which registers
+ *   the body string into window.__BLOG_POSTS. Works the same as it always has.
+ * type 'md': fetch the raw post.<lang>.md text. Markdown bodies are plain
+ *   files with no JS wrapper, so they need fetch — which means md posts only
+ *   work over http(s), not file:// (see localrun.py for local preview).
+ * Either way this resolves to a RAW body string; BlogInterpreter.render
+ * (called in writeBody) turns it into injectable HTML based on type.
+ * ───────────────────────────────────────────────────────────── */
 const _bodyLoading = {};
-function loadPostBody(slug, lang) {
+const _mdCache = {};
+function loadPostBody(slug, lang, type) {
   const key = `${slug}:${lang}`;
+
+  if (type === 'md') {
+    if (_mdCache[key] != null) return Promise.resolve(_mdCache[key]);
+    if (_bodyLoading[key]) return _bodyLoading[key];
+    _bodyLoading[key] = fetch(`blog/blog_data/${slug}/post.${lang}.md`)
+      .then(r => {
+        if (!r.ok) throw new Error(`Failed to load post.${lang}.md (HTTP ${r.status})`);
+        return r.text();
+      })
+      .then(txt => { delete _bodyLoading[key]; _mdCache[key] = txt; return txt; })
+      .catch(e => { delete _bodyLoading[key]; throw e; });
+    return _bodyLoading[key];
+  }
+
   const cached = (window.__BLOG_POSTS || {})[key];
   if (cached != null) return Promise.resolve(cached);
   if (_bodyLoading[key]) return _bodyLoading[key];
@@ -138,6 +164,27 @@ function loadPostBody(slug, lang) {
     document.head.appendChild(script);
   });
   return _bodyLoading[key];
+}
+
+/* In-document anchor links (e.g. a post's "jump to section" links, like the
+   README's EN/中文 nav). The hash router treats ANY location.hash change as
+   navigation, so a raw <a href="#english"> would route away. We intercept
+   clicks on in-post #anchors, smooth-scroll to the target, and leave the hash
+   untouched — the same trick the TOC uses. Unknown anchors fall through to
+   default behavior. */
+function bindReaderAnchors(root) {
+  root.querySelectorAll('a[href^="#"]').forEach(a => {
+    const raw = a.getAttribute('href').slice(1);
+    if (!raw) return;
+    let id = raw;
+    try { id = decodeURIComponent(raw); } catch (_) {}
+    a.addEventListener('click', e => {
+      const target = document.getElementById(id);
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
 }
 
 /* ─── Reader view ─── */
@@ -176,11 +223,14 @@ async function renderReader(slug) {
 
   reader.innerHTML = `
     <div class="fade-in">
-      <div class="flex flex-wrap items-center gap-3 text-sm text-m3-onSurfaceVariant tracking-wider mb-6">
-        ${pinHtml}
-        <span class="font-bold text-m3-primary tabular-nums">${formatDate(post.date)}</span>
-        ${updatedHtml}
-        ${post.readingTime ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span>${post.readingTime} ${minLabel}</span>` : ''}
+      <div class="flex items-start justify-between gap-3 mb-6">
+        <div class="flex flex-wrap items-center gap-3 text-sm text-m3-onSurfaceVariant tracking-wider">
+          ${pinHtml}
+          <span class="font-bold text-m3-primary tabular-nums">${formatDate(post.date)}</span>
+          ${updatedHtml}
+          ${post.readingTime ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span>${post.readingTime} ${minLabel}</span>` : ''}
+        </div>
+        <span class="shrink-0 px-2.5 py-0.5 rounded-m3-sm text-[11px] font-mono uppercase tracking-wider text-m3-onSurfaceVariant/60 border border-m3-outlineVariant">${(post.type || 'html') === 'md' ? 'Markdown' : 'HTML'}</span>
       </div>
 
       <h1 class="text-4xl md:text-5xl font-extrabold text-m3-onSurface leading-tight mb-8">${pickLang(post.title)}</h1>
@@ -205,12 +255,17 @@ async function renderReader(slug) {
 
   const lang = post.lang || 'both';
   const wantedLang = (lang === 'both') ? currentLang : lang;
+  const type = post.type || 'html';
 
-  function writeBody(html) {
+  // Turn a RAW body (HTML or Markdown) into injectable HTML via the
+  // interpreter, then run the DOM-level post-processors (highlight + TOC
+  // happen against the resulting DOM, so they don't care about the source).
+  function writeBody(raw) {
     const el = document.getElementById('reader-body');
     if (!el || el.dataset.slug !== slug) return false;
-    el.innerHTML = html;
+    el.innerHTML = window.BlogInterpreter.render(raw, { type, slug });
     if (typeof window.highlightAllCode === 'function') window.highlightAllCode(el);
+    bindReaderAnchors(el);
     return true;
   }
 
@@ -218,19 +273,19 @@ async function renderReader(slug) {
   if (bodyEl) bodyEl.dataset.slug = slug;
 
   try {
-    let html = await loadPostBody(slug, wantedLang);
-    if (!html) {
+    let raw = await loadPostBody(slug, wantedLang, type);
+    if (!raw && type !== 'md') {
       if (window.__BLOG_POSTS) delete window.__BLOG_POSTS[`${slug}:${wantedLang}`];
-      html = await loadPostBody(slug, wantedLang);
+      raw = await loadPostBody(slug, wantedLang, type);
     }
-    writeBody(html);
+    writeBody(raw);
     buildToc();
   } catch (e) {
     if (lang === 'both') {
       const altLang = wantedLang === 'zh' ? 'en' : 'zh';
       try {
-        const html = await loadPostBody(slug, altLang);
-        writeBody(html);
+        const raw = await loadPostBody(slug, altLang, type);
+        writeBody(raw);
         buildToc();
         return;
       } catch (_) {}

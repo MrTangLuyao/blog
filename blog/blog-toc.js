@@ -46,6 +46,7 @@ function fireFabRipple(cx, cy) {
   circle.classList.add('ripple');
   const existing = tocFab.querySelector('.ripple');
   if (existing) existing.remove();
+  circle.addEventListener('animationend', () => circle.remove());
   tocFab.appendChild(circle);
 }
 

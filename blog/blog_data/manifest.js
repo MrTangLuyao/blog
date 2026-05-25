@@ -9,8 +9,46 @@
 
 window.__BLOG_MANIFEST = {
   version: 3,
-  updated: '2026-05-09',
+  updated: '2026-05-25',
   posts: [
+
+    {
+      slug: "welcome",
+      date: "2026-05-01",
+      updated: "2026-05-04",
+      type: "md",
+      title: { "zh": "你好，欢迎来到我的博客", "en": "Hello — Welcome to my blog" },
+      excerpt: { "zh": "介绍博客，以及louie.网站", "en": "Introduction to my blog" },
+      cover: "cover.webp",
+      tags: ["Hello World"],
+      readingTime: 2,
+      lang: "both",
+      pinned: true,
+    },
+
+    {
+      slug: "design-restraint",
+      date: "2026-05-25",
+      type: "md",
+      title: { "zh": "网站设计：克制美学", "en": "Web Design: The Aesthetics of Restraint" },
+      excerpt: { "zh": "关于克制美学与本次的博客大版本 Markdown 更新", "en": "On the aesthetics of restraint, and this blog's major Markdown update." },
+      tags: ["Hello World"],
+      readingTime: 7,
+      lang: "both",
+      pinned: true,
+    },
+
+    {
+      slug: "readme",
+      date: "2026-05-25",
+      type: "md",
+      title: { "zh": "博客工作原理", "en": "How the Blog Works" },
+      excerpt: { "zh": "原 README.md", "en": "The original README.md" },
+      tags: ["meta"],
+      readingTime: 12,
+      lang: "en",
+      pinned: true,
+    },
 
     {
       slug: "c-algo-tute-3",
@@ -109,19 +147,6 @@ window.__BLOG_MANIFEST = {
       tags: ["sql", "code"],
       readingTime: 18,
       lang: "both",
-    },
-
-    {
-      slug: "welcome",
-      date: "2026-05-01",
-      updated: "2026-05-04",
-      title: { "zh": "你好，欢迎来到我的博客", "en": "Hello — Welcome to my blog" },
-      excerpt: { "zh": "介绍博客，以及louie.网站", "en": "Introduction to my blog" },
-      cover: "cover.webp",
-      tags: ["Hello World"],
-      readingTime: 2,
-      lang: "both",
-      pinned: true,
     },
 
     {

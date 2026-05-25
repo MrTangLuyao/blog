@@ -34,6 +34,12 @@ function bindRipples() {
       circle.classList.add("ripple");
       const existing = button.querySelector('.ripple');
       if (existing) existing.remove();
+      // Remove the span once its 600ms animation finishes. Without this the
+      // finished (invisible) span lingers on persistent elements like the
+      // reader "back" button, and toggling #view-reader between display:none
+      // and block (on navigation) re-fires the CSS animation — a phantom
+      // ripple replays every time you open a post.
+      circle.addEventListener('animationend', () => circle.remove());
       button.appendChild(circle);
     };
     button.addEventListener('touchstart', (e) => {
@@ -101,6 +107,10 @@ function loadManifest() {
         const pa = a.pinned ? 1 : 0;
         const pb = b.pinned ? 1 : 0;
         if (pa !== pb) return pb - pa;
+        // Pinned posts keep their manifest declaration order (stable sort),
+        // so their order is controlled by arranging them in manifest.js.
+        // Non-pinned posts fall back to newest-first by date.
+        if (pa && pb) return 0;
         return (b.date || '').localeCompare(a.date || '');
       })
   };
