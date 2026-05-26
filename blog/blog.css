@@ -73,28 +73,84 @@ body { overscroll-behavior: none; }
 .reader-body a:hover { border-bottom-color: #d97757; }
 .reader-body ul, .reader-body ol { padding-left: 28px; color: #e8e8e8; }
 .reader-body li + li { margin-top: 6px; }
+/* Real, fixed-width JetBrains Mono for code. The site-wide 'JetBrains Mono'
+   family (louie.css / fonts.css) is actually a CJK *body* subset — its ASCII
+   glyphs aren't reliably monospaced, which made code columns look ragged.
+   These two faces load the genuine monospace files (already in the repo). */
+@font-face {
+  font-family: 'JBMono';
+  src: url('../lib/design/JetBrainsMono.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'JBMono';
+  src: url('../lib/design/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+
+/* inline code — pill */
 .reader-body code {
-  font-family: 'JetBrains Mono', monospace; font-size: 0.9em;
+  font-family: 'JBMono', 'JetBrains Mono', monospace; font-size: 0.9em;
   color: #ffb49d; background: rgba(217, 119, 87, 0.15);
   padding: 2px 6px; border-radius: 6px;
 }
-.reader-body pre {
-  background: #2a2a29; border: 1px solid #3a3a39; border-radius: 12px;
-  padding: 16px; overflow-x: auto; font-size: 14px; line-height: 1.7;
-}
-.reader-body pre code { color: #e8e8e8; background: none; padding: 0; }
 
-/* ─── C syntax highlighting (paired with blog-syntax.js) ─── */
-/* Palette: VS Code Dark+ inspired, tuned for the #2a2a29 surface. */
-.reader-body pre code .syn-comment      { color: #6a9955; font-style: italic; }
-.reader-body pre code .syn-string       { color: #ce9178; }
-.reader-body pre code .syn-keyword      { color: #569cd6; font-weight: 600; }
-.reader-body pre code .syn-type         { color: #4ec9b0; }
-.reader-body pre code .syn-constant     { color: #4fc1ff; }
-.reader-body pre code .syn-function     { color: #dcdcaa; }
-.reader-body pre code .syn-number       { color: #b5cea8; }
-.reader-body pre code .syn-operator     { color: #d4d4d4; }
-.reader-body pre code .syn-preprocessor { color: #c586c0; }
+/* ─── Code box (highlight.js VS Code Dark+ theme + custom chrome) ───
+   Token COLOURS come from lib/highlight/vs2015.min.css (the upstream,
+   maintained theme). Everything below is just the box chrome: header bar
+   with language label + copy button, and a line-number gutter. The box
+   provides the warm #2a2a29 surface; we neutralise the theme's own bg. */
+.reader-body .code-box {
+  margin: 24px 0; border: 1px solid #3a3a39; border-radius: 12px;
+  background: #2a2a29; overflow: hidden;
+  font-family: 'JBMono', 'JetBrains Mono', monospace; font-size: 14px;
+  /* keep code literal — no ligatures (-> must not render as →) for tutorials */
+  font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;
+}
+.reader-body .code-box__bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px 6px 14px;
+  background: rgba(0, 0, 0, 0.18); border-bottom: 1px solid #3a3a39;
+}
+.reader-body .code-box__lang {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #a1a1a0; font-weight: 700;
+}
+.reader-body .code-box__copy {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  color: #a1a1a0; font: inherit; font-size: 11px; padding: 4px 9px;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.reader-body .code-box__copy:hover {
+  color: #e8e8e8; background: rgba(255, 255, 255, 0.06); border-color: #3a3a39;
+}
+.reader-body .code-box__copy svg { width: 13px; height: 13px; flex-shrink: 0; }
+.reader-body .code-box__copy.copied { color: #6a9955; }
+
+.reader-body .code-box__main { display: flex; align-items: stretch; }
+.reader-body .code-box__gutter {
+  flex: 0 0 auto; user-select: none; -webkit-user-select: none;
+  text-align: right; white-space: pre; tab-size: 4;
+  padding: 14px 12px 14px 14px; line-height: 1.7; color: #5c5c5b;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+.reader-body .code-box__pre {
+  flex: 1 1 auto; min-width: 0; margin: 0; padding: 14px 16px;
+  overflow-x: auto; line-height: 1.7; background: none;
+}
+/* the box owns the chrome: strip the inline-code pill (bg/padding) that
+   .reader-body code would otherwise apply to plain, un-highlighted blocks,
+   and neutralise the vs2015 theme's own block background/padding */
+.reader-body .code-box__pre code { color: #e8e8e8; background: none; padding: 0; }
+.reader-body .hljs { background: transparent; }
+
+/* stray <pre> without a <code> child (rare) — keep a sane surface */
+.reader-body pre:not(.code-box__pre) {
+  background: #2a2a29; border: 1px solid #3a3a39; border-radius: 12px;
+  padding: 14px 16px; overflow-x: auto; font-size: 14px; line-height: 1.7;
+  font-family: 'JBMono', 'JetBrains Mono', monospace; color: #e8e8e8;
+}
 .reader-body img {
   max-width: 100%; height: auto; border-radius: 12px;
   margin: 24px auto; display: block; border: 1px solid #3a3a39;

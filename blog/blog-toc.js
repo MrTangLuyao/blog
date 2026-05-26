@@ -60,6 +60,13 @@ window.addEventListener('resize', updateTocBtn);
 /* ─── Desktop TOC sidebar ─── */
 let _tocObserver = null;
 
+// True if `id` is already used by some OTHER element in the document — used to
+// keep generated heading ids from clashing with app ids like #toc-sidebar.
+function idTaken(id, self) {
+  const el = document.getElementById(id);
+  return !!el && el !== self;
+}
+
 function buildToc() {
   const sidebar = document.getElementById('toc-sidebar');
   const body    = document.getElementById('reader-body');
@@ -74,12 +81,15 @@ function buildToc() {
     return;
   }
 
-  const used = {};
+  // Slugify headings into stable ids. Guard against collisions with BOTH
+  // earlier headings AND ids already present in the page (e.g. the static
+  // <nav id="toc-sidebar">). Without the second check a heading like
+  // "## TOC sidebar" mints a duplicate #toc-sidebar, so its anchor jumps to
+  // the sidebar container instead of the section.
   headings.forEach(h => {
-    let base = h.textContent.trim().replace(/[^\w一-鿿\s]/g, '').trim().replace(/\s+/g, '-').toLowerCase() || h.tagName.toLowerCase();
-    let id = base;
-    if (used[id] !== undefined) { used[id]++; id = `${base}-${used[id]}`; }
-    else used[id] = 0;
+    const base = h.textContent.trim().replace(/[^\w一-鿿\s]/g, '').trim().replace(/\s+/g, '-').toLowerCase() || h.tagName.toLowerCase();
+    let id = base, n = 1;
+    while (idTaken(id, h)) { id = `${base}-${n++}`; }
     h.id = id;
   });
 

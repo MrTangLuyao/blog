@@ -27,6 +27,29 @@
 
 let activeTag = '__all';
 
+/* ─── Post → code language ───────────────────────────────────
+   Map a post's tags to the highlight.js language its code blocks
+   are written in, so blog-syntax.js can colour them deterministically
+   instead of guessing per block (C in particular is hard to auto-detect).
+   Returns null when no tag names a known language → auto-detection. */
+const CODE_LANG_BY_TAG = {
+  c: 'c', 'c++': 'cpp', cpp: 'cpp',
+  python: 'python', py: 'python',
+  sql: 'sql',
+  bash: 'bash', shell: 'bash', sh: 'bash',
+  json: 'json',
+  javascript: 'javascript', js: 'javascript',
+  html: 'xml', xml: 'xml',
+};
+function postCodeLang(post) {
+  if (!post || !Array.isArray(post.tags)) return null;
+  for (const tag of post.tags) {
+    const lang = CODE_LANG_BY_TAG[String(tag).toLowerCase()];
+    if (lang) return lang;
+  }
+  return null;
+}
+
 /* ─── Tag bar ─── */
 function renderTagBar() {
   const bar = document.getElementById('tag-bar');
@@ -264,7 +287,7 @@ async function renderReader(slug) {
     const el = document.getElementById('reader-body');
     if (!el || el.dataset.slug !== slug) return false;
     el.innerHTML = window.BlogInterpreter.render(raw, { type, slug });
-    if (typeof window.highlightAllCode === 'function') window.highlightAllCode(el);
+    if (typeof window.highlightAllCode === 'function') window.highlightAllCode(el, postCodeLang(post));
     bindReaderAnchors(el);
     return true;
   }

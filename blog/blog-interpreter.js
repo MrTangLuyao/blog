@@ -14,9 +14,9 @@
  *   1. First top-level <p> gets class="lead"        (matches every post's opener)
  *   2. Relative <img src> → blog/blog_data/<slug>/  (resolves the "paths are
  *      relative to index.html, not the post folder" gotcha automatically)
- *   3. Fenced code: only ```c is left for the C highlighter; every other
- *      language (and unlabeled fences) gets class="lang-text" so the
- *      C-only highlighter (blog-syntax.js) skips it and renders it verbatim.
+ *   3. Fenced code: language hints (```c, ```python, ```sql, …) are left
+ *      intact as class="language-xxx" so blog-syntax.js (highlight.js) can
+ *      colour them; unlabeled fences are auto-detected downstream.
  *
  * marked v12 adds no heading ids by default, so buildToc keeps full control
  * of slugifying h2/h3 — nothing to disable here.
@@ -52,12 +52,9 @@
       });
     }
 
-    // 3. opt non-C fenced code out of the C highlighter
-    root.querySelectorAll('pre code').forEach(code => {
-      if (!code.classList.contains('language-c')) {
-        code.classList.add('lang-text');
-      }
-    });
+    // 3. Fenced-code language hints (class="language-xxx") are kept as-is so
+    //    blog-syntax.js / highlight.js can colour them; unlabeled fences are
+    //    left classless and auto-detected downstream.
 
     return root.innerHTML;
   }
