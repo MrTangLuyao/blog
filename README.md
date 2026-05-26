@@ -71,8 +71,8 @@ blog/
 │   │   └── (other assets, e.g. inline images)
 │   └── (more post folders…)
 └── editor/
-    └── blog_writer.py             ← legacy Tk GUI (writes the HTML .js format). Slated to be replaced
-                                     by a Markdown-first tool; not required to add posts by hand.
+    └── blog_writer.py             ← Tk manifest manager: create posts + edit manifest metadata.
+                                     Bodies open in your own editor (.md / .js); HTML posts flagged "!".
 ```
 
 URLs: `/` → list view, `/#<slug>` → reader view for that post.
@@ -376,8 +376,8 @@ blog/
 │   │   └── （其它资源）
 │   └── （更多文章文件夹…）
 └── editor/
-    └── blog_writer.py             ← 旧版 Tk 写文工具（写的是 HTML .js 格式）。将被
-                                     Markdown 优先的新工具取代；手写文章不依赖它。
+    └── blog_writer.py             ← Tk 清单管理器：新建文章 + 编辑 manifest 元数据。
+                                     正文用你自己的编辑器打开（.md / .js）；HTML 文章标 "!"。
 ```
 
 URL：`/` → 列表视图；`/#<slug>` → 阅读视图。

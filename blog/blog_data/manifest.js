@@ -2,14 +2,14 @@
    Louie's blog manifest — INDEX ONLY.
 
    Each post entry is metadata. The body lives in its own folder:
-       blog/blog_data/<slug>/post.zh.js
-       blog/blog_data/<slug>/post.en.js
+       blog/blog_data/<slug>/post.zh.(md|js)
+       blog/blog_data/<slug>/post.en.(md|js)
    blog.html loads those on demand when the reader view opens a post.
    ───────────────────────────────────────────────────────────── */
 
 window.__BLOG_MANIFEST = {
   version: 3,
-  updated: '2026-05-25',
+  updated: '2026-05-26',
   posts: [
 
     {
@@ -45,7 +45,7 @@ window.__BLOG_MANIFEST = {
       title: { "zh": "博客工作原理", "en": "How the Blog Works" },
       excerpt: { "zh": "原 README.md", "en": "The original README.md" },
       tags: ["meta"],
-      readingTime: 12,
+      readingTime: 19,
       lang: "en",
       pinned: true,
     },

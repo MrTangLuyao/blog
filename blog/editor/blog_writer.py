@@ -1,11 +1,25 @@
 #!/usr/bin/env python3
-"""blog_writer.py — GUI tool for writing Louie's blog posts."""
+"""blog_writer.py — manifest manager for Louie's blog.
+
+Scope (deliberately small): create new posts and edit the manifest metadata
+(slug, date, title, excerpt, cover, tags, lang, pinned, reading time, type).
+
+It does NOT edit post bodies. Bodies are plain files on disk:
+    Markdown posts (type 'md')  → blog/blog_data/<slug>/post.<lang>.md
+    HTML posts     (type other) → blog/blog_data/<slug>/post.<lang>.js
+Click "Open … ↗" to open a body file in your OS's default editor (point your
+favourite Markdown editor at .md files). New body files are created from a
+small template on first open. HTML posts are flagged with a "!" in the list,
+since the recommended/normal format is Markdown.
+"""
 
 import json
 import math
 import os
 import re
 import shutil
+import subprocess
+import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from datetime import date
@@ -75,7 +89,7 @@ def load_manifest() -> dict:
 
 def _post_to_js(p: dict) -> str:
     lines = ['    {']
-    order = ['slug', 'date', 'updated', 'title', 'excerpt', 'cover',
+    order = ['slug', 'date', 'updated', 'type', 'title', 'excerpt', 'cover',
              'tags', 'readingTime', 'lang', 'pinned', 'draft']
     keys = order + [k for k in p if k not in order]
     for k in keys:
@@ -108,8 +122,8 @@ def save_manifest(manifest: dict) -> None:
         "/* ─────────────────────────────────────────────────────────────\n"
         "   Louie's blog manifest — INDEX ONLY.\n\n"
         "   Each post entry is metadata. The body lives in its own folder:\n"
-        "       blog/blog_data/<slug>/post.zh.js\n"
-        "       blog/blog_data/<slug>/post.en.js\n"
+        "       blog/blog_data/<slug>/post.zh.(md|js)\n"
+        "       blog/blog_data/<slug>/post.en.(md|js)\n"
         "   blog.html loads those on demand when the reader view opens a post.\n"
         "   ───────────────────────────────────────────────────────────── */\n\n"
         f"window.__BLOG_MANIFEST = {{\n"
@@ -124,34 +138,70 @@ def save_manifest(manifest: dict) -> None:
         f.write(content)
 
 
-def load_post_body(slug: str, lang: str) -> str:
-    path = os.path.join(BLOG_DATA, slug, f'post.{lang}.js')
+# ── Body files (created/opened, never edited in-app) ────────────────────
+
+def post_type(p: dict) -> str:
+    """Normalised post type: 'md' or 'html' (the runtime default)."""
+    return 'md' if (p.get('type') == 'md') else 'html'
+
+
+def body_ext(typ: str) -> str:
+    return 'md' if typ == 'md' else 'js'
+
+
+def body_path(slug: str, lang: str, typ: str) -> str:
+    return os.path.join(BLOG_DATA, slug, f'post.{lang}.{body_ext(typ)}')
+
+
+def ensure_body_file(slug: str, lang: str, typ: str) -> str:
+    """Return the body file path, creating it from a template if missing."""
+    folder = os.path.join(BLOG_DATA, slug)
+    os.makedirs(folder, exist_ok=True)
+    path = body_path(slug, lang, typ)
+    if not os.path.exists(path):
+        if typ == 'md':
+            content = f"# \n\n_Write the {lang.upper()} post here, in Markdown._\n"
+        else:
+            content = (
+                f"/* Post body — {slug} / {lang} */\n\n"
+                f"(window.__BLOG_POSTS = window.__BLOG_POSTS || {{}})['{slug}:{lang}'] = `\n"
+                f'<p class="lead"></p>\n'
+                f"`;\n"
+            )
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    return path
+
+
+def read_body_text(slug: str, lang: str, typ: str) -> str:
+    """Raw body text for reading-time estimation (empty if file absent)."""
+    path = body_path(slug, lang, typ)
     if not os.path.exists(path):
         return ''
     with open(path, 'r', encoding='utf-8') as f:
         src = f.read()
-    # extract content between backticks
-    m = re.search(r"\[['\"][^'\"]+:[a-z]+['\"]\]\s*=\s*`([\s\S]*?)`;", src)
-    return m.group(1).strip() if m else ''
+    if typ == 'md':
+        return src
+    m = re.search(r"=\s*`([\s\S]*?)`;\s*$", src.strip())
+    return m.group(1) if m else src
 
 
-def save_post_body(slug: str, lang: str, html: str) -> None:
-    folder = os.path.join(BLOG_DATA, slug)
-    os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, f'post.{lang}.js')
-    content = (
-        f"/* Post body — {slug} / {lang} */\n\n"
-        f"(window.__BLOG_POSTS = window.__BLOG_POSTS || {{}})['{slug}:{lang}'] = `\n"
-        f"{html}\n"
-        f"`;\n"
-    )
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(content)
+def open_in_editor(path: str) -> None:
+    """Open a file with the OS default application (the user's editor)."""
+    try:
+        if sys.platform.startswith('win'):
+            os.startfile(path)  # type: ignore[attr-defined]
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
+    except Exception as e:  # noqa: BLE001
+        messagebox.showerror('Open failed', f'Could not open:\n{path}\n\n{e}')
 
 
-def estimate_reading_time(en_html: str, zh_html: str) -> int:
-    en_text = re.sub(r'<[^>]+>', '', en_html)
-    zh_text = re.sub(r'<[^>]+>', '', zh_html)
+def estimate_reading_time(en_text: str, zh_text: str) -> int:
+    en_text = re.sub(r'<[^>]+>', '', en_text)
+    zh_text = re.sub(r'<[^>]+>', '', zh_text)
     words_en = len(en_text.split())
     chars_zh = len(re.sub(r'\s', '', zh_text))
     return max(1, math.ceil((words_en / 200) + (chars_zh / 400)))
@@ -169,15 +219,9 @@ def make_btn(parent, text, command, primary=False, danger=False, **kw):
     return tk.Button(
         parent, text=text, command=command,
         bg=bg, fg=fg, activebackground=abg, activeforeground=fg,
+        disabledforeground=C['outline'],
         relief='flat', bd=0, padx=12, pady=5,
         font=(*FONT_MONO, 'bold'), cursor='hand2', **kw
-    )
-
-
-def make_label(parent, text, small=False, **kw):
-    return tk.Label(
-        parent, text=text, bg=C['bg'], fg=C['muted'],
-        font=FONT_MONO_SM if small else FONT_MONO, **kw
     )
 
 
@@ -191,7 +235,7 @@ def make_entry(parent, textvariable, width=20):
     )
 
 
-def labeled_entry(parent, label, var, width=20, label_kwargs=None):
+def labeled_entry(parent, label, var, width=20):
     """Returns a Frame containing a label + entry, stacked vertically."""
     frame = tk.Frame(parent, bg=C['bg'])
     tk.Label(frame, text=label, bg=C['bg'], fg=C['muted'],
@@ -207,13 +251,12 @@ class BlogWriter(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Blog Writer — louie.blog')
-        self.geometry('1340x860')
-        self.minsize(960, 600)
+        self.geometry('1080x600')
+        self.minsize(860, 520)
         self.configure(bg=C['bg'])
         self._manifest: dict = load_manifest()
         self._current_slug: str | None = None
         self._cover_src: str | None = None       # pending new cover file path
-        self._last_body: tk.Text | None = None   # most recently focused body editor
         self._build_ui()
         self._refresh_list()
         if self._manifest.get('posts'):
@@ -228,7 +271,7 @@ class BlogWriter(tk.Tk):
         top = tk.Frame(self, bg=C['surface'], height=50)
         top.pack(fill='x', side='top')
         top.pack_propagate(False)
-        tk.Label(top, text='louie.blog — writer', bg=C['surface'],
+        tk.Label(top, text='louie.blog — manifest', bg=C['surface'],
                  fg=C['primary'], font=('JetBrains Mono', 13, 'bold'),
                  padx=16).pack(side='left', fill='y')
         btn_row = tk.Frame(top, bg=C['surface'])
@@ -243,9 +286,9 @@ class BlogWriter(tk.Tk):
         pane.pack(fill='both', expand=True)
 
         # Sidebar
-        sidebar = tk.Frame(pane, bg=C['surface'], width=240)
-        pane.add(sidebar, minsize=180)
-        tk.Label(sidebar, text='POSTS', bg=C['surface'], fg=C['muted'],
+        sidebar = tk.Frame(pane, bg=C['surface'], width=260)
+        pane.add(sidebar, minsize=200)
+        tk.Label(sidebar, text='POSTS   ( ! = HTML )', bg=C['surface'], fg=C['muted'],
                  font=(*FONT_MONO_SM, 'bold'), padx=12, pady=10,
                  anchor='w').pack(fill='x')
         sb_scroll = tk.Scrollbar(sidebar, bg=C['surface'], troughcolor=C['bg'],
@@ -267,7 +310,7 @@ class BlogWriter(tk.Tk):
         editor = tk.Frame(editor_wrap, bg=C['bg'])
         editor.pack(fill='both', expand=True, padx=16, pady=12)
 
-        # Row 1: slug, date, reading time, lang, pinned
+        # Row 1: slug, date, updated, reading time
         r1 = tk.Frame(editor, bg=C['bg'])
         r1.pack(fill='x', pady=(0, 6))
         self._v_slug = tk.StringVar()
@@ -279,17 +322,29 @@ class BlogWriter(tk.Tk):
         labeled_entry(r1, 'Updated',             self._v_updated, 12).pack(side='left', padx=(0,10))
         labeled_entry(r1, 'Reading time (min)',  self._v_rt, 5).pack(side='left', padx=(0,10))
 
-        # Lang combobox
-        lang_f = tk.Frame(r1, bg=C['bg'])
-        lang_f.pack(side='left', padx=(0, 10))
+        # Row 1b: type, lang, pinned
+        r1b = tk.Frame(editor, bg=C['bg'])
+        r1b.pack(fill='x', pady=(0, 6))
+
+        type_f = tk.Frame(r1b, bg=C['bg'])
+        type_f.pack(side='left', padx=(0, 16))
+        tk.Label(type_f, text='Type', bg=C['bg'], fg=C['muted'],
+                 font=FONT_MONO_SM).pack(anchor='w')
+        self._v_type = tk.StringVar(value='md')
+        ttk.Combobox(type_f, textvariable=self._v_type, values=['md', 'html'],
+                     width=7, state='readonly', style='Dark.TCombobox').pack()
+        self._v_type.trace_add('write', lambda *_: self._sync_body_buttons())
+
+        lang_f = tk.Frame(r1b, bg=C['bg'])
+        lang_f.pack(side='left', padx=(0, 16))
         tk.Label(lang_f, text='Lang', bg=C['bg'], fg=C['muted'],
                  font=FONT_MONO_SM).pack(anchor='w')
         self._v_lang = tk.StringVar(value='both')
         ttk.Combobox(lang_f, textvariable=self._v_lang, values=['both','en','zh'],
                      width=7, state='readonly', style='Dark.TCombobox').pack()
+        self._v_lang.trace_add('write', lambda *_: self._sync_body_buttons())
 
-        # Pinned checkbox
-        pin_f = tk.Frame(r1, bg=C['bg'])
+        pin_f = tk.Frame(r1b, bg=C['bg'])
         pin_f.pack(side='left', padx=(0, 10))
         tk.Label(pin_f, text='Pinned', bg=C['bg'], fg=C['muted'],
                  font=FONT_MONO_SM).pack(anchor='w')
@@ -331,102 +386,35 @@ class BlogWriter(tk.Tk):
 
         # Row 5: tags
         r5 = tk.Frame(editor, bg=C['bg'])
-        r5.pack(fill='x', pady=(0, 8))
+        r5.pack(fill='x', pady=(0, 12))
         self._v_tags = tk.StringVar()
         labeled_entry(r5, 'Tags (comma separated)', self._v_tags, 60).pack(
             side='left', fill='x', expand=True)
 
-        # Snippet toolbar
-        self._build_toolbar(editor)
-
-        # Body notebook (EN / ZH)
-        nb = ttk.Notebook(editor, style='Dark.TNotebook')
-        nb.pack(fill='both', expand=True, pady=(4, 0))
-
-        en_frame = tk.Frame(nb, bg=C['surface'])
-        nb.add(en_frame, text='  Body EN  ')
-        self._body_en = self._make_text(en_frame)
-        self._body_en.pack(fill='both', expand=True, padx=2, pady=2)
-
-        zh_frame = tk.Frame(nb, bg=C['surface'])
-        nb.add(zh_frame, text='  Body ZH  ')
-        self._body_zh = self._make_text(zh_frame)
-        self._body_zh.pack(fill='both', expand=True, padx=2, pady=2)
-
-    def _make_text(self, parent) -> tk.Text:
-        frame = tk.Frame(parent, bg=C['surface'])
-        frame.pack(fill='both', expand=True)
-        sb = tk.Scrollbar(frame, bg=C['surface'], troughcolor=C['bg'],
-                          relief='flat', width=8)
-        sb.pack(side='right', fill='y')
-        txt = tk.Text(
-            frame, bg=C['surfaceHi'], fg=C['text'],
-            insertbackground=C['primary'], font=FONT_MONO_LG,
-            relief='flat', bd=0, wrap='word', undo=True,
-            yscrollcommand=sb.set, highlightthickness=0,
-            selectbackground=C['primaryDim'], selectforeground=C['primary'],
-            padx=10, pady=10, spacing1=2, spacing3=2,
-        )
-        sb.config(command=txt.yview)
-        txt.pack(side='left', fill='both', expand=True)
-        txt.bind('<FocusIn>', lambda e, w=txt: setattr(self, '_last_body', w))
-        return txt
-
-    def _build_toolbar(self, parent):
-        bar = tk.Frame(parent, bg=C['surface'], pady=4, padx=6)
-        bar.pack(fill='x', pady=(0, 2))
-        snippets = [
-            ('<h2>',        '<h2>…</h2>'),
-            ('<h3>',        '<h3>…</h3>'),
-            ('<p>',         '<p>…</p>'),
-            ('<lead>',      '<p class="lead">…</p>'),
-            ('<strong>',    '<strong>…</strong>'),
-            ('<em>',        '<em>…</em>'),
-            ('<code>',      '<code>…</code>'),
-            ('<pre>',       '<pre><code>…</code></pre>'),
-            ('<ul>',        '<ul>\n  <li>…</li>\n</ul>'),
-            ('<ol>',        '<ol>\n  <li>…</li>\n</ol>'),
-            ('<blockquote>','<blockquote>…</blockquote>'),
-            ('<a>',         '<a href="">…</a>'),
-            ('<img>',       '<img src="" alt="">'),
-            ('<hr>',        '<hr>'),
-            ('<table>',     '<table>\n  <thead><tr><th>…</th></tr></thead>\n  <tbody><tr><td>…</td></tr></tbody>\n</table>'),
-        ]
-        for label, snippet in snippets:
-            btn = tk.Button(
-                bar, text=label, bg=C['surfaceHi'], fg=C['muted'],
-                font=FONT_MONO_SM, relief='flat', bd=0, padx=6, pady=3,
-                cursor='hand2', activebackground=C['primaryDim'],
-                activeforeground=C['primary'],
-                command=lambda s=snippet: self._insert_snippet(s),
-            )
-            btn.pack(side='left', padx=2)
-
-    def _insert_snippet(self, snippet: str):
-        w = self._last_body
-        if w is None:
-            return
-        try:
-            sel_start = w.index('sel.first')
-            sel_end   = w.index('sel.last')
-            selected  = w.get(sel_start, sel_end)
-            filled    = snippet.replace('…', selected)
-            w.delete(sel_start, sel_end)
-            w.insert(sel_start, filled)
-        except tk.TclError:
-            w.insert('insert', snippet)
-        w.focus_set()
+        # Row 6: body files — open in the external editor
+        body = tk.Frame(editor, bg=C['surface'], padx=14, pady=12)
+        body.pack(fill='x', pady=(4, 0))
+        tk.Label(body, text='POST BODY', bg=C['surface'], fg=C['muted'],
+                 font=(*FONT_MONO_SM, 'bold'), anchor='w').pack(fill='x')
+        tk.Label(body,
+                 text='Edited in your own editor (open .md in a Markdown app). '
+                      'Missing files are created from a template.',
+                 bg=C['surface'], fg=C['muted'], font=FONT_MONO_SM,
+                 anchor='w', justify='left').pack(fill='x', pady=(2, 8))
+        body_btns = tk.Frame(body, bg=C['surface'])
+        body_btns.pack(fill='x')
+        self._body_btn_en = make_btn(body_btns, 'Open EN ↗', lambda: self._open_body('en'))
+        self._body_btn_en.pack(side='left', padx=(0, 8))
+        self._body_btn_zh = make_btn(body_btns, 'Open ZH ↗', lambda: self._open_body('zh'))
+        self._body_btn_zh.pack(side='left', padx=(0, 8))
+        make_btn(body_btns, 'Open folder ↗', self._open_folder).pack(side='left', padx=(0, 8))
+        self._body_hint = tk.Label(body, text='', bg=C['surface'], fg=C['muted'],
+                                   font=FONT_MONO_SM, anchor='w')
+        self._body_hint.pack(fill='x', pady=(8, 0))
 
     def _configure_ttk(self):
         s = ttk.Style(self)
         s.theme_use('clam')
-        s.configure('Dark.TNotebook', background=C['bg'], borderwidth=0)
-        s.configure('Dark.TNotebook.Tab',
-                    background=C['surface'], foreground=C['muted'],
-                    padding=[12, 6], font=FONT_MONO, borderwidth=0)
-        s.map('Dark.TNotebook.Tab',
-              background=[('selected', C['surfaceHi'])],
-              foreground=[('selected', C['primary'])])
         s.configure('Dark.TCombobox',
                     fieldbackground=C['surface'], background=C['surface'],
                     foreground=C['text'], selectbackground=C['primaryDim'],
@@ -446,8 +434,9 @@ class BlogWriter(tk.Tk):
                 label = title.get('en') or title.get('zh') or p['slug']
             else:
                 label = str(title) or p['slug']
-            pin = '📌 ' if p.get('pinned') else '   '
-            self._post_list.insert('end', f'{pin}{label}')
+            pin  = '📌 ' if p.get('pinned') else '   '
+            excl = '! ' if post_type(p) != 'md' else '  '  # HTML flag
+            self._post_list.insert('end', f'{pin}{excl}{label}')
 
     def _on_list_select(self, _=None):
         sel = self._post_list.curselection()
@@ -468,6 +457,7 @@ class BlogWriter(tk.Tk):
         self._v_date.set(post.get('date', ''))
         self._v_updated.set(post.get('updated', ''))
         self._v_rt.set(str(post.get('readingTime', '')))
+        self._v_type.set(post_type(post))
         self._v_lang.set(post.get('lang', 'both'))
         self._v_pinned.set(bool(post.get('pinned', False)))
 
@@ -487,14 +477,45 @@ class BlogWriter(tk.Tk):
             text=cover if cover else 'None',
             fg=C['text'] if cover else C['muted'],
         )
+        self._sync_body_buttons()
 
-        en = load_post_body(slug, 'en')
-        zh = load_post_body(slug, 'zh')
-        self._body_en.delete('1.0', 'end')
-        self._body_en.insert('1.0', en)
-        self._body_zh.delete('1.0', 'end')
-        self._body_zh.insert('1.0', zh)
-        self._last_body = self._body_en
+    # ── Body files ────────────────────────────────────────────────────────
+
+    def _sync_body_buttons(self):
+        """Enable the EN/ZH open buttons that the current lang implies."""
+        if not hasattr(self, '_body_btn_en'):
+            return
+        lang = self._v_lang.get()
+        self._body_btn_en.config(state='normal' if lang in ('both', 'en') else 'disabled')
+        self._body_btn_zh.config(state='normal' if lang in ('both', 'zh') else 'disabled')
+        slug = self._v_slug.get().strip()
+        typ = self._v_type.get()
+        if slug:
+            existing = [lg for lg in ('en', 'zh') if os.path.exists(body_path(slug, lg, typ))]
+            self._body_hint.config(
+                text=f'files: post.{{en,zh}}.{body_ext(typ)}   '
+                     f'(on disk: {", ".join(existing) if existing else "none yet"})')
+        else:
+            self._body_hint.config(text='')
+
+    def _open_body(self, lang: str):
+        slug = self._v_slug.get().strip()
+        if not re.match(r'^[a-z0-9][a-z0-9\-]*$', slug):
+            messagebox.showwarning('Invalid slug',
+                'Set a valid slug (lowercase letters, digits, hyphens) first.')
+            return
+        typ = self._v_type.get()
+        path = ensure_body_file(slug, lang, typ)
+        open_in_editor(path)
+        self._sync_body_buttons()
+
+    def _open_folder(self):
+        slug = self._v_slug.get().strip()
+        if not slug:
+            return
+        folder = os.path.join(BLOG_DATA, slug)
+        os.makedirs(folder, exist_ok=True)
+        open_in_editor(folder)
 
     # ── Cover ────────────────────────────────────────────────────────────
 
@@ -511,14 +532,13 @@ class BlogWriter(tk.Tk):
         self._cover_src = None
         self._cover_label.config(text='(cleared on save)', fg=C['muted'])
 
-    # ── Save ─────────────────────────────────────────────────────────────
+    # ── Save (manifest only) ───────────────────────────────────────────────
 
     def _save_post(self):
         slug = self._v_slug.get().strip()
         if not slug:
             messagebox.showwarning('Missing slug', 'Slug is required.')
             return
-        # Validate slug (safe filesystem name)
         if not re.match(r'^[a-z0-9][a-z0-9\-]*$', slug):
             messagebox.showwarning('Invalid slug',
                 'Slug must be lowercase letters, digits, and hyphens only.')
@@ -531,18 +551,26 @@ class BlogWriter(tk.Tk):
         exc_en    = self._v_excerpt_en.get().strip()
         exc_zh    = self._v_excerpt_zh.get().strip()
         tags      = [t.strip() for t in self._v_tags.get().split(',') if t.strip()]
+        typ       = self._v_type.get()
         lang      = self._v_lang.get()
         pinned    = self._v_pinned.get()
         date_str  = self._v_date.get().strip() or str(date.today())
         updated   = self._v_updated.get().strip()
-        en_html   = self._body_en.get('1.0', 'end-1c').strip()
-        zh_html   = self._body_zh.get('1.0', 'end-1c').strip()
+
+        # Rename folder if slug changed (before reading bodies for the estimate)
+        if old_slug and old_slug != slug:
+            old_dir = os.path.join(BLOG_DATA, old_slug)
+            new_dir = os.path.join(BLOG_DATA, slug)
+            if os.path.exists(old_dir) and not os.path.exists(new_dir):
+                os.rename(old_dir, new_dir)
 
         rt_raw = self._v_rt.get().strip()
         try:
-            rt = int(rt_raw) if rt_raw else estimate_reading_time(en_html, zh_html)
+            rt = int(rt_raw) if rt_raw else estimate_reading_time(
+                read_body_text(slug, 'en', typ), read_body_text(slug, 'zh', typ))
         except ValueError:
-            rt = estimate_reading_time(en_html, zh_html)
+            rt = estimate_reading_time(
+                read_body_text(slug, 'en', typ), read_body_text(slug, 'zh', typ))
 
         post: dict = {
             'slug':    slug,
@@ -555,10 +583,12 @@ class BlogWriter(tk.Tk):
         }
         if updated and updated != date_str:
             post['updated'] = updated
+        if typ == 'md':                 # html is the runtime default → no key
+            post['type'] = 'md'
         if pinned:
             post['pinned'] = True
 
-        # Handle cover image
+        # Cover image
         cover_text = self._cover_label.cget('text')
         if self._cover_src:
             slug_dir = os.path.join(BLOG_DATA, slug)
@@ -573,27 +603,19 @@ class BlogWriter(tk.Tk):
             post['cover'] = cover_text
         # else: no cover key added → cleared
 
-        # Rename folder if slug changed
-        if old_slug and old_slug != slug:
-            old_dir = os.path.join(BLOG_DATA, old_slug)
-            new_dir = os.path.join(BLOG_DATA, slug)
-            if os.path.exists(old_dir) and not os.path.exists(new_dir):
-                os.rename(old_dir, new_dir)
-
-        # Update manifest list
+        # Update manifest list (preserve any extra keys from the old entry)
         posts = self._manifest.setdefault('posts', [])
         lookup = old_slug or slug
         idx = next((i for i, p in enumerate(posts) if p['slug'] == lookup), None)
         if idx is not None:
+            preserved = {k: v for k, v in posts[idx].items() if k not in post
+                         and k not in ('updated', 'type', 'cover', 'pinned')}
+            post = {**preserved, **post}
             posts[idx] = post
         else:
             posts.insert(0, post)
 
         self._current_slug = slug
-
-        # Save bodies
-        save_post_body(slug, 'en', en_html)
-        save_post_body(slug, 'zh', zh_html)
         save_manifest(self._manifest)
 
         self._v_rt.set(str(rt))
@@ -603,6 +625,7 @@ class BlogWriter(tk.Tk):
         self._post_list.selection_clear(0, 'end')
         self._post_list.selection_set(new_idx)
         self._post_list.see(new_idx)
+        self._sync_body_buttons()
 
         self.title(f'Blog Writer — {slug} ✓')
         self.after(2000, lambda: self.title('Blog Writer — louie.blog'))
@@ -616,7 +639,7 @@ class BlogWriter(tk.Tk):
         if not messagebox.askyesno(
             'Delete post',
             f'Remove "{slug}" from the manifest?\n\n'
-            'The files in blog/blog_data/{slug}/ will NOT be deleted.',
+            f'The files in blog/blog_data/{slug}/ will NOT be deleted.',
         ):
             return
         posts = self._manifest.get('posts', [])
@@ -637,6 +660,7 @@ class BlogWriter(tk.Tk):
         new = {
             'slug':    slug,
             'date':    today,
+            'type':    'md',
             'title':   {'zh': '', 'en': ''},
             'excerpt': {'zh': '', 'en': ''},
             'tags':    [],
@@ -647,8 +671,6 @@ class BlogWriter(tk.Tk):
         self._refresh_list()
         self._post_list.selection_set(0)
         self._select_post(slug)
-        # Focus slug field so user can rename immediately
-        self.focus_get()
 
 
 if __name__ == '__main__':
