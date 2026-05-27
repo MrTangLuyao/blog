@@ -1,0 +1,141 @@
+{
+  "version": 4,
+  "updated": "2026-05-28",
+  "entries": [
+    {
+      "kind": "post",
+      "slug": "linear-algebra-review",
+      "date": "2026-05-27",
+      "type": "md",
+      "title": {
+        "zh": "回顾线性代数",
+        "en": "Linear Algebra in Review"
+      },
+      "excerpt": {
+        "zh": "来自 MAST10007 · 线性方程组 · 矩阵与行列式 · 向量空间 ℝⁿ · 一般向量空间 · 线性变换 · 特征值与特征向量 · 内积空间 — 最快最全地按顺序过一遍。",
+        "en": "From MAST10007 — a fast, complete walk through linear systems, matrices, vector spaces, linear transformations, eigenvalues, and inner product spaces."
+      },
+      "tags": [
+        "math",
+        "linear-algebra"
+      ],
+      "readingTime": 42,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "welcome",
+      "date": "2026-05-01",
+      "updated": "2026-05-04",
+      "type": "md",
+      "title": {
+        "zh": "你好，欢迎来到我的博客",
+        "en": "Hello — Welcome to my blog"
+      },
+      "excerpt": {
+        "zh": "介绍博客，以及louie.网站",
+        "en": "Introduction to my blog"
+      },
+      "cover": "cover.webp",
+      "tags": [
+        "Hello World"
+      ],
+      "readingTime": 2,
+      "lang": "both",
+      "pinned": true
+    },
+    {
+      "kind": "post",
+      "slug": "design-restraint",
+      "date": "2026-05-25",
+      "type": "md",
+      "title": {
+        "zh": "网站设计：克制美学",
+        "en": "Web Design: The Aesthetics of Restraint"
+      },
+      "excerpt": {
+        "zh": "关于克制美学与本次的博客大版本 Markdown 更新",
+        "en": "On the aesthetics of restraint, and this blog's major Markdown update."
+      },
+      "tags": [
+        "Hello World"
+      ],
+      "readingTime": 7,
+      "lang": "both",
+      "pinned": true
+    },
+    {
+      "kind": "post",
+      "slug": "vision-networks-fttb",
+      "date": "2026-02-14",
+      "updated": "2026-05-01",
+      "title": {
+        "zh": "澳洲免费FTTB千兆网络分享 - VisionNetworks",
+        "en": "Australia's Free FTTB Gigabit Network Guide — VisionNetworks"
+      },
+      "excerpt": {
+        "zh": "公寓的 NBN 卡在 100 Mbps 还死贵？其实 FTTB 能跑超过千兆——TPG 集团的 Vision 网络、iinet/Vodafone 的套餐、安装流程、切回 NBN 的方法，一篇说清楚。",
+        "en": "Stuck with 100 Mbps NBN at your Aussie apartment? FTTB can actually exceed gigabit — a full guide to the TPG group's Vision network, iinet/Vodafone plans, install process, and switching back to NBN."
+      },
+      "tags": [
+        "australia",
+        "internet",
+        "nbn"
+      ],
+      "readingTime": 8,
+      "lang": "both"
+    },
+    {
+      "kind": "collection",
+      "slug": "sql",
+      "date": "2026-05-02",
+      "title": {
+        "zh": "SQL 基础语法",
+        "en": "SQL Basics"
+      },
+      "excerpt": {
+        "zh": "学习SQL",
+        "en": "Learn SQL"
+      },
+      "tags": [
+        "sql",
+        "code"
+      ]
+    },
+    {
+      "kind": "collection",
+      "slug": "python",
+      "date": "2026-05-04",
+      "title": {
+        "zh": "Python 基础语法",
+        "en": "Python Basics"
+      },
+      "excerpt": {
+        "zh": "学习Python",
+        "en": "Learn Python"
+      },
+      "tags": [
+        "python",
+        "code"
+      ]
+    },
+    {
+      "kind": "collection",
+      "slug": "c",
+      "date": "2026-05-09",
+      "title": {
+        "zh": "C 语言算法",
+        "en": "C Algorithms"
+      },
+      "excerpt": {
+        "zh": "学习C算法",
+        "en": "Learn C & algorithms"
+      },
+      "tags": [
+        "c",
+        "algorithms",
+        "code"
+      ]
+    }
+  ]
+}

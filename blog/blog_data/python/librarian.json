@@ -1,0 +1,70 @@
+{
+  "version": 4,
+  "updated": "2026-05-28",
+  "title": {
+    "zh": "Python 基础语法",
+    "en": "Python Basics"
+  },
+  "entries": [
+    {
+      "kind": "post",
+      "slug": "python-tute-1",
+      "date": "2026-05-04",
+      "title": {
+        "zh": "Python 基础语法 1",
+        "en": "Python Syntax Guide 1"
+      },
+      "excerpt": {
+        "zh": "print/input · 数值运算 · 类型转换 · 整除取余 · 字符串索引切片 · 字符串方法 · f-string · 列表与元组 · 条件语句",
+        "en": "print/input · Numeric ops · Type conversion · Floor division · String indexing · String methods · f-string · Lists & tuples · Conditionals"
+      },
+      "cover": "cover.webp",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "readingTime": 22,
+      "lang": "both"
+    },
+    {
+      "kind": "post",
+      "slug": "python-tute-2",
+      "date": "2026-05-04",
+      "title": {
+        "zh": "Python 基础语法 2",
+        "en": "Python Syntax Guide 2"
+      },
+      "excerpt": {
+        "zh": "比较运算符 · 函数定义 · while 循环 · for 循环 · 嵌套循环 · 字典 · 集合 · 列表可变性 · 高级列表操作",
+        "en": "Comparison operators · Functions · while loop · for loop · Nested loops · Dict · Set · List mutability · Advanced list ops"
+      },
+      "cover": "cover.webp",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "readingTime": 22,
+      "lang": "both"
+    },
+    {
+      "kind": "post",
+      "slug": "python-tute-3",
+      "date": "2026-05-04",
+      "title": {
+        "zh": "Python 基础语法 3",
+        "en": "Python Syntax Guide 3"
+      },
+      "excerpt": {
+        "zh": "高级函数 · 列表推导式 · 常用标准库 · 文件读写 · CSV · 异常处理 · 递归 · 调试技巧 · 实用技巧",
+        "en": "Advanced functions · List comprehensions · stdlib · File I/O · CSV · Exception handling · Recursion · Debugging · Practical tips"
+      },
+      "cover": "cover.webp",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "readingTime": 20,
+      "lang": "both"
+    }
+  ]
+}

@@ -1,324 +1,359 @@
 /* ============================================================
  * blog/blog-views.js
- * List + reader render functions for blog.html.
+ * List + reader render functions for index.html.  (The Librarian update)
  *
- *   activeTag                 — currently filtered tag (or '__all')
- *   renderTagBar()            — render tag pills above the list,
- *                               wire click handlers that update
- *                               activeTag and re-render the list
- *   renderList()              — render filtered cards into #blog-list
+ * Attaches to window.Blog:
+ *   Blog.renderList(path, lib, chain)    — folder view: breadcrumb + tag bar +
+ *                                          post & collection cards for one level
+ *   Blog.renderReader(path, entry, chain)— reader skeleton, await body, buildToc
+ *   Blog.renderNotFound()                — "post not found" view
+ *   Blog.renderListError(path, err)      — librarian failed to load
  *
- *   _bodyLoading              — in-flight Promise map per slug:lang,
- *                               prevents duplicate <script> injects
- *   loadPostBody(slug, lang)  — lazy-load blog/blog_data/<slug>/post.<lang>.js
- *                               and resolve the registered body string
- *   renderReader(slug)        — render reader skeleton, await body,
- *                               populate #reader-body, then buildToc.
- *                               If lang='both' and the requested lang
- *                               body fails, falls back to the other.
- *
- * Cross-file dependencies (all loaded earlier in blog.html):
- *   translations, currentLang     ← blog-i18n.js
- *   manifest, pickLang, formatDate,
- *   postCoverUrl, bindRipples,
- *   bindFadeIn                    ← blog-core.js
- *   buildToc                      ← blog-toc.js
+ * Cross-file deps (all on window.Blog): translations, currentLang, pickLang,
+ *   formatDate, coverUrl, bindRipples, bindFadeIn, buildToc, dataPath.
+ * Body highlighting uses window.highlightAllCode (blog-syntax.js) and
+ * window.BlogInterpreter.render (blog-interpreter.js).
  * ============================================================ */
 
-let activeTag = '__all';
+(function (Blog) {
+  'use strict';
 
-/* ─── Post → code language ───────────────────────────────────
-   Map a post's tags to the highlight.js language its code blocks
-   are written in, so blog-syntax.js can colour them deterministically
-   instead of guessing per block (C in particular is hard to auto-detect).
-   Returns null when no tag names a known language → auto-detection. */
-const CODE_LANG_BY_TAG = {
-  c: 'c', 'c++': 'cpp', cpp: 'cpp',
-  python: 'python', py: 'python',
-  sql: 'sql',
-  bash: 'bash', shell: 'bash', sh: 'bash',
-  json: 'json',
-  javascript: 'javascript', js: 'javascript',
-  html: 'xml', xml: 'xml',
-};
-function postCodeLang(post) {
-  if (!post || !Array.isArray(post.tags)) return null;
-  for (const tag of post.tags) {
-    const lang = CODE_LANG_BY_TAG[String(tag).toLowerCase()];
-    if (lang) return lang;
+  let activeTag = '__all';
+  let _activeListPath = null;   // reset the tag filter when entering a new level
+
+  /* ─── Post → code language ───────────────────────────────────
+     Map a post's tags to the highlight.js language its code blocks use, so
+     blog-syntax.js colours them deterministically (C is hard to auto-detect).
+     Returns null when no tag names a known language → auto-detection. */
+  const CODE_LANG_BY_TAG = {
+    c: 'c', 'c++': 'cpp', cpp: 'cpp',
+    python: 'python', py: 'python',
+    sql: 'sql',
+    bash: 'bash', shell: 'bash', sh: 'bash',
+    json: 'json',
+    javascript: 'javascript', js: 'javascript',
+    html: 'xml', xml: 'xml',
+  };
+  function postCodeLang(entry) {
+    if (!entry || !Array.isArray(entry.tags)) return null;
+    for (const tag of entry.tags) {
+      const lang = CODE_LANG_BY_TAG[String(tag).toLowerCase()];
+      if (lang) return lang;
+    }
+    return null;
   }
-  return null;
-}
 
-/* ─── Tag bar ─── */
-function renderTagBar() {
-  const bar = document.getElementById('tag-bar');
-  const tags = new Set();
-  manifest.posts.forEach(p => (p.tags || []).forEach(t => tags.add(t)));
-  const allLabel = translations[currentLang]['blog-tag-all'] || 'All';
+  // child path of an entry that sits directly under parentPath
+  function childPath(parentPath, slug) {
+    return parentPath ? `${parentPath}/${slug}` : slug;
+  }
+  function hashFor(path) { return path ? `#/${path}` : '#'; }
 
-  const renderBtn = (tag, label, active) => `
-    <button class="ripple-surface ripple-surface-variant px-4 py-1.5 rounded-m3-full text-[13px] font-medium transition-colors border border-m3-outlineVariant ${active ? 'bg-m3-primaryContainer text-m3-onPrimaryContainer border-m3-primary/30' : 'bg-m3-surfaceContainer text-m3-onSurfaceVariant hover:bg-m3-surfaceContainerHigh hover:text-m3-onSurface'}" data-tag="${tag}">${label}</button>
-  `;
-
-  bar.innerHTML = renderBtn('__all', allLabel, activeTag === '__all') +
-    [...tags].sort().map(t => renderBtn(t, t, activeTag === t)).join('');
-
-  bar.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      activeTag = btn.dataset.tag;
-      bar.querySelectorAll('button[data-tag]').forEach(b => {
-        const act = b.dataset.tag === activeTag;
-        b.classList.toggle('bg-m3-primaryContainer', act);
-        b.classList.toggle('text-m3-onPrimaryContainer', act);
-        b.classList.toggle('border-m3-primary/30', act);
-        b.classList.toggle('bg-m3-surfaceContainer', !act);
-        b.classList.toggle('text-m3-onSurfaceVariant', !act);
-        b.classList.toggle('hover:bg-m3-surfaceContainerHigh', !act);
-        b.classList.toggle('hover:text-m3-onSurface', !act);
-      });
-      renderList();
+  /* ─── Breadcrumb ─── */
+  function renderBreadcrumb(chain) {
+    const el = document.getElementById('breadcrumb');
+    if (!el) return;
+    const t = Blog.translations[Blog.currentLang];
+    if (!chain || !chain.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    el.style.display = '';
+    const crumbs = [`<a class="bc-link" href="#">${t['lib-home']}</a>`];
+    chain.forEach((c, i) => {
+      const label = Blog.pickLang(c.entry.title) || c.slug;
+      const isLast = i === chain.length - 1;
+      crumbs.push(isLast
+        ? `<span class="bc-current">${label}</span>`
+        : `<a class="bc-link" href="${hashFor(c.path)}">${label}</a>`);
     });
-  });
-  bindRipples();
-}
-
-/* ─── List view ─── */
-function renderList() {
-  const list = document.getElementById('blog-list');
-  const empty = document.getElementById('blog-empty');
-  const filtered = activeTag === '__all'
-    ? manifest.posts
-    : manifest.posts.filter(p => (p.tags || []).includes(activeTag));
-
-  if (filtered.length === 0) {
-    list.innerHTML = '';
-    empty.style.display = 'block';
-    return;
+    el.innerHTML = crumbs.join('<span class="bc-sep">›</span>');
   }
-  empty.style.display = 'none';
 
-  const tt = translations[currentLang];
-  list.innerHTML = filtered.map(post => {
-    const cover = postCoverUrl(post);
-    const initial = (pickLang(post.title) || post.slug).trim().charAt(0).toUpperCase();
+  /* ─── Tag bar (scoped to the current level's entries) ─── */
+  function renderTagBar(entries, rerender) {
+    const bar = document.getElementById('tag-bar');
+    if (!bar) return;
+    const tags = new Set();
+    entries.forEach(e => (e.tags || []).forEach(tg => tags.add(tg)));
+    if (tags.size === 0) { bar.innerHTML = ''; bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    const allLabel = Blog.translations[Blog.currentLang]['blog-tag-all'] || 'All';
+    const btn = (tag, label, active) => `
+      <button class="ripple-surface ripple-surface-variant px-4 py-1.5 rounded-m3-full text-[13px] font-medium transition-colors ${active ? 'bg-m3-primaryContainer text-m3-onPrimaryContainer' : 'bg-m3-surfaceContainer text-m3-onSurfaceVariant hover:bg-m3-surfaceContainerHigh hover:text-m3-onSurface'}" data-tag="${tag}">${label}</button>`;
+    bar.innerHTML = btn('__all', allLabel, activeTag === '__all') +
+      [...tags].sort().map(tg => btn(tg, tg, activeTag === tg)).join('');
+    bar.querySelectorAll('button[data-tag]').forEach(b => {
+      b.addEventListener('click', () => { activeTag = b.dataset.tag; rerender(); });
+    });
+    Blog.bindRipples();
+  }
 
-    const coverHtml = cover
-      ? `<div class="w-full sm:w-28 sm:h-28 h-40 shrink-0 rounded-m3-md overflow-hidden bg-m3-surface flex items-center justify-center border border-m3-outlineVariant/50"><img src="${cover}" alt="" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'text-3xl font-bold text-m3-primary/50\\'>${initial}</span>'"></div>`
-      : `<div class="w-full sm:w-28 sm:h-28 h-40 shrink-0 rounded-m3-md bg-m3-primaryContainer/10 flex items-center justify-center border border-m3-primary/10"><span class="text-3xl font-bold text-m3-primary/50">${initial}</span></div>`;
+  /* ─── Compact list rows — flat, one line, no tags / reading time ─── */
+  const PIN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(20deg)"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>';
+  const FOLDER_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h5l2 2h9a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/></svg>';
 
-    const tagsHtml = (post.tags || []).map(t => `<span class="px-2.5 py-0.5 rounded-m3-sm text-[11px] font-mono text-m3-primary bg-m3-primaryContainer/30 border border-m3-primary/20">${t}</span>`).join('');
-    const minLabel = tt['reader-min'] || 'min';
+  function articleThumb(entry, parentPath) {
+    const initial = (Blog.pickLang(entry.title) || entry.slug).trim().charAt(0).toUpperCase();
+    const cover = Blog.coverUrl(entry, parentPath);
+    return cover
+      ? `<span class="list-row__thumb"><img src="${cover}" alt="" loading="lazy" onerror="this.parentElement.textContent='${initial}'"></span>`
+      : `<span class="list-row__thumb">${initial}</span>`;
+  }
+  // collections always show the folder icon — that's their visual signature
+  const folderThumb = `<span class="list-row__thumb list-row__thumb--folder">${FOLDER_SVG}</span>`;
 
-    const updatedHtml = (post.updated && post.updated !== post.date)
-      ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span class="italic">${tt['reader-updated']} ${formatDate(post.updated)}</span>`
-      : '';
+  // fixed-width pin slot, present on every row so titles line up (filled only when pinned)
+  function pinSlot(entry) {
+    return `<span class="list-row__pin">${entry.pinned ? PIN_SVG : ''}</span>`;
+  }
+  function dateMeta(entry) {
+    return `<span class="list-row__meta">${Blog.formatDate(entry.date)}</span>`;
+  }
 
-    const pinHtml = post.pinned
-      ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-m3-full text-[10px] font-bold uppercase tracking-widest text-m3-primary bg-m3-primaryContainer/40 border border-m3-primary/30"><svg width="10" height="10" class="rotate-[20deg]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>${tt['reader-pinned']}</span>`
-      : '';
-
+  function postRow(entry, parentPath) {
     return `
-      <a class="ripple-surface group m3-card flex flex-col sm:flex-row gap-5 bg-m3-surfaceContainer rounded-m3-xl p-5 md:p-6 border border-m3-outlineVariant fade-in ${post.pinned ? 'border-m3-primary/30 bg-[#352c28]' : ''}" href="#${post.slug}">
-        ${coverHtml}
-        <div class="flex flex-col min-w-0 flex-1">
-          <div class="flex items-start justify-between gap-3 mb-2">
-            <div class="flex flex-wrap items-center gap-3 text-xs text-m3-onSurfaceVariant tracking-wider">
-              ${pinHtml}
-              <span class="font-bold text-m3-primary tabular-nums">${formatDate(post.date)}</span>
-              ${updatedHtml}
-              ${post.readingTime ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span>${post.readingTime} ${minLabel}</span>` : ''}
-            </div>
-            <span class="shrink-0 px-2 py-0.5 rounded-m3-sm text-[10px] font-mono uppercase tracking-wider text-m3-onSurfaceVariant/60 border border-m3-outlineVariant">${post.type === 'md' ? 'Markdown' : 'HTML'}</span>
-          </div>
-          <h2 class="text-xl font-bold text-m3-onSurface leading-snug mb-2 group-hover:text-m3-primary transition-colors">${pickLang(post.title)}</h2>
-          <p class="text-sm text-m3-onSurfaceVariant leading-relaxed line-clamp-2 mb-3 flex-grow">${pickLang(post.excerpt)}</p>
-          ${tagsHtml ? `<div class="flex flex-wrap gap-2 mt-auto">${tagsHtml}</div>` : ''}
-        </div>
-      </a>
-    `;
-  }).join('');
-  bindFadeIn();
-  bindRipples();
-}
+      <a class="list-row ripple-surface group fade-in${entry.pinned ? ' pinned' : ''}" href="${hashFor(childPath(parentPath, entry.slug))}">
+        ${articleThumb(entry, parentPath)}
+        ${pinSlot(entry)}
+        <span class="list-row__title">${Blog.pickLang(entry.title)}</span>
+        ${dateMeta(entry)}
+      </a>`;
+  }
 
-/* ─── Post body loader ─────────────────────────────────────────
- * type 'html' (default): inject <script src=post.<lang>.js>, which registers
- *   the body string into window.__BLOG_POSTS. Works the same as it always has.
- * type 'md': fetch the raw post.<lang>.md text. Markdown bodies are plain
- *   files with no JS wrapper, so they need fetch — which means md posts only
- *   work over http(s), not file:// (see localrun.py for local preview).
- * Either way this resolves to a RAW body string; BlogInterpreter.render
- * (called in writeBody) turns it into injectable HTML based on type.
- * ───────────────────────────────────────────────────────────── */
-const _bodyLoading = {};
-const _mdCache = {};
-function loadPostBody(slug, lang, type) {
-  const key = `${slug}:${lang}`;
+  function collectionRow(entry, parentPath) {
+    return `
+      <a class="list-row list-row--collection ripple-surface group fade-in${entry.pinned ? ' pinned' : ''}" href="${hashFor(childPath(parentPath, entry.slug))}">
+        ${folderThumb}
+        ${pinSlot(entry)}
+        <span class="list-row__title">${Blog.pickLang(entry.title)}</span>
+        ${dateMeta(entry)}
+      </a>`;
+  }
 
-  if (type === 'md') {
-    if (_mdCache[key] != null) return Promise.resolve(_mdCache[key]);
+  /* ─── List view (one collection level) ─── */
+  Blog.renderList = function renderList(path, lib, chain) {
+    if (_activeListPath !== path) { activeTag = '__all'; _activeListPath = path; }
+    const entries = (lib && lib.entries) || [];
+
+    renderBreadcrumb(chain);
+    renderTagBar(entries, () => Blog.renderList(path, lib, chain));
+
+    const list = document.getElementById('blog-list');
+    const empty = document.getElementById('blog-empty');
+    const filtered = activeTag === '__all'
+      ? entries
+      : entries.filter(e => (e.tags || []).includes(activeTag));
+
+    if (filtered.length === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    list.innerHTML = filtered.map(e =>
+      e.kind === 'collection' ? collectionRow(e, path) : postRow(e, path)
+    ).join('');
+    Blog.bindFadeIn();
+    Blog.bindRipples();
+  };
+
+  Blog.renderListError = function renderListError(path, err) {
+    renderBreadcrumb(null);
+    const bar = document.getElementById('tag-bar'); if (bar) bar.innerHTML = '';
+    const empty = document.getElementById('blog-empty'); if (empty) empty.style.display = 'none';
+    const list = document.getElementById('blog-list');
+    const t = Blog.translations[Blog.currentLang];
+    list.innerHTML = `
+      <div class="text-center py-16 fade-in">
+        <p class="text-m3-onSurfaceVariant mb-3">${t['lib-load-error']}</p>
+        <p class="text-xs font-mono text-m3-onSurfaceVariant/50">${String(err).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c])}</p>
+      </div>`;
+    Blog.bindFadeIn();
+  };
+
+  /* ─── Post body loader ─────────────────────────────────────────
+   * md  → fetch blog/blog_data/<path>/post.<lang>.md  (raw text)
+   * html→ inject <script src=…/post.<lang>.js> which registers the body into
+   *        window.__BLOG_POSTS['<slug>:<lang>'] (slug-keyed, so a post keeps
+   *        working even after it's moved into a collection folder).
+   * ───────────────────────────────────────────────────────────── */
+  const _bodyLoading = {};
+  const _mdCache = {};
+  function loadPostBody(path, lang, type) {
+    const slug = path.split('/').pop();
+    const key = `${path}:${lang}`;
+
+    if (type === 'md') {
+      if (_mdCache[key] != null) return Promise.resolve(_mdCache[key]);
+      if (_bodyLoading[key]) return _bodyLoading[key];
+      _bodyLoading[key] = fetch(Blog.dataPath(path, `post.${lang}.md`))
+        .then(r => { if (!r.ok) throw new Error(`post.${lang}.md → HTTP ${r.status}`); return r.text(); })
+        .then(txt => { delete _bodyLoading[key]; _mdCache[key] = txt; return txt; })
+        .catch(e => { delete _bodyLoading[key]; throw e; });
+      return _bodyLoading[key];
+    }
+
+    const regKey = `${slug}:${lang}`;
+    const cached = (window.__BLOG_POSTS || {})[regKey];
+    if (cached != null) return Promise.resolve(cached);
     if (_bodyLoading[key]) return _bodyLoading[key];
-    _bodyLoading[key] = fetch(`blog/blog_data/${slug}/post.${lang}.md`)
-      .then(r => {
-        if (!r.ok) throw new Error(`Failed to load post.${lang}.md (HTTP ${r.status})`);
-        return r.text();
-      })
-      .then(txt => { delete _bodyLoading[key]; _mdCache[key] = txt; return txt; })
-      .catch(e => { delete _bodyLoading[key]; throw e; });
+
+    _bodyLoading[key] = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = Blog.dataPath(path, `post.${lang}.js`);
+      script.async = false;
+      script.onload = () => {
+        delete _bodyLoading[key];
+        const body = (window.__BLOG_POSTS || {})[regKey];
+        if (body != null) resolve(body);
+        else reject(new Error(`Missing window.__BLOG_POSTS['${regKey}']`));
+      };
+      script.onerror = () => { delete _bodyLoading[key]; reject(new Error(`Failed to load ${script.src}`)); };
+      document.head.appendChild(script);
+    });
     return _bodyLoading[key];
   }
 
-  const cached = (window.__BLOG_POSTS || {})[key];
-  if (cached != null) return Promise.resolve(cached);
-  if (_bodyLoading[key]) return _bodyLoading[key];
-
-  _bodyLoading[key] = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `blog/blog_data/${slug}/post.${lang}.js`;
-    script.async = false;
-    script.onload = () => {
-      delete _bodyLoading[key];
-      const body = (window.__BLOG_POSTS || {})[key];
-      if (body != null) resolve(body);
-      else reject(new Error(`Missing window.__BLOG_POSTS['${key}']`));
-    };
-    script.onerror = () => { delete _bodyLoading[key]; reject(new Error(`Failed to load ${script.src}`)); };
-    document.head.appendChild(script);
-  });
-  return _bodyLoading[key];
-}
-
-/* In-document anchor links (e.g. a post's "jump to section" links, like the
-   README's EN/中文 nav). The hash router treats ANY location.hash change as
-   navigation, so a raw <a href="#english"> would route away. We intercept
-   clicks on in-post #anchors, smooth-scroll to the target, and leave the hash
-   untouched — the same trick the TOC uses. Unknown anchors fall through to
-   default behavior. */
-function bindReaderAnchors(root) {
-  root.querySelectorAll('a[href^="#"]').forEach(a => {
-    const raw = a.getAttribute('href').slice(1);
-    if (!raw) return;
-    let id = raw;
-    try { id = decodeURIComponent(raw); } catch (_) {}
-    a.addEventListener('click', e => {
-      const target = document.getElementById(id);
-      if (!target) return;
-      e.preventDefault();
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  /* In-post anchor links (e.g. README's EN/中文 nav). The router treats any
+     hash change as navigation, so intercept clicks on in-post #anchors and
+     smooth-scroll instead — same trick the TOC uses. */
+  function bindReaderAnchors(root) {
+    root.querySelectorAll('a[href^="#"]').forEach(a => {
+      const raw = a.getAttribute('href').slice(1);
+      if (!raw) return;
+      let id = raw;
+      try { id = decodeURIComponent(raw); } catch (_) {}
+      a.addEventListener('click', e => {
+        const target = document.getElementById(id);
+        if (!target) return;
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     });
-  });
-}
+  }
 
-/* ─── Reader view ─── */
-async function renderReader(slug) {
-  const post = manifest.posts.find(p => p.slug === slug);
-  const reader = document.getElementById('reader-content');
-  const t = translations[currentLang];
-
-  if (!post) {
+  Blog.renderNotFound = function renderNotFound() {
+    const reader = document.getElementById('reader-content');
+    const t = Blog.translations[Blog.currentLang];
     reader.innerHTML = `
       <div class="text-center py-20 fade-in">
         <h2 class="text-2xl font-bold text-m3-onSurface mb-4">${t['not-found-title']}</h2>
         <p class="text-m3-onSurfaceVariant mb-8">${t['not-found-desc']}</p>
         <a class="ripple-surface bg-m3-primaryContainer text-m3-onPrimaryContainer px-6 py-2.5 rounded-m3-full font-bold" href="#">${t['not-found-back']} →</a>
-      </div>
-    `;
+      </div>`;
     requestAnimationFrame(() => {
       const wrapper = reader.querySelector('.fade-in');
       if (wrapper) wrapper.classList.add('visible');
     });
-    bindRipples();
-    return;
-  }
+    Blog.bindRipples();
+  };
 
-  const tagsHtml = (post.tags || []).map(t => `<span class="px-3 py-1 rounded-m3-sm text-[12px] font-mono text-m3-primary bg-m3-primaryContainer/30 border border-m3-primary/20">${t}</span>`).join('');
-  const minLabel = t['reader-min'];
-  const cover = postCoverUrl(post);
+  /* ─── Reader view ─── */
+  Blog.renderReader = async function renderReader(path, entry, chain) {
+    const reader = document.getElementById('reader-content');
+    const t = Blog.translations[Blog.currentLang];
 
-  const updatedHtml = (post.updated && post.updated !== post.date)
-    ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span class="italic">${t['reader-updated']} ${formatDate(post.updated)}</span>`
-    : '';
+    const segs = path.split('/');
+    const slug = segs[segs.length - 1];
+    const parentPath = segs.slice(0, -1).join('/');
 
-  const pinHtml = post.pinned
-    ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-m3-full text-[10px] font-bold uppercase tracking-widest text-m3-primary bg-m3-primaryContainer/40 border border-m3-primary/30"><svg width="10" height="10" class="rotate-[20deg]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>${t['reader-pinned']}</span>`
-    : '';
+    const tagsHtml = (entry.tags || []).map(tg => `<span class="px-3 py-1 rounded-m3-sm text-[12px] font-mono text-m3-primary bg-m3-primaryContainer/30">${tg}</span>`).join('');
+    const minLabel = t['reader-min'];
+    const cover = Blog.coverUrl(entry, parentPath);
 
-  reader.innerHTML = `
-    <div class="fade-in">
-      <div class="flex items-start justify-between gap-3 mb-6">
-        <div class="flex flex-wrap items-center gap-3 text-sm text-m3-onSurfaceVariant tracking-wider">
-          ${pinHtml}
-          <span class="font-bold text-m3-primary tabular-nums">${formatDate(post.date)}</span>
-          ${updatedHtml}
-          ${post.readingTime ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span>${post.readingTime} ${minLabel}</span>` : ''}
+    const updatedHtml = (entry.updated && entry.updated !== entry.date)
+      ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span class="italic">${t['reader-updated']} ${Blog.formatDate(entry.updated)}</span>` : '';
+    const pinHtml = entry.pinned
+      ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-m3-full text-[10px] font-bold uppercase tracking-widest text-m3-primary bg-m3-primaryContainer/40"><svg width="10" height="10" class="rotate-[20deg]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>${t['reader-pinned']}</span>` : '';
+
+    reader.innerHTML = `
+      <div class="fade-in">
+        <div class="flex items-start justify-between gap-3 mb-6">
+          <div class="flex flex-wrap items-center gap-3 text-sm text-m3-onSurfaceVariant tracking-wider">
+            ${pinHtml}
+            <span class="font-bold text-m3-primary tabular-nums">${Blog.formatDate(entry.date)}</span>
+            ${updatedHtml}
+            ${entry.readingTime ? `<span class="w-1 h-1 rounded-full bg-m3-onSurfaceVariant/50"></span><span>${entry.readingTime} ${minLabel}</span>` : ''}
+          </div>
+          <span class="shrink-0 px-2.5 py-0.5 rounded-m3-sm text-[11px] font-mono uppercase tracking-wider text-m3-onSurfaceVariant/70 bg-m3-surfaceContainerHigh">${(entry.type || 'html') === 'md' ? 'Markdown' : 'HTML'}</span>
         </div>
-        <span class="shrink-0 px-2.5 py-0.5 rounded-m3-sm text-[11px] font-mono uppercase tracking-wider text-m3-onSurfaceVariant/60 border border-m3-outlineVariant">${(post.type || 'html') === 'md' ? 'Markdown' : 'HTML'}</span>
-      </div>
 
-      <h1 class="text-4xl md:text-5xl font-extrabold text-m3-onSurface leading-tight mb-8">${pickLang(post.title)}</h1>
-      ${tagsHtml ? `<div class="flex flex-wrap gap-2 mb-12">${tagsHtml}</div>` : ''}
+        <h1 class="text-4xl md:text-5xl font-extrabold text-m3-onSurface leading-tight mb-8">${Blog.pickLang(entry.title)}</h1>
+        ${tagsHtml ? `<div class="flex flex-wrap gap-2 mb-12">${tagsHtml}</div>` : ''}
 
-      ${cover ? `<div class="w-full rounded-m3-xl overflow-hidden border border-m3-outlineVariant mb-14 shadow-xl shadow-black/30"><img src="${cover}" class="w-full h-auto object-cover" alt=""></div>` : ''}
+        ${cover ? `<div class="w-full rounded-m3-xl overflow-hidden mb-14 shadow-xl shadow-black/30"><img src="${cover}" class="w-full h-auto object-cover" alt=""></div>` : ''}
 
-      <div class="reader-body" id="reader-body"><p class="text-m3-onSurfaceVariant/50 italic">…</p></div>
+        <div class="reader-body" id="reader-body"><p class="text-m3-onSurfaceVariant/50 italic">…</p></div>
 
-      <div class="flex flex-wrap items-center justify-between gap-4 mt-24 pt-8 border-t border-m3-outlineVariant">
-        <span class="text-sm text-m3-onSurfaceVariant">— ${formatDate(post.date)}${(post.updated && post.updated !== post.date) ? ` · ${t['reader-updated']} ${formatDate(post.updated)}` : ''}</span>
-        <a class="ripple-surface ripple-surface-variant bg-m3-surfaceContainer hover:bg-m3-surfaceContainerHigh text-m3-onSurface px-5 py-2 rounded-m3-full text-sm font-bold border border-m3-outline transition-colors" href="#">${t['reader-back']} →</a>
-      </div>
-    </div>
-  `;
+        <div class="mt-24 pt-8 border-t border-m3-outlineVariant">
+          <span class="text-sm text-m3-onSurfaceVariant">— ${Blog.formatDate(entry.date)}${(entry.updated && entry.updated !== entry.date) ? ` · ${t['reader-updated']} ${Blog.formatDate(entry.updated)}` : ''}</span>
+        </div>
+      </div>`;
 
-  requestAnimationFrame(() => {
-    const wrapper = reader.querySelector('.fade-in');
-    if (wrapper) wrapper.classList.add('visible');
-  });
-  bindRipples();
+    requestAnimationFrame(() => {
+      const wrapper = reader.querySelector('.fade-in');
+      if (wrapper) wrapper.classList.add('visible');
+    });
+    Blog.bindRipples();
 
-  const lang = post.lang || 'both';
-  const wantedLang = (lang === 'both') ? currentLang : lang;
-  const type = post.type || 'html';
+    const lang = entry.lang || 'both';
+    const wantedLang = (lang === 'both') ? Blog.currentLang : lang;
+    const type = entry.type || 'html';
 
-  // Turn a RAW body (HTML or Markdown) into injectable HTML via the
-  // interpreter, then run the DOM-level post-processors (highlight + TOC
-  // happen against the resulting DOM, so they don't care about the source).
-  function writeBody(raw) {
-    const el = document.getElementById('reader-body');
-    if (!el || el.dataset.slug !== slug) return false;
-    el.innerHTML = window.BlogInterpreter.render(raw, { type, slug });
-    if (typeof window.highlightAllCode === 'function') window.highlightAllCode(el, postCodeLang(post));
-    bindReaderAnchors(el);
-    return true;
-  }
-
-  const bodyEl = document.getElementById('reader-body');
-  if (bodyEl) bodyEl.dataset.slug = slug;
-
-  try {
-    let raw = await loadPostBody(slug, wantedLang, type);
-    if (!raw && type !== 'md') {
-      if (window.__BLOG_POSTS) delete window.__BLOG_POSTS[`${slug}:${wantedLang}`];
-      raw = await loadPostBody(slug, wantedLang, type);
+    // Turn a RAW body (HTML or Markdown) into injectable HTML, then run the
+    // DOM post-processors (highlight + TOC operate on the resulting DOM).
+    function writeBody(raw) {
+      const el = document.getElementById('reader-body');
+      if (!el || el.dataset.path !== path) return false;
+      let html = window.BlogInterpreter.render(raw, { type, basePath: path });
+      // A post body hardcodes its own assets as blog/blog_data/<slug>/… . When the
+      // post lives inside a collection its real path is deeper, so retarget that
+      // prefix to the full path — keeps HTML posts (e.g. <iframe> anims) relocatable.
+      if (path !== slug) {
+        html = html.split(`blog/blog_data/${slug}/`).join(`blog/blog_data/${path}/`);
+      }
+      el.innerHTML = html;
+      // Wrap wide tables so they scroll inside their own box on mobile instead
+      // of stretching the page past the viewport (works for md + raw-HTML).
+      el.querySelectorAll('table').forEach(function (tbl) {
+        const parent = tbl.parentNode;
+        if (!parent || (parent.classList && parent.classList.contains('table-scroll'))) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'table-scroll';
+        parent.insertBefore(wrap, tbl);
+        wrap.appendChild(tbl);
+      });
+      if (typeof window.highlightAllCode === 'function') window.highlightAllCode(el, postCodeLang(entry));
+      bindReaderAnchors(el);
+      return true;
     }
-    writeBody(raw);
-    buildToc();
-  } catch (e) {
-    if (lang === 'both') {
-      const altLang = wantedLang === 'zh' ? 'en' : 'zh';
-      try {
-        const raw = await loadPostBody(slug, altLang, type);
-        writeBody(raw);
-        buildToc();
-        return;
-      } catch (_) {}
+
+    const bodyEl = document.getElementById('reader-body');
+    if (bodyEl) bodyEl.dataset.path = path;
+
+    try {
+      let raw = await loadPostBody(path, wantedLang, type);
+      if (!raw && type !== 'md') {
+        if (window.__BLOG_POSTS) delete window.__BLOG_POSTS[`${slug}:${wantedLang}`];
+        raw = await loadPostBody(path, wantedLang, type);
+      }
+      writeBody(raw);
+      Blog.buildToc();
+    } catch (e) {
+      if (lang === 'both') {
+        const altLang = wantedLang === 'zh' ? 'en' : 'zh';
+        try {
+          const raw = await loadPostBody(path, altLang, type);
+          writeBody(raw);
+          Blog.buildToc();
+          return;
+        } catch (_) {}
+      }
+      const el = document.getElementById('reader-body');
+      if (el && el.dataset.path === path) {
+        el.innerHTML = `
+          <p class="text-red-400">Failed to load post body.</p>
+          <pre class="bg-m3-surfaceContainer p-4 rounded-m3-md border border-m3-outlineVariant overflow-auto"><code class="text-m3-onSurface text-xs">${String(e).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c])}</code></pre>`;
+      }
     }
-    const el = document.getElementById('reader-body');
-    if (el && el.dataset.slug === slug) {
-      el.innerHTML = `
-        <p class="text-red-400">Failed to load post body.</p>
-        <pre class="bg-m3-surfaceContainer p-4 rounded-m3-md border border-m3-outlineVariant overflow-auto"><code class="text-m3-onSurface text-xs">${String(e).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c])}</code></pre>
-      `;
-    }
-  }
-}
+  };
+
+})(window.Blog = window.Blog || {});

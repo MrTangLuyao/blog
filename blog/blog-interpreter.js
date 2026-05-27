@@ -21,11 +21,67 @@
  * marked v12 adds no heading ids by default, so buildToc keeps full control
  * of slugifying h2/h3 — nothing to disable here.
  *
- * Dependency: window.marked (lib/marked.min.js), loaded before this script.
+ * Math: a marked extension renders $…$ (inline) and $$…$$ (display) with
+ * KaTeX AT PARSE TIME, so the LaTeX is turned into HTML before markdown can
+ * mangle it (no _ → <em>, no \ stripping). The output is plain KaTeX markup
+ * styled by lib/katex/katex.min.css; nothing downstream needs to know.
+ *
+ * Dependencies (both loaded before this script):
+ *   window.marked  (lib/marked.min.js)
+ *   window.katex   (lib/katex/katex.min.js)
  * ============================================================ */
 
 (function () {
   'use strict';
+
+  // Register the KaTeX math extension on the shared marked instance once.
+  function registerMathExtension() {
+    if (!window.marked || typeof window.marked.use !== 'function') return;
+    if (!window.katex || window.__katexMarkedRegistered) return;
+
+    const renderTeX = (tex, displayMode) => {
+      try {
+        return window.katex.renderToString(tex, {
+          displayMode,
+          throwOnError: false,   // render the error in red instead of throwing
+          strict: false,
+        });
+      } catch (e) {
+        return '<code class="katex-error">' + tex + '</code>';
+      }
+    };
+
+    window.marked.use({
+      extensions: [
+        {
+          // $$ … $$  → display (block) math, may span multiple lines
+          name: 'blockMath',
+          level: 'block',
+          start(src) { const i = src.indexOf('$$'); return i < 0 ? undefined : i; },
+          tokenizer(src) {
+            const m = /^\$\$([\s\S]+?)\$\$/.exec(src);
+            if (m) return { type: 'blockMath', raw: m[0], text: m[1].trim() };
+          },
+          renderer(token) { return renderTeX(token.text, true); },
+        },
+        {
+          // $ … $  → inline math (single line, no nested $, not opening with a space)
+          name: 'inlineMath',
+          level: 'inline',
+          start(src) { const i = src.indexOf('$'); return i < 0 ? undefined : i; },
+          tokenizer(src) {
+            const m = /^\$(?!\s)((?:\\\$|[^$\n])+?)\$/.exec(src);
+            if (m) return { type: 'inlineMath', raw: m[0], text: m[1] };
+          },
+          renderer(token) { return renderTeX(token.text, false); },
+        },
+      ],
+    });
+
+    window.__katexMarkedRegistered = true;
+  }
+
+  registerMathExtension();
 
   function isAbsoluteOrRooted(src) {
     return /^(?:[a-z]+:)?\/\//i.test(src)   // http://, https://, //
@@ -34,7 +90,7 @@
         || src.startsWith('data:');          // inline data URI
   }
 
-  function normalizeMarkdownDom(html, slug) {
+  function normalizeMarkdownDom(html, basePath) {
     const root = document.createElement('div');
     root.innerHTML = html;
 
@@ -42,12 +98,13 @@
     const firstP = root.querySelector(':scope > p');
     if (firstP) firstP.classList.add('lead');
 
-    // 2. relative image paths → blog/blog_data/<slug>/
-    if (slug) {
+    // 2. relative image paths → blog/blog_data/<basePath>/  (basePath is the
+    //    post's full collection path, e.g. "sql/sql-syntax-guide-1")
+    if (basePath) {
       root.querySelectorAll('img[src]').forEach(img => {
         const src = img.getAttribute('src') || '';
         if (src && !isAbsoluteOrRooted(src)) {
-          img.setAttribute('src', `blog/blog_data/${slug}/${src.replace(/^\.?\//, '')}`);
+          img.setAttribute('src', `blog/blog_data/${basePath}/${src.replace(/^\.?\//, '')}`);
         }
       });
     }
@@ -68,8 +125,9 @@
     if (!window.marked || typeof window.marked.parse !== 'function') {
       throw new Error('BlogInterpreter: window.marked is not loaded (lib/marked.min.js)');
     }
+    if (!window.__katexMarkedRegistered) registerMathExtension(); // in case katex loaded late
     const html = window.marked.parse(raw);
-    return normalizeMarkdownDom(html, o.slug);
+    return normalizeMarkdownDom(html, o.basePath != null ? o.basePath : o.slug);
   }
 
   window.BlogInterpreter = { render };

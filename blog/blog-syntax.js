@@ -68,9 +68,9 @@
     return LANG_LABELS[lang] || lang.toUpperCase();
   }
 
-  // Localised copy-button captions (mirrors blog-toc.js reading `currentLang`).
+  // Localised copy-button captions (reads Blog.currentLang from blog-i18n.js).
   function copyCaptions() {
-    const zh = (typeof currentLang !== 'undefined' && currentLang === 'zh');
+    const zh = !!(window.Blog && window.Blog.currentLang === 'zh');
     return zh ? { idle: '复制', done: '已复制' } : { idle: 'Copy', done: 'Copied' };
   }
 
@@ -228,8 +228,8 @@
     }
 
     // attach the site ripple to the copy buttons we just created (highlight
-    // runs after showReader's own bindRipples(), so these would miss it)
-    if (typeof bindRipples === 'function') bindRipples();
+    // runs after the reader's own bindRipples(), so these would miss it)
+    if (window.Blog && typeof window.Blog.bindRipples === 'function') window.Blog.bindRipples();
   }
 
   // expose on window so blog-views.js can call it after each writeBody
