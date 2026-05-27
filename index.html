@@ -31,6 +31,7 @@
   <link rel="stylesheet" href="lib/design/fonts.css">
   <link rel="stylesheet" href="lib/design/louie.css">
   <link rel="stylesheet" href="lib/highlight/vs2015.min.css"><!-- highlight.js VS Code Dark+ theme; blog.css overrides box bg/padding -->
+  <link rel="stylesheet" href="lib/katex/katex.min.css"><!-- KaTeX math typesetting; rendered at parse time by blog-interpreter.js -->
   <link rel="stylesheet" href="blog/blog.css">
   <script src="lib/design/tailwindcss.js"></script>
   <script src="lib/design/tailwind.config.js"></script>
@@ -70,11 +71,14 @@
       </div>
     </div>
     <div class="nav-right">
+      <button id="about-btn" class="ripple-surface" type="button" aria-label="About" title="About">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.6" r="0.6" fill="currentColor" stroke="none"/></svg>
+      </button>
       <a id="github-btn" class="ripple-surface" href="https://github.com/MrTangLuyao/blog" target="_blank" rel="noopener" aria-label="GitHub repository" title="GitHub">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.97-3.2.69-3.87-1.54-3.87-1.54-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.27-5.23-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.16 1.17.92-.25 1.91-.38 2.89-.38.98 0 1.97.13 2.89.38 2.2-1.48 3.16-1.17 3.16-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.25 5.65.41.35.78 1.04.78 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.55C20.71 21.39 24 17.08 24 12 24 5.65 18.85.5 12 .5z"/></svg>
       </a>
       <div class="nav-divider"></div>
-      <button id="lang-toggle" class="ripple-surface" onclick="toggleLang()">
+      <button id="lang-toggle" class="ripple-surface" type="button">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
         <span id="lang-label">EN ⇄ 文</span>
       </button>
@@ -98,12 +102,21 @@
   </div>
 
   <main class="flex-grow pt-28 pb-20 px-6 max-w-4xl w-full mx-auto relative z-10">
+    <!-- Shared "Back" button — sticky on top across collection + reader views;
+         goes up one level. Shown/hidden + href set by blog-router.js. -->
+    <a id="back-btn" href="#" class="ripple-surface ripple-surface-variant" style="display:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      <span data-i18n="back">Back</span>
+    </a>
+
     <div id="view-list">
       <div class="mb-14 fade-in">
         <p class="text-m3-primary font-bold tracking-widest uppercase mb-4 text-xs flex items-center gap-3 before:w-8 before:h-[2px] before:bg-m3-primary" data-i18n="blog-greeting">notes</p>
         <h1 class="text-4xl md:text-5xl font-extrabold leading-tight text-m3-onSurface mb-3" data-i18n="blog-title">Blog</h1>
         <p class="text-m3-onSurfaceVariant text-[17px]" data-i18n="blog-sub">Louie 的博客及文章</p>
       </div>
+
+      <nav id="breadcrumb" aria-label="Breadcrumb" style="display:none;"></nav>
 
       <div class="flex flex-wrap gap-3 py-6 mb-8 border-y border-m3-outlineVariant fade-in" id="tag-bar"></div>
 
@@ -117,11 +130,6 @@
     <article id="view-reader" style="display:none;" class="w-full">
       <nav id="toc-sidebar" aria-label="Table of contents" class="hidden flex-col z-50 bg-m3-surfaceContainer/90 backdrop-blur border border-m3-outlineVariant rounded-m3-xl p-4 shadow-lg shadow-black/20"></nav>
 
-      <a href="#" class="ripple-surface ripple-surface-variant inline-flex items-center gap-2 px-5 py-2 mb-10 rounded-m3-full text-sm font-medium text-m3-onSurfaceVariant border border-m3-outline hover:text-m3-onSurface hover:bg-m3-surfaceContainerHigh transition-colors" id="reader-back">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-        <span data-i18n="reader-back">All posts</span>
-      </a>
-
       <div id="reader-content" class="w-full"></div>
     </article>
   </main>
@@ -132,9 +140,28 @@
     </div>
   </footer>
 
+  <!-- About / changelog modal — filled + wired by blog-core.js -->
+  <div id="about-modal" aria-hidden="true">
+    <div class="about-backdrop"></div>
+    <div class="about-card" role="dialog" aria-modal="true" aria-label="About">
+      <button class="about-close ripple-surface ripple-surface-variant" id="about-close" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="about-logo">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v13"/><path d="M3 18V5a1 1 0 0 1 1-1h5a3 3 0 0 1 3 3 3 3 0 0 1 3-3h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a2 2 0 0 0-2 2 2 2 0 0 0-2-2H4a1 1 0 0 1-1-1Z"/></svg>
+      </div>
+      <div class="about-name">louie<span class="about-dot">.</span>blog</div>
+      <div class="about-codename">The Librarian</div>
+      <div class="about-by" id="about-by"></div>
+      <div class="about-log" id="about-log"></div>
+    </div>
+  </div>
+
   <script src="lib/runtime/luxon.min.js"></script>
   <script src="lib/marked.min.js"></script>
-  <script src="blog/blog_data/manifest.js"></script>
+  <script src="lib/katex/katex.min.js"></script><!-- must precede blog-interpreter.js: the markdown $…$ extension calls katex.renderToString -->
+  <!-- The Librarian: head_librarian.json + nested librarian.json are fetched at
+       runtime by blog-core.js — no manifest <script> tag anymore. -->
   <script src="blog/blog-i18n.js"></script>
   <script src="blog/blog-core.js"></script>
   <script src="lib/highlight/highlight.min.js"></script>
