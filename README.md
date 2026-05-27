@@ -1,4 +1,4 @@
-# Louie's Blog — README
+# Louie's Blog
 
 - **English** → [§ English](#english)
 - **中文** → [§ 中文](#中文)
@@ -9,310 +9,615 @@
 
 # English
 
-## Architecture in one paragraph
+A static, dependency-light blog. No backend, no database, no build step: the
+browser loads `index.html`, fetches a tree of JSON index files and Markdown/HTML
+post bodies on demand, and renders everything client-side. This document is the
+complete technical reference for the codebase.
 
-The site is static on Cloudflare Pages — no backend, no DB, no build step. `manifest.js` is the **index** (metadata for every post, no bodies); each post's **body** lives in its own folder and is loaded on demand when the reader opens it.
+## Table of contents
 
-A post body comes in one of **two formats**, chosen per-post by the `type` field in the manifest:
+1. [Architecture overview](#architecture-overview)
+2. [Local development](#local-development)
+3. [Repository layout](#repository-layout)
+4. [Boot sequence and script order](#boot-sequence-and-script-order)
+5. [The `window.Blog` namespace](#the-windowblog-namespace)
+6. [The Librarian: data model](#the-librarian-data-model)
+7. [Loading, caching, and path resolution](#loading-caching-and-path-resolution)
+8. [Routing](#routing)
+9. [List view rendering](#list-view-rendering)
+10. [Reader view rendering](#reader-view-rendering)
+11. [The interpreter](#the-interpreter)
+12. [Math (KaTeX)](#math-katex)
+13. [Syntax highlighting](#syntax-highlighting)
+14. [Table of contents sidebar](#table-of-contents-sidebar)
+15. [Navigation chrome](#navigation-chrome)
+16. [Internationalization](#internationalization)
+17. [Styling and design tokens](#styling-and-design-tokens)
+18. [Asset and path conventions](#asset-and-path-conventions)
+19. [Authoring: add a post](#authoring-add-a-post)
+20. [Authoring: add a collection](#authoring-add-a-collection)
+21. [Editing and moving content](#editing-and-moving-content)
+22. [Component reference](#component-reference)
+23. [Gotchas](#gotchas)
+24. [Deployment](#deployment)
+25. [Known limitations](#known-limitations)
+26. [Publishing checklist](#publishing-checklist)
 
-- **`md` (Markdown)** — a plain `.md` file. Loaded with `fetch()`, then turned into HTML at runtime by `blog/blog-interpreter.js` (which wraps [marked](https://marked.js.org/), `lib/marked.min.js`). This is the recommended format for most posts.
-- **`html` (default)** — a `post.<lang>.js` file that registers an HTML string into `window.__BLOG_POSTS`, injected via a `<script>` tag. Use it only when you need raw markup the reader doesn't otherwise support (custom `<iframe>` animations, bespoke layout, etc.).
+---
 
-> ⚠️ **`md` posts use `fetch()`, which the browser blocks on `file://`.** So you can no longer just double-click `index.html` to preview Markdown posts. Use the local server below. (`html` posts still work on `file://`, but just use the server for everything — it's one command.)
+## Architecture overview
 
-## Local preview
+The index is a recursive tree of `librarian.json` files, internally referred to
+as **The Librarian**:
+
+- The root index is `blog/blog_data/head_librarian.json`.
+- A **collection** is a directory that contains its own `librarian.json` plus
+  child directories. Each child is either a **post** or another **collection**,
+  so collections nest to arbitrary depth.
+- A **post** is a directory containing its body files (`post.<lang>.md` or
+  `post.<lang>.js`) and any local assets.
+
+Librarian files are fetched lazily — only the indices needed to render the
+current URL are requested. Post bodies are fetched only when their reader opens.
+
+All first-party runtime code is attached to a single global object,
+`window.Blog`. The five UI modules (`blog-i18n`, `blog-core`, `blog-toc`,
+`blog-views`, `blog-router`) are IIFEs that attach their public functions to
+`window.Blog`; internal helpers stay module-private. `blog-syntax.js` and
+`blog-interpreter.js` are separate IIFEs that expose `window.highlightAllCode`
+and `window.BlogInterpreter`.
+
+A post body is one of two formats, selected per-post by the `type` field:
+
+- **`md`** — a plain Markdown file fetched with `fetch()` and converted to HTML
+  at runtime by `blog-interpreter.js` (a wrapper around [marked](https://marked.js.org/)).
+  Inline `$…$` and block `$$…$$` math are rendered by KaTeX during parsing.
+- **`html`** (default when `type` is omitted) — a `post.<lang>.js` file that
+  assigns an HTML string to `window.__BLOG_POSTS['<slug>:<lang>']` and is loaded
+  by injecting a `<script>` tag. Used for markup the Markdown pipeline cannot
+  express (e.g. `<iframe>`-embedded animations).
+
+Because both `librarian.json` fetching and `md` bodies use `fetch()`, the site
+requires an HTTP(S) origin; it does not run from `file://`.
+
+## Local development
 
 ```bash
 python3 localrun.py
 ```
 
-Starts a static server rooted at the repo, opens the blog in your browser, and waits. **Press any key (or Ctrl+C) to stop.** It sends no-cache headers, so editing a `.md` / `.js` / `.css` file and refreshing shows the change immediately.
+`localrun.py` starts a static file server rooted at the repository, opens the
+blog in the default browser, and blocks until a key is pressed (or `Ctrl+C`). It
+sends no-cache response headers, so editing any `.md`, `.js`, `.json`, or `.css`
+file and reloading shows the change without a hard refresh.
 
----
+If a change does not appear, the browser is serving a cached asset — reload with
+cache disabled (`Cmd/Ctrl+Shift+R`).
 
-## File layout
+## Repository layout
 
 ```
-index.html                         ← entry page. Hosts BOTH list view and reader view.
-localrun.py                        ← local preview server (python3 localrun.py)
-CNAME                              ← Cloudflare Pages custom domain
+index.html                         Entry document. Hosts list view, reader view, and the About modal.
+localrun.py                        Local no-cache preview server.
+CNAME                              Custom domain for the host.
 LICENSE
-README.md                          ← this file (the only README — legacy ones were removed)
+README.md                          This document.
 lib/
 ├── design/
-│   ├── fonts.css                  ← @font-face: site 'JetBrains Mono' = a CJK *body* subset (chunks)
-│   ├── JetBrainsMono.woff2 / -Bold.woff2  ← the REAL fixed-width font; loaded as 'JBMono' by blog.css for code
-│   ├── fonts_chunks/              ← subset CJK font chunks (the body 'JetBrains Mono' faces)
-│   ├── louie.css                  ← shared site styles + :root CSS variables (matches louie1.com)
-│   ├── tailwindcss.js             ← Tailwind play CDN snapshot
+│   ├── louie.css                  Shared site styles and the :root design tokens.
+│   ├── fonts.css                  @font-face for the site 'JetBrains Mono' (a CJK body subset).
+│   ├── JetBrainsMono.woff2        The real fixed-width face, loaded by blog.css as 'JBMono' for code.
+│   ├── JetBrainsMono-Bold.woff2
+│   ├── fonts_chunks/              Subset CJK font chunks.
+│   ├── tailwindcss.js             Tailwind browser build (runtime CSS generation).
 │   └── tailwind.config.js
-├── marked.min.js                  ← Markdown parser (marked, MIT). window.marked
-├── highlight/                     ← highlight.js (BSD-3) — syntax highlighting
-│   ├── highlight.min.js           ← common-language bundle. window.hljs
-│   └── vs2015.min.css             ← VS Code Dark+ theme (token colours)
-├── resources/po.webp              ← favicon / OG image
-└── runtime/luxon.min.js           ← date formatting
+├── marked.min.js                  Markdown parser. Exposes window.marked.
+├── katex/
+│   ├── katex.min.js               KaTeX core. Exposes window.katex.
+│   ├── katex.min.css
+│   └── fonts/                     20 KaTeX_*.woff2 faces.
+├── highlight/
+│   ├── highlight.min.js           highlight.js. Exposes window.hljs.
+│   └── vs2015.min.css             Token colour theme.
+├── resources/po.webp              Favicon and Open Graph image.
+└── runtime/luxon.min.js           Date formatting.
 blog/
-├── blog.css                       ← blog-specific styles (list cards, reader, TOC, etc.)
-├── blog-i18n.js                   ← translations table + applyLang() + toggleLang()
-├── blog-core.js                   ← manifest loader, body loader, ripple, language fallback, tag state
-├── blog-syntax.js                 ← highlight.js wrapper: per-post default lang + relevance gate + code-box chrome (lang label, copy, line numbers)
-├── blog-interpreter.js            ← BlogInterpreter.render(): md → HTML (marked + normalize); html → passthrough
-├── blog-toc.js                    ← buildToc / clearToc + IntersectionObserver scroll-spy
-├── blog-views.js                  ← renderList, renderReader, renderTagBar, format badge, fade-in
-├── blog-router.js                 ← hash-based route(), boot order
+├── blog.css                       All blog-specific CSS (list rows, reader prose, TOC, back button, About modal).
+├── blog-i18n.js                   Translations table; language state and switching.
+├── blog-core.js                   The Librarian loader; UI primitives; About modal; lang-aware helpers.
+├── blog-syntax.js                 highlight.js wrapper and code-box chrome. Exposes window.highlightAllCode.
+├── blog-interpreter.js            Markdown→HTML + KaTeX; HTML passthrough. Exposes window.BlogInterpreter.
+├── blog-toc.js                    Reader table of contents and scroll-spy.
+├── blog-views.js                  List and reader rendering; post body loader.
+├── blog-router.js                 Hash router and boot.
 ├── blog_data/
-│   ├── manifest.js                ← INDEX ONLY. Sets window.__BLOG_MANIFEST.
-│   ├── <slug>/                    ← one folder per post
-│   │   ├── post.zh.md  / post.en.md    ← Markdown body  (type: 'md')
-│   │   ├── post.zh.js  / post.en.js    ← HTML body      (type: 'html')
-│   │   ├── cover.webp             ← OPTIONAL cover image, referenced from manifest.js
-│   │   ├── anims/                 ← OPTIONAL self-contained HTML/JS animations (<iframe> targets)
-│   │   └── (other assets, e.g. inline images)
-│   └── (more post folders…)
+│   ├── head_librarian.json        Root index.
+│   ├── <slug>/                    A top-level post directory.
+│   │   ├── post.zh.md | post.en.md     Markdown body (type: "md").
+│   │   ├── post.zh.js | post.en.js     HTML body (type: "html").
+│   │   ├── cover.webp             Optional cover image.
+│   │   └── anims/ , images, …     Optional assets.
+│   ├── <collection>/              A collection directory.
+│   │   ├── librarian.json         The collection's index (same schema as head_librarian.json).
+│   │   ├── <slug>/                A post inside the collection.
+│   │   └── <sub-collection>/      A nested collection.
+│   └── …
 └── editor/
-    └── blog_writer.py             ← Tk manifest manager: create posts + edit manifest metadata.
-                                     Bodies open in your own editor (.md / .js); HTML posts flagged "!".
+    └── blog_writer.py             Desktop manifest editor. OUT OF DATE — see Known limitations.
 ```
 
-URLs: `/` → list view, `/#<slug>` → reader view for that post.
+## Boot sequence and script order
 
-### Script load order in `index.html`
+Scripts are loaded at the end of `<body>` in this order:
 
 ```html
-<!-- index.html, near </body> -->
+<script src="lib/design/tailwindcss.js"></script>   <!-- in <head>: Tailwind runtime -->
+<script src="lib/design/tailwind.config.js"></script>
+<!-- …near </body>: -->
 <script src="lib/runtime/luxon.min.js"></script>
-<script src="lib/marked.min.js"></script>           <!-- before the interpreter uses it -->
-<script src="blog/blog_data/manifest.js"></script>   <!-- must run first: sets window.__BLOG_MANIFEST -->
+<script src="lib/marked.min.js"></script>            <!-- before blog-interpreter.js -->
+<script src="lib/katex/katex.min.js"></script>        <!-- before blog-interpreter.js -->
 <script src="blog/blog-i18n.js"></script>
 <script src="blog/blog-core.js"></script>
-<script src="lib/highlight/highlight.min.js"></script><!-- sets window.hljs; before blog-syntax.js -->
+<script src="lib/highlight/highlight.min.js"></script><!-- before blog-syntax.js -->
 <script src="blog/blog-syntax.js"></script>
-<script src="blog/blog-interpreter.js"></script>     <!-- before blog-views.js (writeBody calls it) -->
+<script src="blog/blog-interpreter.js"></script>      <!-- before blog-views.js -->
 <script src="blog/blog-toc.js"></script>
 <script src="blog/blog-views.js"></script>
-<script src="blog/blog-router.js"></script>          <!-- must be last: kicks off route() -->
+<script src="blog/blog-router.js"></script>           <!-- last: boots the app -->
 ```
 
-Don't reorder: `manifest.js` first (so `window.__BLOG_MANIFEST` exists), `blog-router.js` last (it boots routing).
+Ordering constraints:
 
----
+- `marked` and `katex` must load before `blog-interpreter.js`, which references
+  both when registering the math extension and rendering Markdown.
+- `highlight.min.js` must load before `blog-syntax.js`.
+- `blog-router.js` must load last; its top-level code is the boot entry point.
+- The order *among* the `blog-*.js` files otherwise does not matter for symbol
+  resolution: each attaches its API to `window.Blog`, and those functions are
+  only invoked at boot or in response to events, by which time every module has
+  executed. There is no synchronous "must exist first" global anymore.
 
-## `manifest.js` schema (index only — no bodies)
+The boot block at the bottom of `blog-router.js`:
 
-```js
-window.__BLOG_MANIFEST = {
-  version: 3,
-  updated: 'YYYY-MM-DD',         // top-level: when this manifest was last touched (informational)
-  posts: [
-    {
-      slug: 'kebab-case-id',     // REQUIRED. URL hash AND post folder name. Never change after publish.
-      date: 'YYYY-MM-DD',        // REQUIRED. ISO 8601 publish date. Used for sort + display.
-      updated: 'YYYY-MM-DD',     // OPTIONAL. Last-modified date. Shown only if present and !== date.
-      type: 'md',                // OPTIONAL. 'html' (default) | 'md'. Picks how the body is loaded + rendered.
-      title:   { zh: '...', en: '...' },  // REQUIRED. Object for bilingual, or plain string.
-      excerpt: { zh: '...', en: '...' },  // 1–2 sentence card summary. Object or string.
-      tags: ['tag1', 'tag2'],    // OPTIONAL. Powers the filter chips. Identical strings group together.
-      cover: 'cover.webp',       // OPTIONAL. Resolved as blog/blog_data/<slug>/cover.webp.
-      readingTime: 3,            // OPTIONAL. Integer minutes.
-      lang: 'both',              // 'both' (default) | 'zh' | 'en'
-      pinned: false,             // OPTIONAL. true = sticky to top of the list.
-      draft: false               // OPTIONAL. true = excluded from list AND blocked in the reader.
-    }
-  ]
-};
-```
+1. `Blog.applyLang(Blog.currentLang)` — applies translations to all `[data-i18n]`
+   elements, updates the language toggle label, then calls `Blog.route()`.
+2. `Blog.bindFadeIn()` and `Blog.bindRipples()` — wire the intersection-observer
+   reveal and the tap-ripple effect.
 
-Field rules:
+`Blog.route()` is `async`: it awaits the root librarian fetch before the first
+paint, so the initial list is empty for the duration of that request.
 
-- **`type`** decides everything about the body. `'md'` → reader fetches `post.<lang>.md` and renders it via `BlogInterpreter`. `'html'` (or omitted) → reader injects `post.<lang>.js` and uses its string verbatim.
-- **`title` / `excerpt`** can be a string (single-language) or `{zh, en}`. Fallback chain: current lang → `en` → `zh` → empty.
-- **`lang`**: `'both'` loads the requested-language body and falls back to the other on failure; `'zh'`/`'en'` loads a single body.
-- **Sorting**:
-  1. `pinned: true` posts come first.
-  2. **Pinned posts keep their order of appearance in `manifest.js`** (stable sort) — so to reorder pins, just move their entries up/down in the file.
-  3. Non-pinned posts: newest `date` first.
-- **`updated`**: "last meaningful edit". Don't bump for typos. Hidden when `updated === date`.
-- **`pinned` UX**: 📌 pill in the meta row, tinted card background, accent border on hover. Keep it to 2–3.
-- **`draft: true`**: removed from list AND blocked in the reader (even via direct hash).
+## The `window.Blog` namespace
 
-The list/reader meta row also shows an **`HTML` / `MARKDOWN` badge** on the right, derived automatically from `type`.
-
----
-
-## Post formats: when to use which
-
-| | **Markdown (`type: 'md'`)** | **HTML (`type: 'html'`, default)** |
+| Symbol | Module | Purpose |
 |---|---|---|
-| File | `post.<lang>.md` (plain Markdown) | `post.<lang>.js` (HTML in a JS template literal) |
-| Loaded by | `fetch()` → `BlogInterpreter` → marked | `<script>` inject → `window.__BLOG_POSTS` |
-| Escaping | **none** — write backticks/`${` freely | must escape `` ` `` → `` \` `` and `${` → `\${` |
-| Works on `file://` | no (needs the local server) | yes |
-| Use for | almost everything | raw markup the reader can't express (`<iframe>` anims, bespoke HTML) |
+| `Blog.translations` | blog-i18n | `{ zh, en }` string tables. |
+| `Blog.currentLang` | blog-i18n | `'zh'` or `'en'` (mutable). |
+| `Blog.applyLang(lang)` | blog-i18n | Apply `[data-i18n]` strings, persist, re-route. |
+| `Blog.toggleLang()` | blog-i18n | Flip language and apply. |
+| `Blog.bindRipples()` | blog-core | Bind the tap ripple to unbound `.ripple-surface` elements. |
+| `Blog.bindFadeIn()` | blog-core | IntersectionObserver reveal for `.fade-in`. |
+| `Blog.pickLang(field, fallback)` | blog-core | Resolve a `{zh,en}` field by `currentLang` with fallback. |
+| `Blog.formatDate(iso)` | blog-core | Luxon-format an ISO date in the UI locale. |
+| `Blog.coverUrl(entry, parentPath)` | blog-core | Build a cover URL, or `null`. |
+| `Blog.dataPath(path, file?)` | blog-core | Build a path under `blog/blog_data/`. |
+| `Blog.librarianUrl(path)` | blog-core | URL of a librarian file (`''` → root). |
+| `Blog.loadLibrarian(path)` | blog-core | Fetch + normalize + cache one librarian. |
+| `Blog.resolvePath(path)` | blog-core | Walk root→path; return kind + entry/lib + chain. |
+| `Blog.renderAbout()` | blog-core | Render the About modal content for `currentLang`. |
+| `Blog.buildToc()` | blog-toc | Build the reader TOC and scroll-spy. |
+| `Blog.clearToc()` | blog-toc | Tear down the TOC when leaving the reader. |
+| `Blog.updateTocBtn()` | blog-toc | Toggle the mobile TOC FAB. |
+| `Blog.renderList(path, lib, chain)` | blog-views | Render a collection level. |
+| `Blog.renderReader(path, entry, chain)` | blog-views | Render a post. |
+| `Blog.renderNotFound()` | blog-views | Render the not-found view. |
+| `Blog.renderListError(path, err)` | blog-views | Render a librarian-load error. |
+| `Blog.route()` | blog-router | Resolve the hash and dispatch a view. |
+| `window.BlogInterpreter.render(raw, opts)` | blog-interpreter | Raw body → injectable HTML. |
+| `window.highlightAllCode(root, lang)` | blog-syntax | Highlight `<pre><code>` in a subtree. |
+| `window.__BLOG_POSTS` | (post `.js` files) | Registry of HTML post body strings. |
 
-Both render into the same `#reader-body` DOM, so syntax highlighting and the TOC work identically regardless of format.
+## The Librarian: data model
 
----
+A librarian file (root `head_librarian.json` or any collection's
+`librarian.json`) has the shape:
 
-## How to add a post — Markdown (recommended)
-
-1. **Pick a slug** — short, lowercase, hyphenated. It's the URL hash AND the folder name; never change it after publish.
-2. **Create the folder** `blog/blog_data/<slug>/`.
-3. **Write the body** as `post.zh.md` and/or `post.en.md` — pure Markdown, no JS wrapper, no escaping. You can write it in any editor (e.g. Typora).
-4. **(Optional) cover** at `blog/blog_data/<slug>/cover.webp`.
-5. **Append a manifest entry** with **`type: 'md'`**. Bump top-level `updated`.
-6. **Preview** with `python3 localrun.py`.
-
-Markdown niceties handled by `BlogInterpreter`:
-- The **first paragraph** automatically gets the `lead` style.
-- **Relative image paths** (`![](pic.webp)`) are auto-prefixed to `blog/blog_data/<slug>/pic.webp` — no need to write the full path.
-- Code fences: ` ```c ` is syntax-highlighted; every other language (and unlabeled fences) renders verbatim.
-- Raw HTML inside Markdown is passed through, so the signature line `<p style="color: var(--muted); …">— Louie</p>` and the like still work.
-
-## How to add a post — HTML (advanced)
-
-Use this only when you need markup Markdown can't express. Steps 1–2 and 4–6 are the same, except set **`type: 'html'`** (or omit `type`). For step 3, create `post.<lang>.js`:
-
-```js
-/* Post body — <slug> / <lang> */
-
-(window.__BLOG_POSTS = window.__BLOG_POSTS || {})['<slug>:<lang>'] = `
-<p class="lead">Lead paragraph…</p>
-
-<h2>Section heading</h2>
-<p>Body…</p>
-`;
+```jsonc
+{
+  "version": 4,
+  "updated": "YYYY-MM-DD",
+  "title": { "zh": "…", "en": "…" },   // optional; a collection's own display name
+  "entries": [ /* post and collection entries, in any order */ ]
+}
 ```
 
-The key MUST be exactly `<slug>:<lang>` or the loader errors. **Escape `` ` `` as `` \` `` and `${` as `\${`** inside the string (it's a JS template literal). In HTML posts you write `<p class="lead">` yourself and image `src` must be the full `blog/blog_data/<slug>/…` path.
+### Post entry
 
----
-
-## Post body conventions (both formats)
-
-Styles available in the reader (defined under `.reader-body` in `blog/blog.css`). Markdown maps to these automatically; HTML posts must use the tags directly.
-
-| Element | Markdown | Notes |
+| Field | Required | Notes |
 |---|---|---|
-| `<p class="lead">` | first paragraph | accent left-border, italic — auto-applied for `md` |
-| `<h2>` / `<h3>` | `##` / `###` | section / sub-heading; drive the TOC |
-| `<p>` | paragraph | |
-| `<strong>` / `<em>` | `**x**` / `*x*` | accent / cream italic |
-| `<a href>` | `[x](url)` | underlined accent link |
-| `<ul>` / `<ol>` / `<li>` | `-` / `1.` | comfortable spacing |
-| `<code>` | `` `x` `` | inline code |
-| `<pre><code>` | ` ``` ` fence | block code (C auto-highlighted; other langs verbatim) |
-| `<blockquote>` | `>` | accent left-border, muted italic |
-| `<img>` | `![](pic.webp)` | rounded + border; relative paths auto-prefixed for `md` |
-| `<iframe>` | raw HTML | for self-contained interactive animations |
-| `<hr>` | `---` | centered accent gradient divider |
-| `<table>` | GFM table | styled rows |
+| `kind` | yes | `"post"`. |
+| `slug` | yes | Directory name and last URL segment. Permanent. |
+| `date` | yes | ISO 8601. Used for sorting and display. |
+| `updated` | no | ISO 8601. Shown only if present and `!== date`. |
+| `type` | no | `"html"` (default) or `"md"`. Selects the body format. |
+| `title` | yes | `{zh,en}` object or a plain string. |
+| `excerpt` | no | `{zh,en}` or string. Not rendered on the list; kept for metadata. |
+| `tags` | no | Array. Populates the tag chips, scoped to the current level. |
+| `cover` | no | Filename, resolved under the post directory. |
+| `readingTime` | no | Integer minutes; shown in the reader header. |
+| `lang` | no | `"both"` (default), `"zh"`, or `"en"`. |
+| `pinned` | no | `true` floats the entry to the top of its level. |
+| `draft` | no | `true` excludes it from the list and blocks it in the reader. |
 
-Need a new prose element? Add it to `.reader-body …` in `blog/blog.css`.
+### Collection entry
 
----
+| Field | Required | Notes |
+|---|---|---|
+| `kind` | yes | `"collection"`. |
+| `slug` | yes | Directory name holding the collection's `librarian.json`. |
+| `date` | yes | ISO 8601. Used for sorting. |
+| `title` | yes | `{zh,en}` or string. |
+| `excerpt` | no | `{zh,en}` or string. Not rendered on the list. |
+| `tags` | no | Array. |
+| `cover` | no | Ignored on the list: a collection always renders a folder icon. |
+| `pinned` | no | `true` floats the collection to the top. |
 
-## The interpreter (`blog/blog-interpreter.js`)
+### Sorting
 
-One seam between a raw body and the HTML injected into `#reader-body`:
+`blog-core.js` normalizes every librarian on load by removing `draft` entries
+and sorting into three bands:
+
+1. **Pinned** entries (any kind), preserving their declaration order in the file.
+2. **Collections**, newest `date` first.
+3. **Posts**, newest `date` first.
+
+The net effect: collections sit above bare posts, and anything pinned floats
+above everything. To reorder pinned items, move their entries in the file.
+
+## Loading, caching, and path resolution
+
+`Blog.loadLibrarian(path)`:
+
+- `path === ''` resolves to `blog/blog_data/head_librarian.json`; any other path
+  resolves to `blog/blog_data/<path>/librarian.json`.
+- The result is normalized (drafts dropped, entries sorted) and cached by path.
+  Concurrent requests for the same path share one in-flight promise.
+
+`Blog.resolvePath(path)` walks from the root to the target, loading each
+librarian along the way:
+
+- For each path segment, it finds the matching entry in the current librarian.
+- A `collection` entry causes the next librarian to load and the walk to
+  continue; a `post` entry must be the final segment.
+- Returns one of:
+  - `{ ok: true, kind: 'collection', lib, chain }` — for the root or a collection.
+  - `{ ok: true, kind: 'post', entry, chain }` — for an article.
+  - `{ ok: false, notFound: true, chain }` — a segment did not match.
+- `chain` is an array of `{ slug, path, entry }` for every segment, used to build
+  breadcrumbs with real titles.
+
+## Routing
+
+The router is hash-based. `parseHash()` strips a leading `#` and any leading or
+trailing `/`, yielding a path string:
+
+| Hash | Path | View |
+|---|---|---|
+| `#` or empty | `''` | Root list. |
+| `#/sql` | `sql` | Collection list. |
+| `#/sql/sql-basics-1` | `sql/sql-basics-1` | Reader. |
+| `#welcome` | `welcome` | Reader (single segment, backward compatible). |
+
+Because a leading slash is stripped, `#welcome` and `#/welcome` are equivalent,
+so links created before collections existed still resolve.
+
+`Blog.route()` is `async`. On each hash change it:
+
+1. Clears stray ripple spans (see Gotchas).
+2. Computes the path and calls `setBackButton(path)`.
+3. Awaits `Blog.resolvePath(path)`.
+4. Dispatches:
+   - resolution error → `Blog.renderListError`,
+   - not found → `Blog.renderNotFound`,
+   - `kind: 'post'` → `Blog.renderReader`,
+   - `kind: 'collection'` → `Blog.renderList`.
+
+## List view rendering
+
+`Blog.renderList(path, lib, chain)`:
+
+- Resets the active tag filter when the level (`path`) changes.
+- Renders breadcrumbs into `#breadcrumb` from `chain` (hidden at the root).
+- Renders the tag bar into `#tag-bar`, scoped to the tags present at the current
+  level; clicking a chip re-renders this level filtered by that tag.
+- Renders one **row** per entry into `#blog-list`:
+  - **Post row**: thumbnail (cover, or the title's initial) · reserved pin slot ·
+    single-line title (ellipsised) · date.
+  - **Collection row**: a folder icon in the collection accent colour · reserved
+    pin slot · title · date.
+- Rows are flat (no borders), one line tall, and carry no tags, reading time, or
+  excerpt. The pin slot has a fixed width on every row so titles align whether or
+  not an entry is pinned.
+
+`Blog.renderListError(path, err)` replaces the list with a localized failure
+message and the error text.
+
+## Reader view rendering
+
+`Blog.renderReader(path, entry, chain)`:
+
+1. Computes `slug` (last segment) and `parentPath`.
+2. Renders the reader skeleton: meta row (pin, date, optional "updated",
+   reading time), the `Markdown`/`HTML` badge, the title, tag chips, optional
+   cover, an empty `#reader-body`, and a closing date line.
+3. Resolves the body language: `lang === 'both'` uses `currentLang` and falls
+   back to the other language if the requested body fails to load; `'zh'`/`'en'`
+   loads only that language.
+4. Loads the body via `loadPostBody(path, lang, type)` and calls `writeBody`.
+
+`loadPostBody(path, lang, type)`:
+
+- **md** → `fetch('blog/blog_data/<path>/post.<lang>.md')`, cached by `path:lang`.
+- **html** → inject `<script src='blog/blog_data/<path>/post.<lang>.js'>`. The
+  script registers `window.__BLOG_POSTS['<slug>:<lang>']`. The registry key is
+  the **slug** (last segment), not the full path, so a post body keeps working
+  after the post is moved into a collection.
+
+`writeBody(raw)`:
+
+1. `window.BlogInterpreter.render(raw, { type, basePath: path })` → HTML.
+2. If the post is nested (`path !== slug`), rewrite any `blog/blog_data/<slug>/`
+   prefix in the HTML to `blog/blog_data/<path>/`. This retargets hardcoded asset
+   paths (e.g. `<iframe>` animation sources) so HTML posts remain relocatable.
+3. Wrap every `<table>` in a `.table-scroll` container so wide tables scroll
+   inside their own box on small screens instead of widening the page.
+4. `window.highlightAllCode(el, postCodeLang(entry))`.
+5. Bind in-post `#anchor` links to smooth-scroll without changing the hash.
+
+## The interpreter
+
+`window.BlogInterpreter.render(raw, opts)`:
 
 ```
-BlogInterpreter.render(raw, { type, slug }) -> htmlString
-  type 'html' → returns raw unchanged (byte-for-byte)
-  type 'md'   → marked.parse(raw), then normalize:
-                  1. first top-level <p> gets class="lead"
-                  2. relative <img src> → blog/blog_data/<slug>/
-                  3. fenced code that isn't ```c gets class="lang-text" (skips the C highlighter)
+render(raw, { type, basePath }) -> htmlString
+  type 'html'  → returns raw unchanged.
+  type 'md'    → marked.parse(raw) (with the KaTeX extension), then:
+                   1. the first top-level <p> gets class="lead";
+                   2. relative <img src> values are prefixed with
+                      blog/blog_data/<basePath>/ ;
+                   3. fenced-code language hints are preserved for highlight.js.
 ```
 
-`writeBody()` (in `blog-views.js`) calls it once, then runs `highlightAllCode()` and `buildToc()` on the result — both operate on the DOM, so they don't care which format the body came from. To add Markdown features, change the normalization here; nothing downstream needs to know.
+Absolute image paths (`http(s)://`, `/…`, `blog/…`, `data:`) are left untouched.
+To change Markdown behaviour, modify the normalization here; the list/reader/TOC
+layers operate on the resulting DOM and require no changes.
 
----
+## Math (KaTeX)
 
-## TOC sidebar
+KaTeX is vendored in `lib/katex/` (core, CSS, and 20 woff2 faces) and works
+offline. `blog-interpreter.js` registers a marked extension that renders math at
+**parse time**, so the LaTeX is converted to HTML before Markdown can alter it:
 
-On wide viewports (≥ 1360 px) the reader builds a sticky left sidebar from the post's `<h2>`/`<h3>` (`blog/blog-toc.js`). It slugifies headings into stable `id`s, renders `toc-link`s, and uses an `IntersectionObserver` (`rootMargin: '-10% 0px -80% 0px'`) for scroll-spy. Clicks use `scrollIntoView` with `e.preventDefault()` — **never let them change `location.hash`** (that would trigger `route()`). Below the breakpoint a floating `#toc-fab` opens `#mobile-toc`. Driven entirely by headings — fewer than 2 headings → no sidebar. Keep headings concise (links are ~220 px wide).
+- inline: `$ … $`
+- display: `$$ … $$`
+- A literal dollar sign in prose must be escaped as `\$`; an unescaped `$` begins
+  inline math.
 
----
+## Syntax highlighting
 
-## Asset paths inside bodies
+`window.highlightAllCode(root, defaultLang)` runs over every `<pre><code>` in a
+subtree after the body is injected:
 
-- **Markdown**: relative image paths are auto-prefixed to `blog/blog_data/<slug>/…` by the interpreter. Absolute (`http(s)://`, `/…`, `blog/…`, `data:`) paths are left alone.
-- **HTML**: paths resolve relative to `index.html`, NOT the post folder — so write the full `blog/blog_data/<slug>/img.webp`.
-- The manifest `cover` is just the filename; the renderer prepends `blog/blog_data/<slug>/`.
+- The language defaults to `defaultLang`, which `blog-views.js` derives from the
+  post's tags via `CODE_LANG_BY_TAG` (e.g. a post tagged `c`/`python`/`sql`
+  highlights all blocks as that language). Untagged posts fall back to
+  highlight.js auto-detection.
+- A relevance gate leaves prose, program output, and ASCII diagrams unhighlighted.
+- Each block is wrapped in code-box chrome: a language label, a copy button, and
+  a line-number gutter. Copy-button captions read `Blog.currentLang`.
+- Token colours come from `lib/highlight/vs2015.min.css`.
+- Opt out per block with a `text`/`plaintext` fence or `class="lang-text"` /
+  `"no-highlight"`. Force a language with a `language-xxx` fence.
 
-Convert covers to WebP and keep them < 200 KB:
+## Table of contents sidebar
 
-```bash
-python -c "from PIL import Image; Image.open('cover.png').save('cover.webp', 'webp', quality=90)"
-```
+`blog-toc.js` builds the reader TOC from the body's `<h2>`/`<h3>` headings:
 
----
+- Headings are slugified into stable, collision-free `id`s.
+- On viewports ≥ 1360 px a fixed left sidebar (`#toc-sidebar`) lists the
+  headings; below that width a floating action button (`#toc-fab`) opens a drawer
+  (`#mobile-toc`).
+- An `IntersectionObserver` (`rootMargin: '-10% 0px -80% 0px'`) drives scroll-spy.
+- TOC links call `scrollIntoView` with `preventDefault()` and never change
+  `location.hash` (that would trigger routing).
+- Fewer than two headings → no sidebar. `Blog.clearToc()` tears everything down
+  when leaving the reader.
 
-## Editing an existing post
+## Navigation chrome
 
-1. Edit the `.md` (or `.js`) body in `blog/blog_data/<slug>/`.
-2. If the change is meaningful, set `updated: '<today>'` in the manifest entry.
-3. Don't change `slug` — it's the permanent URL and folder name.
+- **Back button** (`#back-btn`): one shared element in `<main>`, used by both the
+  collection and reader views. It is a sticky pill at the top of the content
+  column at every width. `setBackButton(path)` in `blog-router.js` sets its href
+  to the parent level and hides it at the root.
+- **Breadcrumbs** (`#breadcrumb`): built from the resolution `chain`; shown only
+  below the root.
+- **About modal** (`#about-btn` ⓘ in the navbar → `#about-modal`): a bilingual
+  changelog rendered by `Blog.renderAbout()`. It fades in/out (no `display`
+  toggle) so a click ripple stays visible and no finished animation replays on
+  reopen; `close()` also sweeps stray ripple spans.
+- **Language toggle** (`#lang-toggle`): bound in `blog-router.js` (no inline
+  handler).
+- **Brand dropdown** (`#brand-dropdown-btn`): set up in `blog-core.js`.
 
-To re-surface a heavily-rewritten post, set `pinned: true` rather than faking a new `date`.
+## Internationalization
 
----
+- `Blog.translations` holds `{ zh, en }` string tables keyed by `data-i18n`
+  attribute names.
+- `Blog.currentLang` initializes from `navigator.language`, then from
+  `localStorage['louie-lang']` if set.
+- `Blog.applyLang(lang)` rewrites all `[data-i18n]` elements, updates the toggle
+  label and document language, persists the choice, refreshes the About modal,
+  and calls `Blog.route()`.
+- `Blog.pickLang(field)` resolves a `{zh,en}` value with the fallback chain
+  `currentLang → en → zh → ''`.
+- Every static UI string must have a `data-i18n` key present in **both** language
+  tables.
 
-## Component map
+## Styling and design tokens
 
-| File | What it owns |
+- Design tokens live in `lib/design/louie.css` `:root`: `--bg`, `--surface`,
+  `--surface-high`, `--border`, `--outline`, `--text`, `--muted`, `--accent`,
+  `--accent-dim`, `--accent-on`. `blog.css` defines one additional token,
+  `--collection` (teal), used for collection folder icons.
+- `blog.css` must reference tokens via `var(--…)` rather than hardcoding hex,
+  except for a few intentional one-offs (pure-white headings, the copy-success
+  green, the error red, the gutter grey).
+- The visual language is flat: list rows, chips, the back button, and thumbnails
+  use filled surfaces with **no borders**.
+- Code uses a dedicated `'JBMono'` face (`blog.css`) loaded from the real
+  `JetBrainsMono.woff2`, with ligatures disabled, because the site-wide
+  `'JetBrains Mono'` is a CJK body subset and is not reliably monospaced for
+  ASCII.
+- Reader prose styles live under `.reader-body` in `blog.css`.
+
+## Asset and path conventions
+
+- `Blog.dataPath(path, file?)` builds a path under `blog/blog_data/`.
+- `Blog.coverUrl(entry, parentPath)` returns
+  `blog/blog_data/<parentPath>/<slug>/<cover>` or `null`.
+- **Markdown** relative image paths (`![](pic.webp)`) are prefixed with the
+  post's full path by the interpreter.
+- **HTML** bodies should reference assets as `blog/blog_data/<slug>/…` using the
+  bare slug; when the post is nested in a collection, `writeBody` retargets that
+  prefix to the post's real path, so assets survive a move.
+
+## Authoring: add a post
+
+1. Choose a slug: short, lowercase, hyphenated. It is the directory name and the
+   last URL segment, and is permanent.
+2. Choose the location:
+   - top level → directory `blog/blog_data/<slug>/`, entry in `head_librarian.json`;
+   - inside collection `X` → directory `blog/blog_data/X/<slug>/`, entry in
+     `X/librarian.json`.
+3. Write the body:
+   - Markdown: `post.zh.md` and/or `post.en.md`. The first paragraph becomes the
+     lead; relative images and `$…$` math are handled automatically.
+   - HTML: `post.<lang>.js`:
+     ```js
+     /* Post body — <slug> / <lang> */
+     (window.__BLOG_POSTS = window.__BLOG_POSTS || {})['<slug>:<lang>'] = `
+     <p class="lead">Lead paragraph…</p>
+     <h2>Section</h2>
+     `;
+     ```
+     The registry key must be exactly `<slug>:<lang>`. Escape `` ` `` as `` \` ``
+     and `${` as `\${`. Write `<p class="lead">` yourself and reference assets as
+     `blog/blog_data/<slug>/…`.
+4. (Optional) Add `cover.webp` to the post directory and set `cover`.
+5. Add a `{ "kind": "post", … }` entry to the directory's librarian, with
+   `type: "md"` for Markdown. Bump that librarian's `updated`.
+6. Preview with `python3 localrun.py`.
+
+## Authoring: add a collection
+
+1. Create the collection directory, e.g. `blog/blog_data/<collection>/` (or
+   nested inside a parent collection).
+2. Create `<collection>/librarian.json`:
+   ```json
+   { "version": 4, "updated": "YYYY-MM-DD", "title": { "zh": "…", "en": "…" }, "entries": [] }
+   ```
+3. Add a `{ "kind": "collection", "slug": "<collection>", "title": {…}, "excerpt": {…} }`
+   entry to the **parent** librarian (`head_librarian.json` for a top-level
+   collection).
+4. Add posts and/or further collections into the directory and list them in its
+   `librarian.json`. Nesting has no depth limit.
+
+## Editing and moving content
+
+- Editing a body: edit the `.md` or `.js` file. If the change is significant, set
+  the entry's `updated` to today.
+- The `slug` is permanent: renaming it breaks existing links and the directory
+  mapping.
+- Moving a post into a collection changes its URL from `#<slug>` to
+  `#/<collection>/<slug>`; old deep links to the moved post will not resolve.
+  Hardcoded asset paths inside the body are retargeted automatically (see
+  [Asset and path conventions](#asset-and-path-conventions)).
+
+## Component reference
+
+| File | Responsibilities |
 |---|---|
-| `blog/blog_data/manifest.js` | Sets `window.__BLOG_MANIFEST` synchronously before any module runs |
-| `lib/marked.min.js` | Markdown → HTML parser (`window.marked`), used only by the interpreter |
-| `blog/blog-i18n.js` | `translations.{zh,en}`, `applyLang()`, `toggleLang()`, `localStorage['louie-lang']` |
-| `blog/blog-core.js` | `loadManifest()` (drops drafts, sorts: pinned-in-manifest-order then date desc), `loadPostBody(slug, lang, type)` (md → `fetch` + `_mdCache`; html → `<script>` + `_bodyLoading`), `pickLang()`, ripple (`bindRipples`, with `animationend` cleanup), `activeTag` |
-| `blog/blog-syntax.js` | highlight.js wrapper; runs over `<pre><code>` after body injection. Uses the post's tag-derived language (else auto-detect), with a relevance gate so prose/diagrams stay plain. Then wraps each block in the code-box chrome (language label, copy button, line-number gutter). Theme colours: `lib/highlight/vs2015.min.css`. Opt out with `class="lang-text"` / `"no-highlight"` / a `text`/`plaintext` fence |
-| `blog/blog-interpreter.js` | `BlogInterpreter.render(raw, {type, slug})` — md→HTML + normalization, html passthrough |
-| `blog/blog-toc.js` | `buildToc()`, `clearToc()`, scroll-spy, mobile TOC FAB |
-| `blog/blog-views.js` | `renderTagBar()`, `renderList()`, `renderReader()` (skeleton → `writeBody` via interpreter), HTML/MARKDOWN badge, `formatDate()`, `bindFadeIn()` |
-| `blog/blog-router.js` | `route()` reads `location.hash`, swaps view, clears stray ripples, re-renders |
-| `blog/blog.css` | All blog-specific styles |
-
-Routing is hash-based. Language preference persists via `localStorage['louie-lang']`.
-
----
-
-## Style / design rules
-
-- Stick to the `:root` CSS variables in `lib/design/louie.css` — they match the home site.
-- Reader prose width is capped by `main { max-width }` — don't widen, it hurts readability. The **list** view is its own narrower column.
-- Bilingual UI: every static label has `data-i18n="key"`. Add new keys to **both** `translations.zh` and `translations.en`.
-
----
+| `blog/blog_data/head_librarian.json` | Root index, fetched at runtime. |
+| `blog/blog_data/<collection>/librarian.json` | A collection's index. |
+| `lib/marked.min.js` | Markdown→HTML (`window.marked`). |
+| `lib/katex/katex.min.js` | Math (`window.katex`). |
+| `lib/highlight/highlight.min.js` | Highlighting engine (`window.hljs`). |
+| `lib/runtime/luxon.min.js` | Date formatting. |
+| `blog/blog-i18n.js` | `translations`, `currentLang`, `applyLang`, `toggleLang`. |
+| `blog/blog-core.js` | `loadLibrarian`, `resolvePath`, `dataPath`/`librarianUrl`/`coverUrl`, `pickLang`/`formatDate`, ripple, fade, brand dropdown, About modal. |
+| `blog/blog-syntax.js` | `window.highlightAllCode`, code-box chrome. |
+| `blog/blog-interpreter.js` | `window.BlogInterpreter.render`, KaTeX extension. |
+| `blog/blog-toc.js` | `buildToc`, `clearToc`, `updateTocBtn`, scroll-spy. |
+| `blog/blog-views.js` | `renderList`, `renderReader`, `renderNotFound`, `renderListError`, `loadPostBody`. |
+| `blog/blog-router.js` | `route`, `setBackButton`, boot. |
+| `blog/blog.css` | All blog-specific styles. |
 
 ## Gotchas
 
-1. **`md` posts need a server.** `fetch()` is blocked on `file://`. Use `python3 localrun.py` locally; production (Cloudflare, http) is fine.
-2. **`marked` must load before the interpreter is called.** Keep `lib/marked.min.js` above `blog-interpreter.js` in `index.html`.
-3. **`window.__BLOG_MANIFEST` must exist before any blog module runs.** `manifest.js` stays first; `blog-router.js` stays last.
-4. **HTML `post.<lang>.js` must register the exact key `<slug>:<lang>`**, or the loader reports a missing body.
-5. **Slug rename = broken links + missing folder.** Old `/#old-slug` URLs will 404.
-6. **Ripple cleanup**: ripple spans are removed on `animationend`, and `route()` sweeps any leftovers — otherwise a finished ripple on a persistent element (the reader "back" button) replays when `#view-reader` toggles `display`. Don't remove either cleanup.
-7. **Highlighting picks the language from the post's tags.** A post tagged `c`/`python`/`sql`/… highlights every code block as that language (see `CODE_LANG_BY_TAG` in `blog-views.js`); untagged posts fall back to auto-detection. A relevance gate leaves prose, program output, and ASCII diagrams plain. To force a block's language use a `language-xxx` fence/class; to keep one verbatim use `text`/`plaintext` or `class="lang-text"`.
-8. **Code font ≠ the site font.** The site-wide `'JetBrains Mono'` family is actually a CJK *body* subset (`lib/design/fonts_chunks/`) and is NOT reliably fixed-width for ASCII — using it for code made columns ragged. `blog.css` loads the real `JetBrainsMono.woff2` as a separate `'JBMono'` family for code boxes only, with ligatures disabled (`-> ` must not render as `→`). Don't point code at `'JetBrains Mono'`.
-9. **Date format**: ISO 8601 only, or Luxon returns "Invalid DateTime".
-10. **Cloudflare**: a repo-root `_headers` with `/blog/* → no-cache` keeps `manifest.js` / bodies fresh. If a deploy doesn't show, check that (and Rocket Loader, which can disturb script timing).
-11. **Reader reveal uses `requestAnimationFrame`, not `IntersectionObserver`** — toggling `view-reader` from `display:none` fires the IO before layout settles (blank screen). Don't switch it back to IO.
+1. **An HTTP server is required.** Both `librarian.json` files and `md` bodies use
+   `fetch()`, which is blocked on `file://`. Use `python3 localrun.py`.
+2. **`marked` and `katex` must load before `blog-interpreter.js`.**
+3. **Boot is asynchronous.** `blog-router.js` boots `applyLang → route()`, which
+   awaits the root librarian fetch. There is no synchronous index global.
+4. **HTML bodies register `window.__BLOG_POSTS['<slug>:<lang>']`** with the exact
+   slug; a mismatch yields a missing-body error.
+5. **Moving or renaming a post changes its URL.** Slugs should be treated as
+   permanent.
+6. **Ripple spans are removed on `animationend`,** and both `route()` and the
+   About modal's `close()` sweep stray `.ripple` spans. A finished ripple left on
+   a persistent element (the back button, a modal button) replays its CSS
+   animation when its container toggles visibility; do not remove these sweeps.
+7. **A literal `$` in Markdown prose must be `\$`.**
+8. **Code uses `'JBMono'`, not `'JetBrains Mono'`.** The latter is a CJK body
+   subset and renders ASCII code with ragged columns.
+9. **Dates must be ISO 8601,** or Luxon yields "Invalid DateTime".
+10. **The reader reveal uses `requestAnimationFrame`, not `IntersectionObserver`**;
+    toggling `display:none` would fire the observer before layout settles.
+11. **Browser caching.** A static server without no-cache headers may serve stale
+    assets. `localrun.py` sends no-cache; otherwise hard-reload.
 
----
+## Deployment
 
-## Quick checklist before publishing
+The site is a static bundle served over HTTP(S) with a custom domain (`CNAME`).
+There is no build step; the repository is served as-is. To keep `head_librarian.json`,
+nested `librarian.json` files, and post bodies fresh after a deploy, configure a
+no-cache (or short-max-age) rule for `/blog/*` on the host (for example, a
+Cloudflare Pages `_headers` file — not currently present in the repository).
 
-- [ ] Slug chosen (short, lowercase, hyphenated, permanent)
-- [ ] Folder `blog/blog_data/<slug>/` created
-- [ ] Body written: `post.<lang>.md` (`type: 'md'`) or `post.<lang>.js` (`type: 'html'`, exact `<slug>:<lang>` key, escaped backticks/`${`)
-- [ ] Headings use `<h2>`/`<h3>` (`##`/`###`) for the TOC; concise (< ~30 chars)
-- [ ] Markdown images use bare relative names; HTML images use full `blog/blog_data/<slug>/…`
-- [ ] Manifest entry added (`slug`, `date`, `type`, `title`, `excerpt`, `lang`, …); top-level `updated` bumped
-- [ ] `cover.webp` placed + `cover` set (if any), < 200 KB
-- [ ] `pinned` / `draft` set deliberately; for pinned, position controls order
-- [ ] Previewed via `python3 localrun.py` — list AND reader; both languages if `lang: 'both'`; TOC on wide screens
+## Known limitations
+
+- **`blog/editor/blog_writer.py` is out of date.** It reads the removed
+  `manifest.js` and does not understand the librarian tree. Edit `librarian.json`
+  files by hand until it is updated.
+- **Tailwind runs in the browser.** `lib/design/tailwindcss.js` generates CSS at
+  runtime rather than at build time.
+- **No `file://` support.** The site requires an HTTP origin.
+
+## Publishing checklist
+
+- [ ] Slug chosen: short, lowercase, hyphenated, permanent.
+- [ ] Directory created at the correct path.
+- [ ] Body written: `post.<lang>.md` (`type: "md"`) or `post.<lang>.js`
+      (`type: "html"`, exact `<slug>:<lang>` key).
+- [ ] Headings use `<h2>`/`<h3>` (`##`/`###`) for the TOC.
+- [ ] Markdown images use bare relative names; HTML assets use
+      `blog/blog_data/<slug>/…`; literal `$` escaped as `\$`.
+- [ ] Entry added to the correct `librarian.json`; that file's `updated` bumped.
+- [ ] `cover.webp` added and `cover` set, if any (keep it small).
+- [ ] `pinned` / `draft` set deliberately.
+- [ ] Previewed with `python3 localrun.py`: list, collection, and reader; both
+      languages if `lang: "both"`; TOC on wide viewports.
 
 ---
 
@@ -320,301 +625,558 @@ Routing is hash-based. Language preference persists via `localStorage['louie-lan
 
 # 中文
 
-## 一段话讲清架构
+一个静态、轻依赖的博客。没有后端、没有数据库、没有编译步骤：浏览器加载
+`index.html`，按需 fetch 一棵 JSON 索引文件树和 Markdown/HTML 正文，并在客户端
+渲染全部内容。本文是该代码库的完整技术参考。
 
-整站静态部署在 Cloudflare Pages —— 没后端、没数据库、没编译。`manifest.js` 是**索引**（每篇文章的元数据，不含正文）；每篇文章的**正文**各自一个文件夹，点开阅读器才按需加载。
+## 目录
 
-正文有**两种格式**，由 manifest 里的 `type` 字段逐篇决定：
+1. [架构概览](#架构概览)
+2. [本地开发](#本地开发)
+3. [仓库结构](#仓库结构)
+4. [启动顺序与脚本加载](#启动顺序与脚本加载)
+5. [window.Blog 命名空间](#windowblog-命名空间)
+6. [The Librarian：数据模型](#the-librarian数据模型)
+7. [加载、缓存与路径解析](#加载缓存与路径解析)
+8. [路由](#路由)
+9. [列表视图渲染](#列表视图渲染)
+10. [阅读视图渲染](#阅读视图渲染)
+11. [解释器](#解释器)
+12. [数学公式（KaTeX）](#数学公式katex)
+13. [语法高亮](#语法高亮)
+14. [目录侧栏](#目录侧栏)
+15. [导航组件](#导航组件)
+16. [国际化](#国际化)
+17. [样式与设计 token](#样式与设计-token)
+18. [资源与路径约定](#资源与路径约定)
+19. [写作：添加文章](#写作添加文章)
+20. [写作：添加合集](#写作添加合集)
+21. [编辑与移动内容](#编辑与移动内容)
+22. [组件参考](#组件参考)
+23. [坑](#坑)
+24. [部署](#部署)
+25. [已知限制](#已知限制)
+26. [发布清单](#发布清单)
 
-- **`md`（Markdown）** —— 一个纯 `.md` 文件。用 `fetch()` 取来，再由 `blog/blog-interpreter.js`（封装了 [marked](https://marked.js.org/)，即 `lib/marked.min.js`）在前端实时转成 HTML。**大多数文章用这个。**
-- **`html`（默认）** —— 一个 `post.<lang>.js` 文件，把一段 HTML 字符串注册进 `window.__BLOG_POSTS`，用 `<script>` 注入。**仅在需要阅读器不支持的原生标记时用**（自定义 `<iframe>` 动画、特殊排版等）。
+---
 
-> ⚠️ **`md` 文章走 `fetch()`，而浏览器在 `file://` 下禁用 fetch。** 所以不能再双击 `index.html` 预览 Markdown 文章，请用下面的本地服务器。（`html` 文章仍能在 `file://` 跑，但统一用服务器最省事——就一条命令。）
+## 架构概览
 
-## 本地预览
+索引是一棵递归的 `librarian.json` 文件树，内部称为 **The Librarian**：
+
+- 根索引是 `blog/blog_data/head_librarian.json`。
+- **合集**是一个目录，包含它自己的 `librarian.json` 加若干子目录。每个子目录要
+  么是**文章**、要么是另一个**合集**，所以合集可以无限层嵌套。
+- **文章**是一个目录，包含正文文件（`post.<lang>.md` 或 `post.<lang>.js`）和本地
+  资源。
+
+librarian 文件按需懒加载——只请求渲染当前 URL 所需的索引。文章正文只在其阅读器
+打开时才 fetch。
+
+所有第一方运行时代码都挂在单一全局对象 `window.Blog` 上。五个 UI 模块
+（`blog-i18n`、`blog-core`、`blog-toc`、`blog-views`、`blog-router`）是 IIFE，把
+公开函数挂到 `window.Blog`，内部辅助函数保持私有。`blog-syntax.js` 和
+`blog-interpreter.js` 是独立 IIFE，暴露 `window.highlightAllCode` 和
+`window.BlogInterpreter`。
+
+正文有两种格式，由 `type` 字段逐篇决定：
+
+- **`md`** —— 纯 Markdown 文件，用 `fetch()` 取来，由 `blog-interpreter.js`
+  （marked 的封装）在运行时转成 HTML。行内 `$…$` 与块级 `$$…$$` 公式在解析时由
+  KaTeX 渲染。
+- **`html`**（省略 `type` 时的默认）—— 一个 `post.<lang>.js` 文件，把一段 HTML
+  字符串赋给 `window.__BLOG_POSTS['<slug>:<lang>']`，通过注入 `<script>` 加载。
+  用于 Markdown 流水线表达不了的标记（如 `<iframe>` 嵌入的动画）。
+
+由于 librarian 的 fetch 和 `md` 正文都用 `fetch()`，本站需要 HTTP(S) 来源，无法
+从 `file://` 运行。
+
+## 本地开发
 
 ```bash
 python3 localrun.py
 ```
 
-在仓库根起一个静态服务器，自动打开浏览器，然后等待。**按任意键（或 Ctrl+C）关闭。** 它发 no-cache 头，所以改完 `.md` / `.js` / `.css` 刷新即见。
+`localrun.py` 在仓库根起一个静态文件服务器，用默认浏览器打开博客，并阻塞直到按键
+（或 `Ctrl+C`）。它发送 no-cache 响应头，所以改任意 `.md` / `.js` / `.json` /
+`.css` 文件并刷新即可看到变化，无需硬刷新。
 
----
+如果改动没出现，是浏览器在用缓存——用禁用缓存的方式重载（`Cmd/Ctrl+Shift+R`）。
 
-## 目录结构
+## 仓库结构
 
 ```
-index.html                         ← 入口页面。同时承载列表视图和阅读视图。
-localrun.py                        ← 本地预览服务器（python3 localrun.py）
-CNAME                              ← Cloudflare Pages 自定义域名
+index.html                         入口文档。承载列表视图、阅读视图和关于弹窗。
+localrun.py                        本地 no-cache 预览服务器。
+CNAME                              自定义域名。
 LICENSE
-README.md                          ← 本文件（唯一的 README——旧的散落笔记已删）
+README.md                          本文档。
 lib/
-├── design/                        ← fonts.css、字体、louie.css、tailwind 等
-├── marked.min.js                  ← Markdown 解析器（marked，MIT）。window.marked
-├── highlight/                     ← highlight.js（BSD-3）—— 语法高亮
-│   ├── highlight.min.js           ← 常用语言包。window.hljs
-│   └── vs2015.min.css             ← VS Code Dark+ 主题（token 配色）
-├── resources/po.webp              ← favicon / OG 图
-└── runtime/luxon.min.js           ← 日期格式化
+├── design/
+│   ├── louie.css                  站点共享样式与 :root 设计 token。
+│   ├── fonts.css                  站点 'JetBrains Mono'（CJK 正文子集）的 @font-face。
+│   ├── JetBrainsMono.woff2        真正的等宽字体，被 blog.css 以 'JBMono' 加载用于代码。
+│   ├── JetBrainsMono-Bold.woff2
+│   ├── fonts_chunks/              CJK 字体子集分块。
+│   ├── tailwindcss.js             Tailwind 浏览器构建（运行时生成 CSS）。
+│   └── tailwind.config.js
+├── marked.min.js                  Markdown 解析器。暴露 window.marked。
+├── katex/
+│   ├── katex.min.js               KaTeX 核心。暴露 window.katex。
+│   ├── katex.min.css
+│   └── fonts/                     20 个 KaTeX_*.woff2。
+├── highlight/
+│   ├── highlight.min.js           highlight.js。暴露 window.hljs。
+│   └── vs2015.min.css             token 配色主题。
+├── resources/po.webp              favicon 与 Open Graph 图。
+└── runtime/luxon.min.js           日期格式化。
 blog/
-├── blog.css                       ← 博客专属样式（列表卡片、阅读器、TOC 等）
-├── blog-i18n.js                   ← 翻译表 + applyLang() + toggleLang()
-├── blog-core.js                   ← manifest 加载、正文加载、涟漪、语言降级、tag 状态
-├── blog-syntax.js                 ← highlight.js 封装：按文章默认语言 + relevance 阈值上色 + 代码框外壳（语言标签、复制、行号）
-├── blog-interpreter.js            ← BlogInterpreter.render()：md → HTML（marked + 规范化）；html 原样透传
-├── blog-toc.js                    ← buildToc / clearToc + scroll-spy
-├── blog-views.js                  ← renderList、renderReader、renderTagBar、格式标签、fade-in
-├── blog-router.js                 ← hash 路由 route()、启动顺序
+├── blog.css                       所有博客专属 CSS（列表行、阅读正文、TOC、返回键、关于弹窗）。
+├── blog-i18n.js                   翻译表；语言状态与切换。
+├── blog-core.js                   The Librarian 加载器；UI 基元；关于弹窗；语言相关辅助函数。
+├── blog-syntax.js                 highlight.js 封装与代码框外壳。暴露 window.highlightAllCode。
+├── blog-interpreter.js            Markdown→HTML + KaTeX；HTML 透传。暴露 window.BlogInterpreter。
+├── blog-toc.js                    阅读器目录与 scroll-spy。
+├── blog-views.js                  列表与阅读渲染；正文加载器。
+├── blog-router.js                 hash 路由与启动。
 ├── blog_data/
-│   ├── manifest.js                ← 仅索引。设置 window.__BLOG_MANIFEST。
-│   ├── <slug>/                    ← 每篇文章一个文件夹
-│   │   ├── post.zh.md / post.en.md     ← Markdown 正文（type: 'md'）
-│   │   ├── post.zh.js / post.en.js     ← HTML 正文（type: 'html'）
-│   │   ├── cover.webp             ← 可选封面图，被 manifest 引用
-│   │   ├── anims/                 ← 可选：自包含 HTML/JS 动画（<iframe> 目标）
-│   │   └── （其它资源）
-│   └── （更多文章文件夹…）
+│   ├── head_librarian.json        根索引。
+│   ├── <slug>/                    一篇顶层文章目录。
+│   │   ├── post.zh.md | post.en.md     Markdown 正文（type: "md"）。
+│   │   ├── post.zh.js | post.en.js     HTML 正文（type: "html"）。
+│   │   ├── cover.webp             可选封面图。
+│   │   └── anims/、图片…          可选资源。
+│   ├── <collection>/              一个合集目录。
+│   │   ├── librarian.json         合集索引（schema 同 head_librarian.json）。
+│   │   ├── <slug>/                合集内的文章。
+│   │   └── <sub-collection>/      嵌套合集。
+│   └── …
 └── editor/
-    └── blog_writer.py             ← Tk 清单管理器：新建文章 + 编辑 manifest 元数据。
-                                     正文用你自己的编辑器打开（.md / .js）；HTML 文章标 "!"。
+    └── blog_writer.py             桌面清单编辑器。已过时——见已知限制。
 ```
 
-URL：`/` → 列表视图；`/#<slug>` → 阅读视图。
+## 启动顺序与脚本加载
 
-### `index.html` 里的脚本加载顺序
+脚本在 `<body>` 末尾按此顺序加载：
 
 ```html
+<script src="lib/design/tailwindcss.js"></script>   <!-- 位于 <head>：Tailwind 运行时 -->
+<script src="lib/design/tailwind.config.js"></script>
+<!-- …接近 </body>： -->
 <script src="lib/runtime/luxon.min.js"></script>
-<script src="lib/marked.min.js"></script>            <!-- 必须在解释器用它之前 -->
-<script src="blog/blog_data/manifest.js"></script>    <!-- 必须最先：设置 window.__BLOG_MANIFEST -->
+<script src="lib/marked.min.js"></script>            <!-- 在 blog-interpreter.js 之前 -->
+<script src="lib/katex/katex.min.js"></script>        <!-- 在 blog-interpreter.js 之前 -->
 <script src="blog/blog-i18n.js"></script>
 <script src="blog/blog-core.js"></script>
-<script src="lib/highlight/highlight.min.js"></script><!-- 设置 window.hljs；必须在 blog-syntax.js 之前 -->
+<script src="lib/highlight/highlight.min.js"></script><!-- 在 blog-syntax.js 之前 -->
 <script src="blog/blog-syntax.js"></script>
-<script src="blog/blog-interpreter.js"></script>      <!-- 必须在 blog-views.js 之前（writeBody 调用它） -->
+<script src="blog/blog-interpreter.js"></script>      <!-- 在 blog-views.js 之前 -->
 <script src="blog/blog-toc.js"></script>
 <script src="blog/blog-views.js"></script>
-<script src="blog/blog-router.js"></script>           <!-- 必须最后：启动 route() -->
+<script src="blog/blog-router.js"></script>           <!-- 最后：启动应用 -->
 ```
 
-别打乱：`manifest.js` 最先，`blog-router.js` 最后。
+顺序约束：
 
----
+- `marked` 与 `katex` 必须在 `blog-interpreter.js` 之前加载，后者注册数学扩展并渲
+  染 Markdown 时会引用它们。
+- `highlight.min.js` 必须在 `blog-syntax.js` 之前。
+- `blog-router.js` 必须最后加载，其顶层代码是启动入口。
+- 其余 `blog-*.js` 之间的顺序对符号解析无影响：各自把 API 挂到 `window.Blog`，这些
+  函数只在启动时或事件中被调用，那时所有模块都已执行。不再有"必须先存在"的同步全
+  局量。
 
-## `manifest.js` 字段（仅索引，不含正文）
+`blog-router.js` 底部的启动块：
 
-```js
-window.__BLOG_MANIFEST = {
-  version: 3,
-  updated: 'YYYY-MM-DD',         // 顶层：manifest 上次改动的日期（仅信息）
-  posts: [
-    {
-      slug: 'kebab-case-id',     // 必填。URL hash 和文件夹名。发布后永远不要改。
-      date: 'YYYY-MM-DD',        // 必填。ISO 8601 发布日期。排序 + 展示用。
-      updated: 'YYYY-MM-DD',     // 可选。最后修改日期。仅当存在且 !== date 时显示。
-      type: 'md',                // 可选。'html'（默认）| 'md'。决定正文怎么加载和渲染。
-      title:   { zh: '...', en: '...' },  // 必填。双语对象或单语字符串。
-      excerpt: { zh: '...', en: '...' },  // 1-2 句卡片摘要。
-      tags: ['tag1', 'tag2'],    // 可选。驱动过滤芯片；字符串完全相同的归为一组。
-      cover: 'cover.webp',       // 可选。解析为 blog/blog_data/<slug>/cover.webp。
-      readingTime: 3,            // 可选。整数分钟。
-      lang: 'both',              // 'both'（默认）| 'zh' | 'en'
-      pinned: false,             // 可选。true = 置顶。
-      draft: false               // 可选。true = 列表和阅读器都拦截。
-    }
-  ]
-};
-```
+1. `Blog.applyLang(Blog.currentLang)` —— 对所有 `[data-i18n]` 元素套用翻译，更新语
+   言切换按钮文案，然后调用 `Blog.route()`。
+2. `Blog.bindFadeIn()` 与 `Blog.bindRipples()` —— 接上 IntersectionObserver 显形和
+   点击涟漪效果。
 
-字段规则：
+`Blog.route()` 是 `async`：首屏绘制前会 await 根 librarian 的 fetch，所以在该请求
+期间初始列表为空。
 
-- **`type`** 决定正文的一切。`'md'` → 阅读器 `fetch` `post.<lang>.md` 再交给 `BlogInterpreter` 渲染；`'html'`（或省略）→ 注入 `post.<lang>.js`，原样使用其字符串。
-- **`title` / `excerpt`** 字符串或 `{zh, en}`。降级链：当前语言 → en → zh → 空。
-- **`lang`**：`'both'` 加载请求语言、失败降级到另一种；`'zh'`/`'en'` 单语。
-- **排序**：
-  1. `pinned: true` 排最前。
-  2. **置顶文章按它们在 `manifest.js` 里的出现顺序排列**（稳定排序）—— 想调置顶先后，直接在文件里上下挪条目即可。
-  3. 非置顶：按 `date` 倒序（新的在前）。
-- **`updated`**：表示"上次有意义的修改"。改错别字别动它。`updated === date` 时隐藏。
-- **`pinned` UX**：元信息行 📌 小标签、卡片背景微着色、hover 强调色边框。一次别超过 2-3 篇。
-- **`draft: true`**：从列表移除，且阅读器拦截（即使直接命中 hash）。
+## window.Blog 命名空间
 
-列表/阅读页的元信息行右侧还会显示一个 **`HTML` / `MARKDOWN` 标签**，按 `type` 自动生成。
-
----
-
-## 两种格式：什么时候用哪个
-
-| | **Markdown（`type: 'md'`）** | **HTML（`type: 'html'`，默认）** |
+| 符号 | 模块 | 作用 |
 |---|---|---|
-| 文件 | `post.<lang>.md`（纯 Markdown） | `post.<lang>.js`（模板字符串里的 HTML） |
-| 加载方式 | `fetch()` → `BlogInterpreter` → marked | `<script>` 注入 → `window.__BLOG_POSTS` |
-| 转义 | **不用** —— 反引号、`${` 随便写 | 必须把 `` ` `` 转成 `` \` ``、`${` 转成 `\${` |
-| 能在 `file://` 跑 | 否（需本地服务器） | 是 |
-| 适用 | 几乎所有文章 | 阅读器表达不了的原生标记（`<iframe>` 动画、特殊 HTML） |
+| `Blog.translations` | blog-i18n | `{ zh, en }` 字符串表。 |
+| `Blog.currentLang` | blog-i18n | `'zh'` 或 `'en'`（可变）。 |
+| `Blog.applyLang(lang)` | blog-i18n | 套用 `[data-i18n]`、持久化、重新路由。 |
+| `Blog.toggleLang()` | blog-i18n | 切换语言并套用。 |
+| `Blog.bindRipples()` | blog-core | 给未绑定的 `.ripple-surface` 绑点击涟漪。 |
+| `Blog.bindFadeIn()` | blog-core | `.fade-in` 的 IntersectionObserver 显形。 |
+| `Blog.pickLang(field, fallback)` | blog-core | 按 `currentLang` 解析 `{zh,en}` 字段，带降级。 |
+| `Blog.formatDate(iso)` | blog-core | 按界面语言用 Luxon 格式化 ISO 日期。 |
+| `Blog.coverUrl(entry, parentPath)` | blog-core | 构造封面 URL，或 `null`。 |
+| `Blog.dataPath(path, file?)` | blog-core | 构造 `blog/blog_data/` 下的路径。 |
+| `Blog.librarianUrl(path)` | blog-core | librarian 文件 URL（`''` → 根）。 |
+| `Blog.loadLibrarian(path)` | blog-core | fetch + 规范化 + 缓存一个 librarian。 |
+| `Blog.resolvePath(path)` | blog-core | 从根走到 path；返回 kind + entry/lib + chain。 |
+| `Blog.renderAbout()` | blog-core | 按 `currentLang` 渲染关于弹窗内容。 |
+| `Blog.buildToc()` | blog-toc | 构建阅读器 TOC 与 scroll-spy。 |
+| `Blog.clearToc()` | blog-toc | 离开阅读器时拆除 TOC。 |
+| `Blog.updateTocBtn()` | blog-toc | 切换移动端 TOC 浮动按钮。 |
+| `Blog.renderList(path, lib, chain)` | blog-views | 渲染一个合集层级。 |
+| `Blog.renderReader(path, entry, chain)` | blog-views | 渲染一篇文章。 |
+| `Blog.renderNotFound()` | blog-views | 渲染找不到视图。 |
+| `Blog.renderListError(path, err)` | blog-views | 渲染 librarian 加载错误。 |
+| `Blog.route()` | blog-router | 解析 hash 并分派视图。 |
+| `window.BlogInterpreter.render(raw, opts)` | blog-interpreter | 原始正文 → 可注入 HTML。 |
+| `window.highlightAllCode(root, lang)` | blog-syntax | 高亮子树内的 `<pre><code>`。 |
+| `window.__BLOG_POSTS` | （文章 `.js` 文件） | HTML 正文字符串的注册表。 |
 
-两者最终都渲染进同一个 `#reader-body`，所以语法高亮和 TOC 对两种格式一视同仁。
+## The Librarian：数据模型
 
----
+librarian 文件（根 `head_librarian.json` 或任意合集的 `librarian.json`）结构为：
 
-## 添加新文章 —— Markdown（推荐）
-
-1. **挑 slug** —— 短、小写、连字符。它既是 URL hash 又是文件夹名，发布后别改。
-2. **建文件夹** `blog/blog_data/<slug>/`。
-3. **写正文** `post.zh.md` 和/或 `post.en.md` —— 纯 Markdown，无 JS 包装、无需转义。可以用任意编辑器（如 Typora）。
-4. **(可选) 封面** 放 `blog/blog_data/<slug>/cover.webp`。
-5. **追加 manifest 条目**，带 **`type: 'md'`**。顺手 bump 顶层 `updated`。
-6. **预览**：`python3 localrun.py`。
-
-`BlogInterpreter` 为 Markdown 自动处理的细节：
-- **首段**自动套用 `lead` 样式。
-- **相对图片路径**（`![](pic.webp)`）自动补成 `blog/blog_data/<slug>/pic.webp`，不用写全路径。
-- 代码围栏：` ```c ` 会语法高亮；其它语言（和无语言围栏）原样显示。
-- Markdown 里的裸 HTML 会透传，所以署名行 `<p style="color: var(--muted); …">— Louie</p>` 这种照常生效。
-
-## 添加新文章 —— HTML（进阶）
-
-仅当需要 Markdown 表达不了的标记时用。第 1-2、4-6 步相同，只是把 **`type` 设为 `'html'`**（或省略）。第 3 步建 `post.<lang>.js`：
-
-```js
-/* Post body — <slug> / <lang> */
-
-(window.__BLOG_POSTS = window.__BLOG_POSTS || {})['<slug>:<lang>'] = `
-<p class="lead">引导段…</p>
-
-<h2>章节标题</h2>
-<p>正文…</p>
-`;
+```jsonc
+{
+  "version": 4,
+  "updated": "YYYY-MM-DD",
+  "title": { "zh": "…", "en": "…" },   // 可选；合集自身的显示名
+  "entries": [ /* 文章条目和合集条目，顺序随意 */ ]
+}
 ```
 
-Key 必须精确等于 `<slug>:<lang>`，否则加载器报错。字符串里**把 `` ` `` 转成 `` \` ``、`${` 转成 `\${`**（它是 JS 模板字符串）。HTML 文章里 `<p class="lead">` 要自己写，图片 `src` 要写全 `blog/blog_data/<slug>/…`。
+### 文章条目
 
----
-
-## 正文规范（两种格式通用）
-
-阅读器支持的样式（`blog/blog.css` 里 `.reader-body`）。Markdown 自动映射到这些元素；HTML 文章直接用标签。
-
-| 元素 | Markdown | 说明 |
+| 字段 | 必填 | 说明 |
 |---|---|---|
-| `<p class="lead">` | 首段 | 左侧强调色边框、斜体——`md` 自动套用 |
-| `<h2>` / `<h3>` | `##` / `###` | 章节 / 子标题；驱动 TOC |
-| `<p>` | 段落 | |
-| `<strong>` / `<em>` | `**x**` / `*x*` | 强调色 / 米色斜体 |
-| `<a href>` | `[x](url)` | 下划线强调色链接 |
-| `<ul>`/`<ol>`/`<li>` | `-` / `1.` | 舒适间距 |
-| `<code>` | `` `x` `` | 行内代码 |
-| `<pre><code>` | ` ``` ` 围栏 | 代码块（C 自动高亮，其它语言原样） |
-| `<blockquote>` | `>` | 左侧强调色边框、斜体灰 |
-| `<img>` | `![](pic.webp)` | 圆角 + 边框；`md` 的相对路径自动补全 |
-| `<iframe>` | 裸 HTML | 自包含交互动画 |
-| `<hr>` | `---` | 居中强调色渐变分隔线 |
-| `<table>` | GFM 表格 | 带样式 |
+| `kind` | 是 | `"post"`。 |
+| `slug` | 是 | 目录名与 URL 最后一段。永久。 |
+| `date` | 是 | ISO 8601。用于排序与展示。 |
+| `updated` | 否 | ISO 8601。仅当存在且 `!== date` 时显示。 |
+| `type` | 否 | `"html"`（默认）或 `"md"`。选择正文格式。 |
+| `title` | 是 | `{zh,en}` 对象或纯字符串。 |
+| `excerpt` | 否 | `{zh,en}` 或字符串。列表上不渲染；保留作元信息。 |
+| `tags` | 否 | 数组。填充标签芯片，作用于当前层级。 |
+| `cover` | 否 | 文件名，解析到文章目录下。 |
+| `readingTime` | 否 | 整数分钟；显示在阅读器头部。 |
+| `lang` | 否 | `"both"`（默认）、`"zh"` 或 `"en"`。 |
+| `pinned` | 否 | `true` 把条目浮到本层级顶部。 |
+| `draft` | 否 | `true` 从列表排除并在阅读器拦截。 |
 
-要新增样式？改 `blog/blog.css` 里的 `.reader-body …`。
+### 合集条目
 
----
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `kind` | 是 | `"collection"`。 |
+| `slug` | 是 | 含合集 `librarian.json` 的目录名。 |
+| `date` | 是 | ISO 8601。用于排序。 |
+| `title` | 是 | `{zh,en}` 或字符串。 |
+| `excerpt` | 否 | `{zh,en}` 或字符串。列表上不渲染。 |
+| `tags` | 否 | 数组。 |
+| `cover` | 否 | 列表上忽略：合集始终渲染文件夹图标。 |
+| `pinned` | 否 | `true` 把合集浮到顶部。 |
 
-## 解释器（`blog/blog-interpreter.js`）
+### 排序
 
-正文从原始字符串到注入 `#reader-body` 的唯一一道缝：
+`blog-core.js` 在加载时规范化每个 librarian：移除 `draft` 条目，并按三档排序：
+
+1. **置顶**条目（任意类型），保持文件中的声明顺序。
+2. **合集**，按 `date` 新到旧。
+3. **文章**，按 `date` 新到旧。
+
+净效果：合集排在裸文章之上，置顶的浮到一切之上。要调整置顶顺序，在文件里移动条目。
+
+## 加载、缓存与路径解析
+
+`Blog.loadLibrarian(path)`：
+
+- `path === ''` 解析为 `blog/blog_data/head_librarian.json`；其它路径解析为
+  `blog/blog_data/<path>/librarian.json`。
+- 结果会被规范化（去 draft、排序）并按路径缓存。对同一路径的并发请求共享一个进行中
+  的 promise。
+
+`Blog.resolvePath(path)` 从根走到目标，沿途加载每个 librarian：
+
+- 对每个路径段，在当前 librarian 中找匹配条目。
+- `collection` 条目触发加载下一个 librarian 并继续；`post` 条目必须是最后一段。
+- 返回以下之一：
+  - `{ ok: true, kind: 'collection', lib, chain }` —— 根或合集。
+  - `{ ok: true, kind: 'post', entry, chain }` —— 文章。
+  - `{ ok: false, notFound: true, chain }` —— 某段不匹配。
+- `chain` 是每段的 `{ slug, path, entry }` 数组，用于带真实标题构建面包屑。
+
+## 路由
+
+路由基于 hash。`parseHash()` 去掉开头的 `#` 和首尾的 `/`，得到路径字符串：
+
+| Hash | 路径 | 视图 |
+|---|---|---|
+| `#` 或空 | `''` | 根列表。 |
+| `#/sql` | `sql` | 合集列表。 |
+| `#/sql/sql-basics-1` | `sql/sql-basics-1` | 阅读器。 |
+| `#welcome` | `welcome` | 阅读器（单段，向后兼容）。 |
+
+由于开头的斜杠被去掉，`#welcome` 与 `#/welcome` 等价，所以合集出现之前创建的链接仍
+能解析。
+
+`Blog.route()` 是 `async`。每次 hash 变化时：
+
+1. 清除残留的涟漪 span（见坑）。
+2. 计算路径并调用 `setBackButton(path)`。
+3. await `Blog.resolvePath(path)`。
+4. 分派：
+   - 解析出错 → `Blog.renderListError`，
+   - 找不到 → `Blog.renderNotFound`，
+   - `kind: 'post'` → `Blog.renderReader`，
+   - `kind: 'collection'` → `Blog.renderList`。
+
+## 列表视图渲染
+
+`Blog.renderList(path, lib, chain)`：
+
+- 当层级（`path`）变化时重置当前标签筛选。
+- 从 `chain` 把面包屑渲染进 `#breadcrumb`（根层级隐藏）。
+- 把标签栏渲染进 `#tag-bar`，作用范围限于当前层级出现的标签；点击芯片会按该标签筛选
+  并重新渲染本层级。
+- 每个条目渲染一**行**到 `#blog-list`：
+  - **文章行**：缩略图（封面，或标题首字母）· 固定的置顶槽 · 单行标题（省略号）·
+    日期。
+  - **合集行**：合集主题色的文件夹图标 · 固定的置顶槽 · 标题 · 日期。
+- 行是扁平的（无描边）、一行高，不带标签、阅读时长或摘要。置顶槽在每行都有固定宽
+  度，所以无论是否置顶，标题都对齐。
+
+`Blog.renderListError(path, err)` 用本地化的失败信息和错误文本替换列表。
+
+## 阅读视图渲染
+
+`Blog.renderReader(path, entry, chain)`：
+
+1. 计算 `slug`（最后一段）和 `parentPath`。
+2. 渲染阅读器骨架：元信息行（置顶、日期、可选的"更新于"、阅读时长）、
+   `Markdown`/`HTML` 标识、标题、标签芯片、可选封面、空的 `#reader-body`，和一行收
+   尾日期。
+3. 解析正文语言：`lang === 'both'` 用 `currentLang`，请求的正文加载失败时降级到另一
+   语言；`'zh'`/`'en'` 只加载该语言。
+4. 通过 `loadPostBody(path, lang, type)` 加载正文并调用 `writeBody`。
+
+`loadPostBody(path, lang, type)`：
+
+- **md** → `fetch('blog/blog_data/<path>/post.<lang>.md')`，按 `path:lang` 缓存。
+- **html** → 注入 `<script src='blog/blog_data/<path>/post.<lang>.js'>`。该脚本注册
+  `window.__BLOG_POSTS['<slug>:<lang>']`。注册表的 key 是 **slug**（最后一段），不
+  是完整路径，所以文章被移进合集后正文仍能工作。
+
+`writeBody(raw)`：
+
+1. `window.BlogInterpreter.render(raw, { type, basePath: path })` → HTML。
+2. 若文章是嵌套的（`path !== slug`），把 HTML 里任意 `blog/blog_data/<slug>/` 前缀
+   重写成 `blog/blog_data/<path>/`。这会重定向硬编码的资源路径（如 `<iframe>` 动画
+   源），使 HTML 文章可被移动。
+3. 把每个 `<table>` 包进 `.table-scroll` 容器，使宽表格在小屏内部横向滚动，而不是撑
+   宽页面。
+4. `window.highlightAllCode(el, postCodeLang(entry))`。
+5. 给文章内的 `#anchor` 链接绑定平滑滚动，且不改变 hash。
+
+## 解释器
+
+`window.BlogInterpreter.render(raw, opts)`：
 
 ```
-BlogInterpreter.render(raw, { type, slug }) -> htmlString
-  type 'html' → 原样返回（逐字节）
-  type 'md'   → marked.parse(raw)，再规范化：
-                  1. 第一个顶层 <p> 加 class="lead"
-                  2. 相对 <img src> → blog/blog_data/<slug>/
-                  3. 非 ```c 的代码围栏加 class="lang-text"（跳过 C 高亮）
+render(raw, { type, basePath }) -> htmlString
+  type 'html'  → 原样返回。
+  type 'md'    → marked.parse(raw)（含 KaTeX 扩展），然后：
+                   1. 第一个顶层 <p> 加 class="lead"；
+                   2. 相对 <img src> 加前缀 blog/blog_data/<basePath>/ ；
+                   3. 围栏代码的语言提示保留给 highlight.js。
 ```
 
-`writeBody()`（在 `blog-views.js`）调它一次，然后对结果跑 `highlightAllCode()` 和 `buildToc()` —— 这两个都对 DOM 操作，不关心正文来自哪种格式。要加 Markdown 特性，改这里的规范化即可，下游无需改动。
+绝对图片路径（`http(s)://`、`/…`、`blog/…`、`data:`）保持不动。要改 Markdown 行为，
+改这里的规范化即可；列表/阅读/TOC 层对结果 DOM 操作，无需改动。
 
----
+## 数学公式（KaTeX）
 
-## TOC 侧栏
+KaTeX 内置在 `lib/katex/`（核心、CSS、20 个 woff2），可离线工作。
+`blog-interpreter.js` 注册一个 marked 扩展，在**解析时**渲染公式，这样 LaTeX 在
+Markdown 改动它之前就被转成了 HTML：
 
-宽屏（≥ 1360 px）阅读器从 `<h2>`/`<h3>` 建粘性左侧目录（`blog/blog-toc.js`）：把标题 slug 化成稳定 `id`，渲染 `toc-link`，用 `IntersectionObserver`（`rootMargin: '-10% 0px -80% 0px'`）做 scroll-spy。点击用 `scrollIntoView` + `e.preventDefault()`——**绝不要改 `location.hash`**（会触发 `route()`）。窄屏用浮动 `#toc-fab` 打开 `#mobile-toc`。完全由标题驱动，少于 2 个标题不显示。标题尽量短（链接约 220px 宽）。
+- 行内：`$ … $`
+- 块级：`$$ … $$`
+- 正文里的真美元符号必须转义成 `\$`；未转义的 `$` 会开启行内公式。
 
----
+## 语法高亮
 
-## 正文里的资源路径
+`window.highlightAllCode(root, defaultLang)` 在正文注入后跑过子树内每个
+`<pre><code>`：
 
-- **Markdown**：相对图片路径由解释器自动补成 `blog/blog_data/<slug>/…`。绝对路径（`http(s)://`、`/…`、`blog/…`、`data:`）不动。
-- **HTML**：路径相对 `index.html` 解析，不是文章文件夹——所以要写全 `blog/blog_data/<slug>/img.webp`。
-- manifest 的 `cover` 只是文件名，渲染器自动加 `blog/blog_data/<slug>/` 前缀。
+- 语言默认取 `defaultLang`，由 `blog-views.js` 通过 `CODE_LANG_BY_TAG` 从文章标签推
+  断（如标 `c`/`python`/`sql` 的文章把所有块按该语言高亮）。无标签文章回退到
+  highlight.js 自动检测。
+- relevance 阈值让散文、程序输出、ASCII 示意图保持不高亮。
+- 每块被包进代码框外壳：语言标签、复制按钮、行号槽。复制按钮文案读 `Blog.currentLang`。
+- token 配色来自 `lib/highlight/vs2015.min.css`。
+- 按块跳过：用 `text`/`plaintext` 围栏或 `class="lang-text"` / `"no-highlight"`。强
+  制某语言：用 `language-xxx` 围栏。
 
-封面转 WebP 并保持 < 200 KB：
+## 目录侧栏
 
-```bash
-python -c "from PIL import Image; Image.open('cover.png').save('cover.webp', 'webp', quality=90)"
-```
+`blog-toc.js` 从正文的 `<h2>`/`<h3>` 标题构建阅读器目录：
 
----
+- 标题被 slug 化成稳定、无冲突的 `id`。
+- 视口 ≥ 1360px 时用固定左侧栏（`#toc-sidebar`）列出标题；更窄时用浮动按钮
+  （`#toc-fab`）打开抽屉（`#mobile-toc`）。
+- `IntersectionObserver`（`rootMargin: '-10% 0px -80% 0px'`）驱动 scroll-spy。
+- TOC 链接用 `scrollIntoView` + `preventDefault()`，绝不改 `location.hash`（那会触发
+  路由）。
+- 少于两个标题 → 无侧栏。`Blog.clearToc()` 在离开阅读器时拆除一切。
 
-## 编辑现有文章
+## 导航组件
 
-1. 改 `blog/blog_data/<slug>/` 里的 `.md`（或 `.js`）正文。
-2. 改动有意义就把 manifest 条目的 `updated` 设为今天。
-3. **永远不要改 `slug`** —— 永久 URL 和文件夹名。
+- **返回按钮**（`#back-btn`）：`<main>` 里一个共用元素，列表和阅读视图都用。它在所有
+  宽度下都是内容列顶部的置顶胶囊。`blog-router.js` 的 `setBackButton(path)` 把它的
+  href 设为上一级并在根层级隐藏。
+- **面包屑**（`#breadcrumb`）：从解析的 `chain` 构建；仅在根之下显示。
+- **关于弹窗**（导航栏 `#about-btn` ⓘ → `#about-modal`）：双语更新日志，由
+  `Blog.renderAbout()` 渲染。它淡入淡出（不切 `display`），所以点击涟漪可见、重开时
+  不会重播已结束的动画；`close()` 还会清扫残留涟漪 span。
+- **语言切换**（`#lang-toggle`）：在 `blog-router.js` 中绑定（无内联处理器）。
+- **品牌下拉**（`#brand-dropdown-btn`）：在 `blog-core.js` 中设置。
 
-大改后想"再次推荐"用 `pinned: true`，别伪造新 `date`。
+## 国际化
 
----
+- `Blog.translations` 保存按 `data-i18n` 属性名为 key 的 `{ zh, en }` 字符串表。
+- `Blog.currentLang` 先从 `navigator.language` 初始化，若 `localStorage['louie-lang']`
+  有值则用它。
+- `Blog.applyLang(lang)` 重写所有 `[data-i18n]` 元素、更新切换按钮文案与文档语言、持
+  久化选择、刷新关于弹窗，并调用 `Blog.route()`。
+- `Blog.pickLang(field)` 按降级链 `currentLang → en → zh → ''` 解析 `{zh,en}` 值。
+- 每个静态 UI 字符串都必须在**两个**语言表里都有 `data-i18n` key。
 
-## 组件分布
+## 样式与设计 token
+
+- 设计 token 在 `lib/design/louie.css` 的 `:root`：`--bg`、`--surface`、
+  `--surface-high`、`--border`、`--outline`、`--text`、`--muted`、`--accent`、
+  `--accent-dim`、`--accent-on`。`blog.css` 额外定义一个 token `--collection`（青
+  色），用于合集文件夹图标。
+- `blog.css` 必须通过 `var(--…)` 引用 token，而非硬编码 hex，少数有意的一次性色除外
+  （纯白标题、复制成功的绿、报错红、行号灰）。
+- 视觉语言是扁平的：列表行、芯片、返回按钮、缩略图用填充面、**无描边**。
+- 代码用专用的 `'JBMono'` 字体（`blog.css`）从真正的 `JetBrainsMono.woff2` 加载、关
+  闭连字，因为站点级 `'JetBrains Mono'` 是 CJK 正文子集，ASCII 并非可靠等宽。
+- 阅读正文样式在 `blog.css` 的 `.reader-body` 下。
+
+## 资源与路径约定
+
+- `Blog.dataPath(path, file?)` 构造 `blog/blog_data/` 下的路径。
+- `Blog.coverUrl(entry, parentPath)` 返回 `blog/blog_data/<parentPath>/<slug>/<cover>`
+  或 `null`。
+- **Markdown** 相对图片路径（`![](pic.webp)`）由解释器加上文章的完整路径前缀。
+- **HTML** 正文应以裸 slug 形式引用资源 `blog/blog_data/<slug>/…`；当文章嵌在合集里
+  时，`writeBody` 会把该前缀重定向到文章的真实路径，使资源在移动后仍可用。
+
+## 写作：添加文章
+
+1. 选 slug：短、小写、连字符。它是目录名和 URL 最后一段，永久不变。
+2. 选位置：
+   - 顶层 → 目录 `blog/blog_data/<slug>/`，条目放进 `head_librarian.json`；
+   - 合集 `X` 内 → 目录 `blog/blog_data/X/<slug>/`，条目放进 `X/librarian.json`。
+3. 写正文：
+   - Markdown：`post.zh.md` 和/或 `post.en.md`。首段成为 lead；相对图片与 `$…$` 公式
+     自动处理。
+   - HTML：`post.<lang>.js`：
+     ```js
+     /* Post body — <slug> / <lang> */
+     (window.__BLOG_POSTS = window.__BLOG_POSTS || {})['<slug>:<lang>'] = `
+     <p class="lead">引导段…</p>
+     <h2>章节</h2>
+     `;
+     ```
+     注册表 key 必须精确等于 `<slug>:<lang>`。把 `` ` `` 转成 `` \` ``、`${` 转成
+     `\${`。`<p class="lead">` 自己写，资源以 `blog/blog_data/<slug>/…` 引用。
+4. （可选）把 `cover.webp` 放进文章目录并设 `cover`。
+5. 往该目录的 librarian 加一个 `{ "kind": "post", … }` 条目，Markdown 用 `type: "md"`。
+   bump 该 librarian 的 `updated`。
+6. 用 `python3 localrun.py` 预览。
+
+## 写作：添加合集
+
+1. 创建合集目录，如 `blog/blog_data/<collection>/`（或嵌套在父合集内）。
+2. 创建 `<collection>/librarian.json`：
+   ```json
+   { "version": 4, "updated": "YYYY-MM-DD", "title": { "zh": "…", "en": "…" }, "entries": [] }
+   ```
+3. 往**父** librarian（顶层合集即 `head_librarian.json`）加一个
+   `{ "kind": "collection", "slug": "<collection>", "title": {…}, "excerpt": {…} }` 条目。
+4. 把文章和/或更多合集放进目录并在它的 `librarian.json` 里列出。嵌套无深度限制。
+
+## 编辑与移动内容
+
+- 编辑正文：改 `.md` 或 `.js` 文件。改动重大时把条目的 `updated` 设为今天。
+- `slug` 永久：改名会破坏已有链接和目录映射。
+- 把文章移进合集会把它的 URL 从 `#<slug>` 变成 `#/<collection>/<slug>`；指向被移动文
+  章的旧深链将无法解析。正文内硬编码的资源路径会被自动重定向（见
+  [资源与路径约定](#资源与路径约定)）。
+
+## 组件参考
 
 | 文件 | 职责 |
 |---|---|
-| `blog/blog_data/manifest.js` | 任何模块运行前同步设置 `window.__BLOG_MANIFEST` |
-| `lib/marked.min.js` | Markdown → HTML 解析器（`window.marked`），仅解释器使用 |
-| `blog/blog-i18n.js` | `translations.{zh,en}`、`applyLang()`、`toggleLang()`、`localStorage['louie-lang']` |
-| `blog/blog-core.js` | `loadManifest()`（过滤 draft、排序：置顶按 manifest 顺序、非置顶日期倒序）、`loadPostBody(slug, lang, type)`（md → `fetch` + `_mdCache`；html → `<script>` + `_bodyLoading`）、`pickLang()`、涟漪（`bindRipples`，含 `animationend` 清理）、`activeTag` |
-| `blog/blog-syntax.js` | highlight.js 封装；正文注入后跑过 `<pre><code>`。用文章标签推断的语言（否则自动检测），配合 relevance 阈值让散文/示意图保持纯文本。然后给每块套上代码框外壳（语言标签、复制按钮、行号槽）。主题配色：`lib/highlight/vs2015.min.css`。跳过：`class="lang-text"` / `"no-highlight"` / `text`/`plaintext` 围栏 |
-| `blog/blog-interpreter.js` | `BlogInterpreter.render(raw, {type, slug})` —— md→HTML + 规范化，html 透传 |
-| `blog/blog-toc.js` | `buildToc()`、`clearToc()`、scroll-spy、移动端 TOC FAB |
-| `blog/blog-views.js` | `renderTagBar()`、`renderList()`、`renderReader()`（骨架 → 经解释器 `writeBody`）、HTML/MARKDOWN 标签、`formatDate()`、`bindFadeIn()` |
-| `blog/blog-router.js` | `route()` 读 `location.hash`，切视图，清残留涟漪，重渲染 |
-| `blog/blog.css` | 所有博客专属样式 |
-
-路由是 hash 路由。语言偏好通过 `localStorage['louie-lang']` 持久化。
-
----
-
-## 设计风格规则
-
-- 守住 `lib/design/louie.css` 的 `:root` CSS 变量——和主站同步。
-- 阅读器正文宽度由 `main { max-width }` 限制，别拓宽，损害可读性。**列表**视图是单独的、更窄的一列。
-- 双语 UI：每个静态标签加 `data-i18n="key"`，新 key 必须**同时**加到 `translations.zh` 和 `translations.en`。
-
----
+| `blog/blog_data/head_librarian.json` | 根索引，运行时 fetch。 |
+| `blog/blog_data/<collection>/librarian.json` | 合集索引。 |
+| `lib/marked.min.js` | Markdown→HTML（`window.marked`）。 |
+| `lib/katex/katex.min.js` | 数学（`window.katex`）。 |
+| `lib/highlight/highlight.min.js` | 高亮引擎（`window.hljs`）。 |
+| `lib/runtime/luxon.min.js` | 日期格式化。 |
+| `blog/blog-i18n.js` | `translations`、`currentLang`、`applyLang`、`toggleLang`。 |
+| `blog/blog-core.js` | `loadLibrarian`、`resolvePath`、`dataPath`/`librarianUrl`/`coverUrl`、`pickLang`/`formatDate`、涟漪、显形、品牌下拉、关于弹窗。 |
+| `blog/blog-syntax.js` | `window.highlightAllCode`、代码框外壳。 |
+| `blog/blog-interpreter.js` | `window.BlogInterpreter.render`、KaTeX 扩展。 |
+| `blog/blog-toc.js` | `buildToc`、`clearToc`、`updateTocBtn`、scroll-spy。 |
+| `blog/blog-views.js` | `renderList`、`renderReader`、`renderNotFound`、`renderListError`、`loadPostBody`。 |
+| `blog/blog-router.js` | `route`、`setBackButton`、启动。 |
+| `blog/blog.css` | 所有博客专属样式。 |
 
 ## 坑
 
-1. **`md` 文章需要服务器。** `fetch()` 在 `file://` 被禁。本地用 `python3 localrun.py`；线上（Cloudflare, http）没问题。
-2. **`marked` 必须在解释器被调用前加载。** `lib/marked.min.js` 要在 `index.html` 里排在 `blog-interpreter.js` 之前。
-3. **`window.__BLOG_MANIFEST` 必须先于任何博客模块存在。** `manifest.js` 保持最先，`blog-router.js` 保持最后。
-4. **HTML 的 `post.<lang>.js` 必须注册精确 key `<slug>:<lang>`**，否则加载器报"找不到正文"。
-5. **改 slug = 死链 + 文件夹找不到**，老 `/#old-slug` 全 404。
-6. **涟漪清理**：涟漪 span 在 `animationend` 时移除，`route()` 还会清扫残留——否则持久元素（阅读器"返回"键）上用完的涟漪会在 `#view-reader` 切 `display` 时重播。两处清理都别删。
-7. **高亮按文章标签选语言。** 标 `c`/`python`/`sql`/… 的文章，所有代码块都按该语言上色（见 `blog-views.js` 的 `CODE_LANG_BY_TAG`）；无标签文章回退自动检测。relevance 阈值让散文、程序输出、ASCII 示意图保持纯文本。要强制某块语言用 `language-xxx` 围栏/类；要让某块原样显示用 `text`/`plaintext` 或 `class="lang-text"`。
-8. **代码字体 ≠ 站点字体。** 全站的 `'JetBrains Mono'` 其实是个 CJK **正文**子集（`lib/design/fonts_chunks/`），ASCII 并非可靠等宽——拿它显示代码会导致列对不齐。`blog.css` 专门为代码框以 `'JBMono'` 这个独立 family 加载真正的 `JetBrainsMono.woff2`，并关闭连字（`-> ` 不能渲染成 `→`）。别让代码用 `'JetBrains Mono'`。
-9. **日期格式**：仅 ISO 8601，否则 Luxon 返回 "Invalid DateTime"。
-10. **Cloudflare**：仓库根的 `_headers`（`/blog/* → no-cache`）保证 `manifest.js` / 正文刷新即新。发布没更新先查它（以及可能干扰脚本时序的 Rocket Loader）。
-11. **阅读器显形用 `requestAnimationFrame`，不是 `IntersectionObserver`** —— 把 `view-reader` 从 `display:none` 切回时 IO 在 layout 稳定前触发（白屏）。别换回 IO。
+1. **需要 HTTP 服务器。** `librarian.json` 文件和 `md` 正文都用 `fetch()`，在
+   `file://` 下被禁。用 `python3 localrun.py`。
+2. **`marked` 与 `katex` 必须在 `blog-interpreter.js` 之前加载。**
+3. **启动是异步的。** `blog-router.js` 启动 `applyLang → route()`，后者 await 根
+   librarian 的 fetch。不存在同步的索引全局量。
+4. **HTML 正文以精确 slug 注册 `window.__BLOG_POSTS['<slug>:<lang>']`**；不匹配会报缺
+   正文。
+5. **移动或重命名文章会改变其 URL。** slug 应视为永久。
+6. **涟漪 span 在 `animationend` 时移除**，且 `route()` 与关于弹窗的 `close()` 都清扫残
+   留 `.ripple`。残留在持久元素（返回按钮、弹窗按钮）上用完的涟漪，会在其容器切换可见
+   性时重播 CSS 动画；不要删掉这些清扫。
+7. **Markdown 正文里的真美元符号必须写 `\$`。**
+8. **代码用 `'JBMono'`，不是 `'JetBrains Mono'`。** 后者是 CJK 正文子集，渲染 ASCII 代
+   码会列不齐。
+9. **日期必须是 ISO 8601**，否则 Luxon 返回 "Invalid DateTime"。
+10. **阅读器显形用 `requestAnimationFrame`，不是 `IntersectionObserver`**；切
+    `display:none` 会在 layout 稳定前触发观察器。
+11. **浏览器缓存。** 不发 no-cache 头的静态服务器可能返回过期资源。`localrun.py` 发
+    no-cache；否则请硬刷新。
 
----
+## 部署
 
-## 发文章前的 checklist
+本站是通过 HTTP(S) 提供、带自定义域名（`CNAME`）的静态包。没有编译步骤；仓库原样提
+供。要在部署后保持 `head_librarian.json`、嵌套的 `librarian.json` 和正文新鲜，请在
+宿主上为 `/blog/*` 配置 no-cache（或短 max-age）规则（例如 Cloudflare Pages 的
+`_headers` 文件——目前仓库中没有）。
 
-- [ ] slug 选好（短、小写、连字符、永久不变）
-- [ ] 文件夹 `blog/blog_data/<slug>/` 建好
-- [ ] 正文写好：`post.<lang>.md`（`type: 'md'`）或 `post.<lang>.js`（`type: 'html'`，精确 `<slug>:<lang>` key、转义反引号/`${`）
-- [ ] 标题用 `<h2>`/`<h3>`（`##`/`###`）给 TOC；精简（< 约 30 字）
-- [ ] Markdown 图片用裸相对名；HTML 图片用全路径 `blog/blog_data/<slug>/…`
-- [ ] manifest 条目加好（`slug`、`date`、`type`、`title`、`excerpt`、`lang` …）；顶层 `updated` bump
-- [ ] 封面 `cover.webp` 放好 + 设 `cover`（若有），< 200 KB
-- [ ] `pinned` / `draft` 该设的设；置顶靠条目位置决定先后
-- [ ] 用 `python3 localrun.py` 预览过 —— 列表 + 阅读器；`lang: 'both'` 时两种语言；宽屏看 TOC
-```
+## 已知限制
+
+- **`blog/editor/blog_writer.py` 已过时。** 它读取已删除的 `manifest.js`，不理解
+  librarian 树。在它更新之前，请手动编辑 `librarian.json` 文件。
+- **Tailwind 在浏览器里运行。** `lib/design/tailwindcss.js` 在运行时而非构建时生成
+  CSS。
+- **不支持 `file://`。** 本站需要 HTTP 来源。
+
+## 发布清单
+
+- [ ] slug 选好：短、小写、连字符、永久。
+- [ ] 目录建在正确路径。
+- [ ] 正文写好：`post.<lang>.md`（`type: "md"`）或 `post.<lang>.js`（`type: "html"`，
+      精确 `<slug>:<lang>` key）。
+- [ ] 标题用 `<h2>`/`<h3>`（`##`/`###`）以驱动 TOC。
+- [ ] Markdown 图片用裸相对名；HTML 资源用 `blog/blog_data/<slug>/…`；真美元符号转义
+      为 `\$`。
+- [ ] 条目加进正确的 `librarian.json`；该文件的 `updated` 已 bump。
+- [ ] 如有封面，`cover.webp` 已添加且设了 `cover`（保持小体积）。
+- [ ] `pinned` / `draft` 有意识地设好。
+- [ ] 用 `python3 localrun.py` 预览过：列表、合集、阅读器；`lang: "both"` 时两种语
+      言；宽视口看 TOC。

@@ -1,56 +1,94 @@
 /* ============================================================
  * blog/blog-router.js
- * Hash router + boot for blog.html.
- * Loaded LAST so every cross-file symbol it references is already
- * defined.
+ * Path-based hash router + boot for index.html.  (The Librarian update)
+ * Loaded LAST, so every Blog.* method it calls is already attached.
  *
- *   route()         — read location.hash:
- *                       ''         → list view (renderTagBar + renderList)
- *                       '#<slug>'  → reader view (renderReader)
- *                     also flips visibility, scrolls, manages TOC.
+ *   Hash grammar:
+ *     ''  or '#'             → root list (head_librarian)
+ *     '#/sql'                → collection list view
+ *     '#/sql/sql-basics-1'   → reader
+ *     '#welcome'             → still works (single segment, no slash) for
+ *                              backward-compatible top-level post links
  *
- *   Boot block (last lines): loadManifest + applyLang(currentLang)
- *   + bindFadeIn + bindRipples — kicks off first paint.
- *
- * Cross-file dependencies — every symbol below is defined in an
- * earlier blog-*.js script:
- *   currentLang, applyLang     ← blog-i18n.js
- *   loadManifest, manifest,
- *   bindFadeIn, bindRipples    ← blog-core.js
- *   updateTocBtn, clearToc     ← blog-toc.js
- *   renderTagBar, renderList,
- *   renderReader               ← blog-views.js
+ *   Blog.route()  — resolve the path against the Librarian, then render the
+ *                   collection list, the reader, a not-found, or a load-error.
+ *   Boot          — bind lang toggle, applyLang (→ first route), fade/ripple.
  * ============================================================ */
 
-function route() {
-  // Clear any leftover ripple spans before swapping views. A finished ripple
-  // sitting on a persistent element (e.g. the reader "back" button) would
-  // otherwise replay its CSS animation when its container toggles back from
-  // display:none to block on navigation.
-  document.querySelectorAll('.ripple').forEach(r => r.remove());
+(function (Blog) {
+  'use strict';
 
-  const slug = location.hash.replace(/^#/, '').trim();
-  const list = document.getElementById('view-list');
-  const reader = document.getElementById('view-reader');
-  if (slug) {
-    list.style.display = 'none';
-    reader.style.display = 'block';
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    updateTocBtn();
-    renderReader(slug);
-  } else {
-    reader.style.display = 'none';
-    list.style.display = 'block';
-    clearToc();
-    renderTagBar();
-    renderList();
+  function parseHash() {
+    return location.hash.replace(/^#/, '').replace(/^\/+/, '').replace(/\/+$/, '').trim();
   }
-}
 
-window.addEventListener('hashchange', route);
+  // Point the shared sticky "Back" button one level up; hide it at the root.
+  function setBackButton(path) {
+    const back = document.getElementById('back-btn');
+    if (!back) return;
+    const segs = path ? path.split('/').filter(Boolean) : [];
+    if (segs.length === 0) { back.style.display = 'none'; return; }
+    const parent = segs.slice(0, -1).join('/');
+    back.setAttribute('href', parent ? `#/${parent}` : '#');
+    back.style.display = '';
+  }
 
-/* ─── Boot ─── */
-loadManifest();
-applyLang(currentLang);
-bindFadeIn();
-bindRipples();
+  Blog.route = async function route() {
+    // Clear leftover ripple spans before swapping views (a finished ripple on a
+    // persistent element replays its CSS animation when its container toggles
+    // back from display:none to block).
+    document.querySelectorAll('.ripple').forEach(r => r.remove());
+
+    const path = parseHash();
+    setBackButton(path);
+    const list = document.getElementById('view-list');
+    const reader = document.getElementById('view-reader');
+
+    let res;
+    try {
+      res = await Blog.resolvePath(path);
+    } catch (e) {
+      // root (or an ancestor) librarian failed to load
+      reader.style.display = 'none';
+      list.style.display = 'block';
+      Blog.clearToc();
+      Blog.renderListError(path, e);
+      return;
+    }
+
+    if (!res.ok) {
+      list.style.display = 'none';
+      reader.style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      Blog.clearToc();
+      Blog.updateTocBtn();
+      Blog.renderNotFound();
+      return;
+    }
+
+    if (res.kind === 'post') {
+      list.style.display = 'none';
+      reader.style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      Blog.updateTocBtn();
+      Blog.renderReader(path, res.entry, res.chain);
+    } else {
+      reader.style.display = 'none';
+      list.style.display = 'block';
+      Blog.clearToc();
+      Blog.renderList(path, res.lib, res.chain);
+    }
+  };
+
+  window.addEventListener('hashchange', () => Blog.route());
+
+  // Language toggle — bound here (was an inline onclick="toggleLang()" in HTML).
+  const langBtn = document.getElementById('lang-toggle');
+  if (langBtn) langBtn.addEventListener('click', () => Blog.toggleLang());
+
+  /* ─── Boot ─── */
+  Blog.applyLang(Blog.currentLang);   // applies i18n strings, then calls Blog.route()
+  Blog.bindFadeIn();
+  Blog.bindRipples();
+
+})(window.Blog = window.Blog || {});
