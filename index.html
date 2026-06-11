@@ -35,6 +35,9 @@
   <link rel="stylesheet" href="blog/blog.css">
   <script src="lib/design/tailwindcss.js"></script>
   <script src="lib/design/tailwind.config.js"></script>
+  <!-- louie. search — loaded from the main site so every louie.* page
+       shares one engine; ⌘K / Ctrl+K opens the overlay. -->
+  <script defer src="https://louie1.com/lib/search/louie-search.js" data-home-origin="https://louie1.com"></script>
 
   <!-- ─── Structured data (Blog) ─── -->
   <script type="application/ld+json">
@@ -73,6 +76,10 @@
     <div class="nav-right">
       <button id="about-btn" class="ripple-surface" type="button" aria-label="About" title="About">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.6" r="0.6" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button id="search-btn" class="ripple-surface" type="button" onclick="window.LouieSearch&amp;&amp;LouieSearch.open()" aria-label="Search">
+        <!-- Lucide `search` (ISC) -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
       </button>
       <a id="github-btn" class="ripple-surface" href="https://github.com/MrTangLuyao/blog" target="_blank" rel="noopener" aria-label="GitHub repository" title="GitHub">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.97-3.2.69-3.87-1.54-3.87-1.54-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.27-5.23-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.16 1.17.92-.25 1.91-.38 2.89-.38.98 0 1.97.13 2.89.38 2.2-1.48 3.16-1.17 3.16-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.25 5.65.41.35.78 1.04.78 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.55C20.71 21.39 24 17.08 24 12 24 5.65 18.85.5 12 .5z"/></svg>
@@ -170,5 +177,22 @@
   <script src="blog/blog-toc.js"></script>
   <script src="blog/blog-views.js"></script>
   <script src="blog/blog-router.js"></script>
+
+  <!-- louie. search ↔ blog i18n: the page owns the language. Push it into
+       the overlay at load, mirror every applyLang, and route the overlay's
+       own language action back through Blog.toggleLang. -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!window.LouieSearch || !window.Blog) return;
+      LouieSearch.setLang(Blog.currentLang);
+      LouieSearch.configure({
+        onLangSwitch: (next) => { if (next !== Blog.currentLang) Blog.toggleLang(); }
+      });
+      const apply = Blog.applyLang;
+      Blog.applyLang = function (l) { apply(l); LouieSearch.setLang(l); };
+      const btn = document.getElementById('search-btn');
+      if (btn) btn.title = 'Search (' + LouieSearch.MOD + ' K)';
+    });
+  </script>
 </body>
 </html>
