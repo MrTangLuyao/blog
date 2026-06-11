@@ -1,0 +1,5 @@
+# CORS: let louie1.com (and the other louie.* sites) read the blog's
+# librarian indexes so the cross-site search (louie-search.js) can
+# list blog posts. Static JSON only — read-only, safe to expose.
+/blog/blog_data/*
+  Access-Control-Allow-Origin: *
