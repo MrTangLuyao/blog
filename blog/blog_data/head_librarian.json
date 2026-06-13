@@ -1,7 +1,28 @@
 {
   "version": 4,
-  "updated": "2026-05-28",
+  "updated": "2026-06-13",
   "entries": [
+    {
+      "kind": "post",
+      "slug": "louie-search-sdk",
+      "date": "2026-06-13",
+      "type": "md",
+      "title": {
+        "zh": "louie. search SDK：一行接入的全站搜索",
+        "en": "The louie. search SDK: site-wide search in one line"
+      },
+      "excerpt": {
+        "zh": "每个 louie.* 站点共用的 ⌘K 搜索：一行 script 接入、data 属性与 JS API 怎么用，以及它背后的 Shadow DOM 隔离、三层内容来源、诚实缓存与双语打分如何工作。",
+        "en": "The ⌘K search every louie.* site shares — how to drop it in with one line, configure it via data attributes and the JS API, and how its Shadow DOM isolation, three content tiers, honest caching, and bilingual scoring work underneath."
+      },
+      "tags": [
+        "javascript",
+        "search",
+        "frontend"
+      ],
+      "readingTime": 9,
+      "lang": "both"
+    },
     {
       "kind": "post",
       "slug": "linear-algebra-review",
