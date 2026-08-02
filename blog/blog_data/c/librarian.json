@@ -1,11 +1,47 @@
 {
   "version": 4,
-  "updated": "2026-05-28",
+  "updated": "2026-08-03",
   "title": {
     "zh": "C 语言算法",
     "en": "C Algorithms"
   },
   "entries": [
+    {
+      "kind": "post",
+      "slug": "foa-questions-answers",
+      "date": "2026-06-18",
+      "type": "md",
+      "title": {
+        "zh": "算法基础问题答案",
+        "en": "Algorithm Foundations Questions and Answers"
+      },
+      "readingTime": 111,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "foa-questions",
+      "date": "2026-06-18",
+      "type": "md",
+      "title": {
+        "zh": "算法基础复习题",
+        "en": "Algorithm Foundations Questions"
+      },
+      "readingTime": 111,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "foa-revision",
+      "date": "2026-06-18",
+      "type": "md",
+      "title": {
+        "zh": "算法基础知识点",
+        "en": "Algorithm Foundations Revision"
+      },
+      "readingTime": 111,
+      "lang": "zh"
+    },
     {
       "kind": "post",
       "slug": "c-algo-tute-1",

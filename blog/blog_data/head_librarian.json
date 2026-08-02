@@ -1,35 +1,22 @@
 {
   "version": 4,
-  "updated": "2026-06-18",
+  "updated": "2026-08-03",
   "entries": [
     {
-      "kind": "collection",
-      "slug": "study-material",
-      "date": "2026-06-18",
-      "title": {
-        "zh": "个人学习资料",
-        "en": "personal study material"
-      }
-    },
-    {
       "kind": "post",
-      "slug": "linear-algebra-review",
-      "date": "2026-05-27",
+      "slug": "melbourne-pigeons",
+      "date": "2026-08-03",
       "type": "md",
       "title": {
-        "zh": "回顾线性代数",
-        "en": "Linear Algebra in Review"
-      },
-      "excerpt": {
-        "zh": "来自 MAST10007 · 线性方程组 · 矩阵与行列式 · 向量空间 ℝⁿ · 一般向量空间 · 线性变换 · 特征值与特征向量 · 内积空间 — 最快最全地按顺序过一遍。",
-        "en": "From MAST10007 — a fast, complete walk through linear systems, matrices, vector spaces, linear transformations, eigenvalues, and inner product spaces."
+        "zh": "鸽子",
+        "en": "Pigeons"
       },
       "tags": [
-        "math",
-        "linear-algebra"
+        "melbourne",
+        "essay"
       ],
-      "readingTime": 42,
-      "lang": "zh"
+      "readingTime": 4,
+      "lang": "both"
     },
     {
       "kind": "post",
@@ -50,26 +37,6 @@
         "Hello World"
       ],
       "readingTime": 2,
-      "lang": "both",
-      "pinned": true
-    },
-    {
-      "kind": "post",
-      "slug": "design-restraint",
-      "date": "2026-05-25",
-      "type": "md",
-      "title": {
-        "zh": "网站设计：克制美学",
-        "en": "Web Design: The Aesthetics of Restraint"
-      },
-      "excerpt": {
-        "zh": "关于克制美学与本次的博客大版本 Markdown 更新",
-        "en": "On the aesthetics of restraint, and this blog's major Markdown update."
-      },
-      "tags": [
-        "Hello World"
-      ],
-      "readingTime": 7,
       "lang": "both",
       "pinned": true
     },
