@@ -1,12 +1,22 @@
 /* Post body — dsa-avl-rotations / zh */
 
 (window.__BLOG_POSTS = window.__BLOG_POSTS || {})['dsa-avl-rotations:zh'] = `
-<p class="lead">AVL 树插入后若某个结点的平衡因子变成 ±2，用<strong>旋转（rotation）</strong>修复：外侧失衡 LL、RR 转一次，内侧失衡 LR、RL 转两次。每次旋转只改三根指针，O(1)，不破坏 BST 顺序。</p>
+<p class="lead">AVL 树插入一个键后，如果某个结点两边的高度差到了 2，就用<strong>旋转（rotation）</strong>把它扶正：LL、RR 转一次，LR、RL 转两次。每次旋转只改几根指针，O(1)，左小右大的顺序不变。</p>
 
-<h2>从三个结点看四种失衡</h2>
-<p>本课程约定 height(NULL) = 0、叶子高度为 1，<strong>平衡因子（balance factor, BF）= height(左子树) − height(右子树)</strong>，<strong>出现 ±2 就是失衡</strong>（见 3.5 平衡与 AVL 条件）。</p>
-<p>最小的例子：空 AVL 树依次插入 3、2、1，得到向左的链 3 → 2 → 1。BF(2) = 1 − 0 = +1，BF(3) = 2 − 0 = <strong>+2</strong>，失衡。把中间的 2 提上来当根，1、3 当它的左、右孩子，高度从 3 降回 2，三个 BF 都变成 0。这叫<strong>在 3 处右旋（right rotation）</strong>。</p>
-<p>从失衡结点沿插入路径朝新结点走两步，这两步的方向就是失衡的名字：</p>
+<h2>从一串珠子说起</h2>
+<p>3.5 讲过，AVL 树要求<strong>每个结点</strong>左右子树的高度差不超过 1。可插入只管把新键挂到空位，不管平不平衡。</p>
+<p>比如空 AVL 树依次插入 3、2、1，得到一条向左的链。3 的左边高 2、右边高 0，不合格。</p>
+<p>把它想成线串着、提在手里的三颗珠子。你捏着 3，整串垂下来有三层。改捏中间的 2 往上提，3 和 1 落到两边，只剩两层。线一根没剪，从左往右还是 1、2、3。</p>
+<p>旋转做的就是这件事：<strong>换一个结点拎上来当根</strong>。树变矮了，BST 顺序没乱，只动了几根指针。</p>
+
+<h2>旋转是什么</h2>
+<p>简单说，旋转就是<strong>让一个孩子顶替它的父亲</strong>：孩子升上去，父亲降下来当它的孩子。左孩子升上去叫<strong>右旋（right rotation）</strong>，右孩子升上去叫<strong>左旋（left rotation）</strong>。刚才把 2 拎上来，就是在 3 处右旋。</p>
+<p>插入后修平衡分三步：</p>
+<ol>
+<li><strong>找结点</strong>：从新结点往根走，一路算<strong>平衡因子（balance factor, BF）= height(左) − height(右)</strong>（本课 height(NULL) = 0、叶子高 1）。<strong>第一个 |BF| = 2 的结点</strong>就是要修的，不一定是根。</li>
+<li><strong>认形状</strong>：从它朝新结点往下走两步，两步的方向就是名字：LL、RR、LR、RL。</li>
+<li><strong>转</strong>：LL、RR 一路歪到底，是<strong>外侧（outside）</strong>失衡，转 1 次（<strong>单旋转，single rotation</strong>）；LR、RL 拐了个弯，是<strong>内侧（inside）</strong>失衡，转 2 次（<strong>双旋转，double rotation</strong>）。</li>
+</ol>
 
 <figure class="fig">
 <svg viewBox="0 0 440 360" width="440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LL、RR、LR、RL 四种失衡形状及各结点的平衡因子">
@@ -50,20 +60,23 @@
 <table>
 <thead><tr><th>情况</th><th>新键落在</th><th>BF：失衡结点 / 孩子</th><th>修法</th></tr></thead>
 <tbody>
-<tr><td>LL</td><td>左孩子的左子树</td><td>+2 / +1</td><td>在失衡结点右旋 1 次</td></tr>
-<tr><td>RR</td><td>右孩子的右子树</td><td>−2 / −1</td><td>在失衡结点左旋 1 次</td></tr>
-<tr><td>LR</td><td>左孩子的右子树</td><td>+2 / −1</td><td>先在左孩子左旋，再在失衡结点右旋</td></tr>
-<tr><td>RL</td><td>右孩子的左子树</td><td>−2 / +1</td><td>先在右孩子右旋，再在失衡结点左旋</td></tr>
+<tr><td>LL</td><td>左孩子的左子树</td><td>+2 / +1</td><td>在失衡结点右旋</td></tr>
+<tr><td>RR</td><td>右孩子的右子树</td><td>−2 / −1</td><td>在失衡结点左旋</td></tr>
+<tr><td>LR</td><td>左孩子的右子树</td><td>+2 / −1</td><td>先左孩子左旋，再失衡结点右旋</td></tr>
+<tr><td>RL</td><td>右孩子的左子树</td><td>−2 / +1</td><td>先右孩子右旋，再失衡结点左旋</td></tr>
 </tbody>
 </table>
 
 <div class="callout key" data-label="考点">
-<p><strong>两个 BF 同号 → 外侧（outside）→ 转 1 次（单旋转，single rotation）；异号 → 内侧（inside）→ 转 2 次（双旋转，double rotation）。</strong>失衡结点 +2 是 L、−2 是 R；孩子 +1 是 L、−1 是 R。</p>
-<p>要修的是<strong>从新结点往根走时遇到的第一个 |BF| = 2 的结点</strong>，即最低的失衡结点，不一定是根。</p>
+<p>不画图也能认：<strong>失衡结点和孩子的 BF 同号 → 外侧 → 转 1 次；异号 → 内侧 → 转 2 次。</strong>+2、+1 读作 L（左边重），−2、−1 读作 R。</p>
 </div>
 
-<h2>单旋转：右旋与左旋</h2>
-<p>LL 的一般情况：k2 失衡，左孩子 k1；X、Y 是 k1 的左、右子树，Z 是 k2 的右子树（三角形是任意子树，可为空）。</p>
+<h2>看个例子</h2>
+
+<h3>单旋转：课上的 9、5、1</h3>
+<p>课上的例子：9 失衡，左孩子 5，5 的左孩子 1，是 LL。把 5 拎上来：1 还在 5 左边，9 落到 5 右边。</p>
+<p>可 5 原来可能有右子树，叫它 Y。9 要占 5 的右边，Y 放哪？交给 9 当左子树：5 升上去后 9 的左边正好空了，Y 里的键都在 5 和 9 之间，放那里合规矩。</p>
+<p>一般地，设 k2 失衡，左孩子 k1；X、Y 是 k1 的左、右子树，Z 是 k2 的右子树（三角形是任意子树，可为空）。</p>
 
 <figure class="fig">
 <svg viewBox="0 0 520 225" width="520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="在 k2 处右旋：k1 上来，Y 改挂为 k2 的左子树">
@@ -94,25 +107,27 @@
 <line x1="240" y1="110" x2="282" y2="110" stroke="#a1a1a0" stroke-width="2"/>
 <polygon points="292,110 281,104 281,116" fill="#a1a1a0"/>
 </svg>
-<figcaption>在 k2 处右旋。只有 Y（橙色）换了父亲；三角形下是插入后的子树高度。</figcaption>
+<figcaption>在 k2 处右旋。只有 Y（橙色）换了父亲；三角形下面是插入后的子树高度。</figcaption>
 </figure>
 
-<p>在 k2 处右旋改三根指针：</p>
+<p>在 k2 处右旋，一共改三根指针：</p>
 <ol>
 <li>k1 顶替 k2：k2 的父结点（或根指针）改指 k1。</li>
 <li>Y 改挂为 k2 的<strong>左</strong>子树。</li>
-<li>k2 成为 k1 的右孩子。</li>
+<li>k2 成为 k1 的<strong>右</strong>孩子。</li>
 </ol>
-<p>Y 的键都在 k1 和 k2 之间，正好放在 k2 的左边。旋转前后中序遍历（in-order）都是 X, k1, Y, k2, Z，<strong>旋转不改变中序序列，结果仍是 BST</strong>。</p>
-<p>课上的例子：9 失衡，左孩子 5，5 的左孩子 1。右旋后 5 当根，1 留在 5 左边；9 要当 5 的右孩子，但 5 原来的右子树 Y 占着那里，于是 Y 改挂到 9 的左边。</p>
-<p><strong>左旋（left rotation）</strong>是镜像，修 RR：右孩子上来，它原来的<strong>左</strong>子树改挂为失衡结点的<strong>右</strong>子树。口诀：<strong>上来的结点把夹在中间的子树交给下去的结点</strong>。</p>
-<p>按图中高度，插入前（X 高 h）k2 高 h+2，旋转后 k1 也高 h+2：<strong>子树高度回到插入前</strong>，祖先不受影响，双旋转同样如此。所以<strong>一次插入最多一次单旋转或一次双旋转</strong>，O(1)，插入总代价仍是 O(log n)；删除则可能一路旋转到根（见 3.4 BST 删除）。旋转后<strong>先更新下去的 k2 的高度，再更新 k1</strong>，因为 k1 取决于 k2。</p>
+<p>旋转前后<strong>中序遍历（in-order）</strong>都是 X, k1, Y, k2, Z，所以仍是 BST。</p>
+<p>高度也回来了：这棵子树插入前高 h+2，插入后 h+3，旋转后又是 h+2，祖先不受影响。所以<strong>一次插入最多一次单旋转或一次双旋转</strong>，插入仍是 O(log n)；删除则可能一路转到根。</p>
+<p><strong>左旋</strong>是镜像，修 RR：右孩子上来，它的左子树交给失衡结点当右子树。一句话记住：<strong>上来的结点把夹在中间的子树交给下去的结点</strong>。</p>
 
-<h2>双旋转：LR 与 RL</h2>
-<p>空树依次插入 3、1、2：3 的左孩子 1，1 的右孩子 2。BF(3) = +2，BF(1) = −1，是 LR。</p>
-<p>直接在 3 处右旋，得到 1 → 右 3 → 左 2，BF(1) = −2，变成 RL：<strong>内侧失衡转一次修不好</strong>，单旋转只把夹在中间的 2 搬到另一侧。转错了还能救，但一共要转 3 次（见练习 3）。</p>
-<p>正确做法：先在孩子 1 处<strong>左旋</strong>，2 上来，变成 3 → 2 → 1 的左链（LL）；再在 3 处<strong>右旋</strong>，2 成为根。</p>
-
+<h3>双旋转：3、1、2</h3>
+<p>空树依次插入 3、1、2：1 在 3 左边，2 在 1 右边。BF(3) = +2，BF(1) = −1，异号，是 LR。</p>
+<p>照搬右旋把 1 拎上来？2 是夹在中间的子树，交给 3 当左孩子，得到 1 → 右 3 → 左 2，BF(1) = −2，成了 RL。<strong>内侧失衡转一次，只是把弯挪到另一边。</strong></p>
+<p>正确做法是先把弯掰直，再拎：</p>
+<ol>
+<li>先在<strong>孩子</strong> 1 处左旋：2 上来，变成 3 → 2 → 1 的左链，即 LL。</li>
+<li>再在<strong>失衡结点</strong> 3 处右旋：2 当根。</li>
+</ol>
 <p>一般情况（LR）：k3 失衡，左孩子 k1，k1 的右孩子 k2；A 是 k1 的左子树，B、C 是 k2 的左、右子树，D 是 k3 的右子树。</p>
 
 <figure class="fig">
@@ -148,23 +163,23 @@
 <line x1="268" y1="125" x2="306" y2="125" stroke="#a1a1a0" stroke-width="2"/>
 <polygon points="316,125 305,119 305,131" fill="#a1a1a0"/>
 </svg>
-<figcaption>LR 双旋转的结果。k2 升到顶；它的左子树 B（蓝）交给 k1，右子树 C（黄）交给 k3。</figcaption>
+<figcaption>LR 双旋转的结果。k2 升到顶，它的左子树 B（蓝）交给 k1，右子树 C（黄）交给 k3。中序始终是 A, k1, B, k2, C, k3, D。</figcaption>
 </figure>
 
-<p>中序序列始终是 A, k1, B, k2, C, k3, D。<strong>RL</strong> 是镜像：先在右孩子处右旋（变成 RR），再在失衡结点左旋。</p>
+<p>RL 是镜像：先在右孩子处右旋（变成 RR），再在失衡结点左旋。</p>
 
 <div class="callout key" data-label="考点">
-<p>四种情况结果一样：<strong>失衡结点、孩子、孙子三个键中，居中的那个成为子树的新根</strong>，较小的当左孩子、较大的当右孩子，其余子树按大小从左到右挂回。画完图用它检查。</p>
+<p>四种情况结果一样：<strong>失衡结点、孩子、孙子三个键里，居中的当新根</strong>，小的在左、大的在右，其余子树按大小挂回。画完用它检查。</p>
 </div>
 
-<h2>完整演练：插入 10, 20, 30, 25, 28, 27</h2>
-<p>每插入一个键：挂到空位，往回更新高度和 BF，在第一个 |BF| = 2 的结点判断情况并旋转。</p>
+<h3>完整演练：插入 10, 20, 30, 25, 28, 27</h3>
+<p>每插一个键：挂到空位，往回算 BF，在第一个 |BF| = 2 的结点认形状、旋转。</p>
 <ul>
 <li><strong>10、20</strong>：20 挂在 10 右边，BF(10) = −1。</li>
-<li><strong>30</strong>：右链 10 → 20 → 30。BF(10) = −2，右孩子 20 的 BF = −1，<strong>RR</strong>。在 10 左旋，20 成为根。</li>
-<li><strong>25</strong>：挂在 30 左边。BF(30) = +1，BF(20) = 1 − 2 = −1，不用旋转。</li>
-<li><strong>28</strong>：28 &gt; 20，28 &lt; 30，28 &gt; 25，挂在 25 右边。往回：BF(25) = −1；BF(30) = 2 − 0 = +2，第一个失衡；左孩子 25 的 BF = −1，<strong>LR</strong>。再往上 BF(20) = 1 − 3 = −2 也失衡，但只修最低的 30：先在 25 左旋，再在 30 右旋。子树高度回到 2，BF(20) 回到 −1。</li>
-<li><strong>27</strong>：27 &gt; 20，27 &lt; 28，27 &gt; 25，挂在 25 右边。往回：BF(25) = −1；BF(28) = 2 − 1 = +1；BF(20) = 1 − 3 = −2，这次第一个失衡的是根；右孩子 28 的 BF = +1，<strong>RL</strong>。先在 28 右旋（25 上来，27 改挂为 28 的左孩子；这时 BF(25) = −2 只是中间状态，不用单独修），再在 20 左旋，25 成为根。</li>
+<li><strong>30</strong>：右链 10 → 20 → 30。BF(10) = −2，右孩子 20 是 −1，<strong>RR</strong>。在 10 左旋，20 当根。</li>
+<li><strong>25</strong>：挂在 30 左边。BF(30) = +1，BF(20) = −1，不用转。</li>
+<li><strong>28</strong>：挂在 25 右边。往回：BF(25) = −1；BF(30) = +2，第一个失衡；左孩子 25 是 −1，<strong>LR</strong>。根 20 也是 −2，但只修最低的 30：先在 25 左旋，再在 30 右旋，根随之恢复。</li>
+<li><strong>27</strong>：挂在 25 右边。往回：BF(25) = −1，BF(28) = +1，BF(20) = 1 − 3 = −2，这次第一个失衡的是根；右孩子 28 是 +1，<strong>RL</strong>。先在 28 右旋（中间那步 BF(25) = −2，不用单独修），再在 20 左旋，25 当根。</li>
 </ul>
 <pre><code class="lang-text">insert 28 (LR): left at 25, then right at 30
     20               20               20
@@ -183,170 +198,95 @@ insert 27 (RL): right at 28, then left at 20
    25    30               28         10    27    30
      \\                   /  \\
       27               27    30</code></pre>
-<p>六次插入共旋转 5 次（RR 1 次、LR 2 次、RL 2 次）；最后的根 25 正是 20、28、25 中居中的键。</p>
+<p>六次插入共旋转 5 次：RR 1 次、LR 2 次、RL 2 次。最后的根 25 正是 20、28、25 里居中的键。</p>
 
 <iframe class="anim-frame" src="blog/blog_data/dsa-avl-rotations/anims/avl-rotate.html" loading="lazy" style="height: 520px;" title="AVL 插入与旋转"></iframe>
-<p class="anim-caption">按钮切换 LL、RR、LR、RL 和 1…7 等序列，“BF / 高度”切换结点上的数字；红色虚线是将要改的指针，绿色是新接上的。</p>
+<p class="anim-caption">点“综合”看这组插入，其他按钮是别的序列。红色虚线是要改的指针，绿色是新接上的。</p>
 
-<h2>C 代码：返回新子树根的旋转</h2>
-<p>结点存高度；旋转函数返回子树的新根，由调用者接回父结点。递归插入<strong>返回时自下而上</strong>对路径上每个结点调用 <code>rebalance</code>，所以最先发现的就是最低的失衡结点。</p>
-<pre><code>#include &lt;stdlib.h&gt;
-#include &lt;assert.h&gt;
-
-typedef struct avl avl_t;
-struct avl {
-    int key;
-    int height;                 /* 叶子 = 1，空树 = 0 */
-    avl_t *left, *right;
-};
-
-int height(avl_t *t) { return t == NULL ? 0 : t-&gt;height; }
-int balance(avl_t *t) { return height(t-&gt;left) - height(t-&gt;right); }
-void update_height(avl_t *t) {
-    int hl = height(t-&gt;left), hr = height(t-&gt;right);
-    t-&gt;height = 1 + (hl &gt; hr ? hl : hr);
-}
-
-/* 右旋（修 LL）：左孩子上来，返回这棵子树的新根 */
-avl_t *rotate_right(avl_t *top) {
+<h2>补充：代码里的旋转</h2>
+<p>代码题考的就是旋转那几句指针。结点里多存一个高度 <code>height</code>（叶子 1，NULL 算 0）。下面是右旋，返回子树的新根：</p>
+<pre><code>avl_t *rotate_right(avl_t *top) {
     avl_t *up = top-&gt;left;
-    top-&gt;left = up-&gt;right;      /* 中间子树 Y 换父亲 */
+    top-&gt;left = up-&gt;right;
     up-&gt;right = top;
-    update_height(top);         /* 先更新下去的结点 */
-    update_height(up);
-    return up;
-}
-
-/* 左旋（修 RR）：右孩子上来 */
-avl_t *rotate_left(avl_t *top) {
-    avl_t *up = top-&gt;right;
-    top-&gt;right = up-&gt;left;
-    up-&gt;left = top;
     update_height(top);
     update_height(up);
     return up;
-}
-
-avl_t *rebalance(avl_t *t) {
-    update_height(t);
-    if (balance(t) == 2) {                      /* 左边重：LL 或 LR */
-        if (balance(t-&gt;left) &lt; 0)               /* LR：先把左孩子左旋成 LL */
-            t-&gt;left = rotate_left(t-&gt;left);
-        return rotate_right(t);
-    }
-    if (balance(t) == -2) {                     /* 右边重：RR 或 RL */
-        if (balance(t-&gt;right) &gt; 0)              /* RL：先把右孩子右旋成 RR */
-            t-&gt;right = rotate_right(t-&gt;right);
-        return rotate_left(t);
-    }
-    return t;                                   /* 没有失衡，原样返回 */
-}
-
-avl_t *avl_insert(avl_t *t, int key) {
-    if (t == NULL) {                            /* 找到空位：新叶子 */
-        avl_t *n = malloc(sizeof(*n));
-        assert(n != NULL);
-        n-&gt;key = key;
-        n-&gt;height = 1;
-        n-&gt;left = n-&gt;right = NULL;
-        return n;
-    }
-    if (key &lt; t-&gt;key)
-        t-&gt;left = avl_insert(t-&gt;left, key);
-    else if (key &gt; t-&gt;key)
-        t-&gt;right = avl_insert(t-&gt;right, key);
-    else
-        return t;                               /* 键已存在，不插入 */
-    return rebalance(t);                        /* 返回途中自下而上检查 */
 }</code></pre>
-<p>调用方式是 <code>root = avl_insert(root, key);</code>，根可能因旋转而改变，必须接住返回值。<code>rebalance</code> 用 <code>balance(t-&gt;left) &lt; 0</code> 区分 LR 和 LL：插入后孩子的 BF 只会是 ±1，删除后还可能是 0，此时单旋转就够（右边同理）。</p>
+<ul>
+<li>第 2 行：<code>top</code> 是失衡结点（图里的 k2），<code>up</code> 是要升上去的左孩子 k1。</li>
+<li>第 3 行：把 k1 的右子树 Y 交给 k2 当左子树。</li>
+<li>第 4 行：k2 降为 k1 的右孩子。</li>
+<li>第 5–6 行：重算高度（1 + 较高的孩子）。<strong>先算下去的 k2，再算 k1</strong>，因为 k1 要用到 k2 的高度。</li>
+<li>第 7 行：返回新根。原来指向 <code>top</code> 的指针要接住它，如 <code>t-&gt;left = rotate_right(t-&gt;left);</code>，根变了就 <code>root = …</code>。</li>
+</ul>
+<p><code>rotate_left</code> 把 left、right 对调。双旋转就是连调两次，LR 是 <code>t-&gt;left = rotate_left(t-&gt;left);</code> 再 <code>return rotate_right(t);</code>。递归插入<strong>返回时自下而上</strong>检查每个结点，最先碰到的就是最低的失衡结点。</p>
 
-<h3>用三根指针写一次旋转</h3>
-<p>代码题也可能给出三根指针 grandparent、parent、child，要求直接写语句。右旋：parent 是祖父的<strong>左</strong>孩子，child 是 parent 的左孩子，在 parent 处右旋（即对边 parent–child 右旋），child 上来：</p>
-<pre><code>grandparent-&gt;left = child;     /* 1. child 顶替 parent 的位置 */
-parent-&gt;left = child-&gt;right;   /* 2. child 的右子树交给 parent 当左子树 */
-child-&gt;right = parent;         /* 3. parent 降为 child 的右孩子 */</code></pre>
+<h3>三根指针的写法</h3>
+<p>也可能直接给 grandparent、parent、child 三根指针让你写语句。下面是右旋：parent 是 grandparent 的左孩子，child 是 parent 的左孩子，child 上来。</p>
+<pre><code>grandparent-&gt;left = child;
+parent-&gt;left = child-&gt;right;
+child-&gt;right = parent;</code></pre>
+<p>第 1 句让 child 顶替 parent 的位置；第 2 句把 child 的右子树交给 parent；第 3 句让 parent 降为 child 的右孩子。</p>
 <div class="callout warn" data-label="易错">
-<p><strong>第 2 句必须写在第 3 句前面</strong>，否则 child 原来的右子树丢失，parent 的左指针还会指向自己（镜像情况见练习 2(c)）。第 1 句不能漏，且要看 parent 挂在祖父哪一边：右孩子就改 <code>grandparent-&gt;right</code>，parent 是根就改根指针。</p>
+<p><strong>第 2 句必须在第 3 句前面</strong>，否则 child 原来的右子树就丢了，parent 的左指针还会指回自己。第 1 句要看 parent 挂在 grandparent 哪一边：右边就改 <code>grandparent-&gt;right</code>；parent 是根就改根指针。</p>
 </div>
-<p>2015 年期末考的是镜像（两处都是右孩子，在 parent 处左旋），见练习 2。</p>
 
 <h2>考试怎么考</h2>
 <ul>
-<li><strong>画图题</strong>：给 4 到 7 个键的插入序列，从空树开始画出每一步，并写明在哪个结点做了哪种旋转。</li>
-<li><strong>给树判旋转</strong>：给一棵刚插入完的树，问需要什么旋转、为什么，再画出结果（2016 期末）。理由要写出 BF：失衡结点是几、孩子是几、所以是哪种情况。</li>
-<li><strong>代码题</strong>：用 grandparent、parent、child 指针写出一次旋转的语句（2015 期末），或写出返回新根的 <code>rotate_left</code> / <code>rotate_right</code>。</li>
-<li><strong>选择题</strong>：给出两个 BF，例如失衡结点 −2、右孩子 +1，问要哪两次旋转、什么顺序（第 5 周课堂小测出过）。</li>
-<li><strong>必须背</strong>：BF = h(左) − h(右)；四种 BF 组合；外侧转 1 次、内侧转 2 次；双旋转先转孩子、再转失衡结点；中间子树换父亲；一次插入最多一次单旋转或双旋转。公式表上没有这些内容。</li>
+<li><strong>手算画图</strong>：给 4 到 7 个键（如 1 到 7），从空树插起，画出每一步，写明在哪做了哪种旋转。</li>
+<li><strong>给树判旋转</strong>：给一棵刚插完的树，问要什么旋转、为什么，再画结果（2016 期末）。理由写出 BF。</li>
+<li><strong>选择题</strong>：只给两个 BF，如失衡结点 −2、右孩子 +1，问怎么转。这是 RL：先右孩子右旋，再失衡结点左旋（第 5 周课堂小测）。</li>
+<li><strong>写代码</strong>：用三根指针写一次旋转（2015 期末），或写 <code>rotate_left</code> / <code>rotate_right</code>。</li>
 </ul>
-<div class="callout warn" data-label="易错">
-<ul>
-<li>看到根的 BF 是 ±2 就在根上转。要转的是从新结点往上第一个失衡的结点，它修好后上面自然恢复。</li>
-<li>LR、RL 只转一次：结果只是变成了另一种内侧失衡。</li>
-<li>双旋转的顺序反了：先在失衡结点上转，白白多转一次。</li>
-<li>忘记移动中间子树，或挂错了边：右旋时它去下去结点的左边，左旋时去右边。</li>
-<li>BF 的符号：本课程是左减右，+2 表示左边重。高度约定不影响 BF：有的资料叶子高度记 0，两边同减 1，差不变。</li>
-</ul>
-</div>
+<p>公式表上没有这些，都要自己记。</p>
 
-<h2>练习</h2>
-<details class="qa">
-<summary class="ripple-surface">1. 一棵 AVL 树插入 10 之后变成下图（这时还没有旋转）。需要什么旋转？为什么？画出结果。</summary>
-<div class="qa__body">
-<pre><code class="lang-text">         7
-       /   \\
-      4     32
-     /     /  \\
-    2     12   38
-         /  \\
-        8    17
+<h3>例题 1：给树判旋转</h3>
+<p>一棵 AVL 树刚插入 10，还没旋转（左图）。需要什么旋转？为什么？画出结果。</p>
+<pre><code class="lang-text">         7                          7
+       /   \\                      /   \\
+      4     32                   4     12
+     /     /  \\                 /     /   \\
+    2     12   38    --&gt;       2     8     32
+         /  \\                         \\   /  \\
+        8    17                       10 17   38
          \\
           10</code></pre>
-<p>从 10 往上算高度和 BF：10 高 1；8 高 2，BF = 0 − 1 = −1；12 高 3，BF = 2 − 1 = +1；32 高 4，BF = 3 − 1 = <strong>+2</strong>；7 高 5，BF = 2 − 4 = −2。</p>
-<p>根 7 也失衡，但从新结点往上<strong>第一个</strong>失衡的是 32。32 的 BF 是 +2，左孩子 12 的 BF 是 +1，是 <strong>LL</strong>，在 32 处右旋（即对边 12–32 右旋）：12 接到 7 的右边，12 原来的右子树 17 改挂为 32 的左孩子，32 成为 12 的右孩子。</p>
-<pre><code class="lang-text">         7
-       /   \\
-      4     12
-     /     /   \\
-    2     8     32
-           \\   /  \\
-           10 17   38</code></pre>
-<p>检查：8 是 −1，32 是 0，12 是 2 − 2 = 0，7 是 2 − 3 = −1，4 是 +1，全部合格，根 7 不用再转。32、12、8 中居中的 12 当了子树的根。</p>
-</div>
-</details>
+<p>从 10 往上算：10 高 1；8 高 2，BF = 0 − 1 = −1；12 高 3，BF = 2 − 1 = +1；32 高 4，BF = 3 − 1 = <strong>+2</strong>；7 高 5，BF = 2 − 4 = −2。</p>
+<p>根 7 也失衡，但从 10 往上<strong>第一个</strong>失衡的是 32。32 是 +2，左孩子 12 是 +1，同号，<strong>LL</strong>，在 32 处右旋：12 接到 7 的右边，12 的右子树 17 交给 32 当左孩子，32 成为 12 的右孩子（右图）。</p>
+<p>检查：8 是 −1，32 是 0，12 是 0，7 是 2 − 3 = −1，4 是 +1，全部合格。32、12、8 里居中的 12 当了新根，对得上。</p>
 
-<details class="qa">
-<summary class="ripple-surface">2. 下面的 BST 中，在 M 处左旋（对边 M–R 左旋）。(a) 画出结果；(b) 用指向 H、M、R 的指针 grandparent、parent、child 写出 C 语句（结点含 char key 和 left、right 指针）；(c) 把后两句顺序对调会怎样？</summary>
-<div class="qa__body">
-<pre><code class="lang-text">        H
-      /   \\
-     F     M
-    / \\   / \\
-   D   G J   R
-            / \\
-           Q   W</code></pre>
-<p>(a) R 上来接到 H 的右边，M 成为 R 的左孩子；R 原来的左子树 Q（M &lt; Q &lt; R）改挂为 M 的右孩子。J、W 不动。</p>
-<pre><code class="lang-text">        H
-      /   \\
-     F     R
-    / \\   / \\
-   D   G M   W
-        / \\
-       J   Q</code></pre>
-<p>中序遍历前后都是 D F G H J M Q R W，结果仍是 BST。</p>
-<p>(b) M 是 H 的右孩子，所以：</p>
+<h3>例题 2：写旋转的指针</h3>
+<p>在左图的 BST 中，在 M 处左旋（M–R 这条边）。(a) 画出结果；(b) 用指向 H、M、R 的指针 grandparent、parent、child 写出 C 语句；(c) 后两句对调会怎样？（2015 期末题型）</p>
+<pre><code class="lang-text">        H                         H
+      /   \\                     /   \\
+     F     M                   F     R
+    / \\   / \\       --&gt;       / \\   / \\
+   D   G J   R               D   G M   W
+            / \\                   / \\
+           Q   W                 J   Q</code></pre>
+<p>(a) R 上来接到 H 的右边，M 降为 R 的左孩子。R 原来的左子树 Q 夹在 M、R 之间，交给 M 当右孩子（右图）。中序前后都是 D F G H J M Q R W。</p>
+<p>(b) M 是 H 的<strong>右</strong>孩子，又是左旋，所以三句是上一节的镜像：</p>
 <pre><code>grandparent-&gt;right = child;
 parent-&gt;right = child-&gt;left;
 child-&gt;left = parent;</code></pre>
-<p>(c) 先执行 <code>child-&gt;left = parent</code>，R 的左指针就不再指向 Q；再执行 <code>parent-&gt;right = child-&gt;left</code>，M 的右指针指向 M 自己。Q 从树上丢失，树里还出现了环。</p>
-</div>
-</details>
+<p>(c) 先执行 <code>child-&gt;left = parent</code>，R 就不再指向 Q；再执行 <code>parent-&gt;right = child-&gt;left</code>，M 的右指针指向 M 自己。Q 丢了，树里还出现了环。</p>
 
-<details class="qa">
-<summary class="ripple-surface">3. 选择题：插入后第一个失衡结点的 BF 是 −2，它的右孩子 BF 是 +1。应该怎样旋转？A. 在失衡结点左旋一次　B. 先在右孩子右旋，再在失衡结点左旋　C. 先在失衡结点左旋，再在右孩子右旋　D. 在右孩子右旋一次。追问：如果第一步误在失衡结点上左旋，一共要转几次？</summary>
-<div class="qa__body">
-<p>选 <strong>B</strong>。−2 表示右边重，孩子 +1 表示新键在右孩子的左边：<strong>RL</strong>，内侧。先在<strong>右孩子</strong>处右旋（变成 RR），再在<strong>失衡结点</strong>处左旋。A、D 只转一次，修不好内侧失衡；C 顺序反了。</p>
-<p>若第一步在失衡结点左旋，以 1, 3, 2 为例：3 上来，2 改挂为 1 的右孩子，得到 3 → 左 1 → 右 2，BF(3) = +2、BF(1) = −1，变成 LR，还要先在 1 左旋、再在 3 右旋，<strong>一共 3 次</strong>。</p>
+<div class="callout warn" data-label="易错">
+<ul>
+<li>看到根是 ±2 就在根上转。要转的是从新结点往上<strong>第一个</strong>失衡的结点。</li>
+<li>内侧失衡只转一次，或者先转失衡结点：只会变成另一种内侧失衡。像 1, 3, 2 先在 1 处左旋，一共要转 3 次。</li>
+<li>中间子树忘了搬或挂错边：右旋时它去下去结点的左边，左旋时去右边。</li>
+<li>BF 符号：本课左减右，+2 是左边重。</li>
+</ul>
 </div>
-</details>
+
+<h2>小结</h2>
+<ul>
+<li>从新结点往上找<strong>第一个 |BF| = 2 的结点</strong>，只修它；一次插入最多一次单旋转或一次双旋转。</li>
+<li>LL +2/+1、RR −2/−1、LR +2/−1、RL −2/+1。同号转 1 次，异号转 2 次。</li>
+<li>右旋是左孩子上来，左旋是右孩子上来；中间子树交给下去的结点。</li>
+<li>双旋转先转孩子、再转失衡结点；居中的键当根。</li>
+<li>旋转只改三根指针，O(1)，中序不变；先更新下去结点的高度，再接住新根。</li>
+</ul>
 `;

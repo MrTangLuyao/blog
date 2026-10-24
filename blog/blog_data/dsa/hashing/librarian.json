@@ -15,14 +15,14 @@
         "en": "4.1 Hash Tables & Integer Hash Functions"
       },
       "excerpt": {
-        "zh": "数组下标 O(1) · 直接寻址为何不行 · 哈希表是具体结构 · h(k) = k mod m · 模数取素数（gcd 规律）· 互素乘数与加常数 · 100 槽选择题 · 冲突不可避免 · C 中负数取模",
-        "en": "Array indexing O(1) · why direct addressing fails · hash table as a concrete structure · h(k) = k mod m · prime modulus (gcd rule) · coprime multiplier vs adding a constant · the 100-slot MCQ · collisions are unavoidable · negative % in C"
+        "zh": "数组下标 O(1) · 直接寻址为何不行 · h(k) = k mod m · 冲突与鸽巢原理 · 模数取素数 · 乘数必须互素 · 加常数无用 · 100 槽选择题",
+        "en": "O(1) array indexing · why direct addressing fails · h(k) = k mod m · collisions & pigeonhole · prime modulus · coprime multiplier · adding a constant does nothing · the 100-slot MCQ"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 9,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
@@ -34,14 +34,14 @@
         "en": "4.2 Hashing Strings"
       },
       "excerpt": {
-        "zh": "字符编码 · 相加/首字母/长度为何失败 · 姓氏实验 · 32 进制 Horner 哈希 · 逐步取模 · M 不取 2 的幂 · unsigned C 实现",
-        "en": "Characters as numbers · why sum/first-letter/length hashes fail · surname experiment · base-32 Horner hash · mod at every step · avoid power-of-two M · unsigned C code"
+        "zh": "字符变数 · 相加与首字母为何不行 · 32 进制多项式哈希 · Horner 法则 · 每步取模 · M 的选择",
+        "en": "Characters as numbers · why sums and first letters fail · base-32 polynomial hash · Horner's rule · mod at every step · choosing M"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
@@ -53,8 +53,8 @@
         "en": "4.3 Separate Chaining"
       },
       "excerpt": {
-        "zh": "冲突 · 每槽一条链表 · 头插 O(1) · 查找只走一条链 · 装载因子 α = n/m · 平均 O(1 + α) · 最坏 O(n) · 平衡 BST 桶 O(log n) · 空间 O(m + n)",
-        "en": "Collisions · one linked list per slot · O(1) head insertion · search walks one chain · load factor α = n/m · average O(1 + α) · worst case O(n) · balanced-BST buckets O(log n) · space O(m + n)"
+        "zh": "冲突 · 每槽一条链表 · 头插 O(1) · 只走一条链 · 装载因子 α · 最坏 O(n)",
+        "en": "Collisions · one linked list per slot · O(1) head insertion · search walks one chain · load factor α · O(n) worst case"
       },
       "tags": [
         "c",
@@ -72,8 +72,8 @@
         "en": "4.4 Linear Probing & Double Hashing"
       },
       "excerpt": {
-        "zh": "开放寻址 · 线性探测 · 主聚集 · 7k mod 10 · 双重哈希 · 步长 +1 与互质 · 比较次数 · 往年题",
-        "en": "Open addressing · linear probing · primary clustering · 7k mod 10 · double hashing · +1 and coprime step · key comparisons · past-paper drills"
+        "zh": "开放寻址 · 线性探测 · 主聚集 · 遇空槽即停 · 双重哈希步长 (k mod q)+1 · 互质",
+        "en": "Open addressing · linear probing · primary clustering · stop at an empty slot · double hashing step (k mod q)+1 · coprime with m"
       },
       "tags": [
         "c",
@@ -91,14 +91,14 @@
         "en": "4.5 Load Factor & Comparing Strategies"
       },
       "excerpt": {
-        "zh": "装载因子 α = n/m · 公式表估计 1/(1−α) 与 1/(1−α)² · 等比求和推导 · rehash 到素数 · 开放寻址删除与 tombstone · 缓存与拉链法 · 三种冲突方案对比 · 空间 O(m + n)",
-        "en": "Load factor α = n/m · equation-sheet estimates 1/(1−α) vs 1/(1−α)² · geometric-series intuition · rehashing to a prime · deletion and tombstones · cache behaviour vs chaining · comparing the three collision strategies · space O(m + n)"
+        "zh": "装载因子 α = n/m · 1/(1−α) 与 1/(1−α)² · rehash · 删除标记 · 缓存 · 三种方案对比",
+        "en": "Load factor α = n/m · 1/(1−α) vs 1/(1−α)² · Rehashing · Tombstones · Cache behaviour · Comparing strategies"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     }
   ]

@@ -1,10 +1,24 @@
 /* Post body — dsa-design-paradigms / zh */
 
 (window.__BLOG_POSTS = window.__BLOG_POSTS || {})['dsa-design-paradigms:zh'] = `
-<p class="lead">设计算法最常用的四种思路是<strong>蛮力（brute force）</strong>、<strong>减治（decrease-and-conquer）</strong>、<strong>分治（divide-and-conquer）</strong>和<strong>贪心（greedy）</strong>。它们的区别在于怎样把问题变小、每一步怎样做决定。给出算法、选出思路，是配对题（matching）的典型考法。</p>
+<p class="lead">设计算法最常用四种思路：<strong>蛮力（brute force）</strong>、<strong>减治（decrease-and-conquer）</strong>、<strong>分治（divide-and-conquer）</strong>和<strong>贪心（greedy）</strong>。期末最常见的考法是配对题：给一个算法，说出它用的是哪种思路。</p>
 
-<h2>四种思路一览</h2>
-<p>课上从三个角度给算法分类：按任务（排序、查找、遍历、调度、最优化……），按设计思路，按解的类型。期末复习课把设计思路分成下面四种：</p>
+<h2>从一个场景说起</h2>
+<p>你手上有一叠写着号码的卡片。</p>
+<p>卡片是乱的，要找 42：没有规律可用，只能一张张翻，最坏 n 张全翻完。</p>
+<p>卡片排好了，再找 42：翻开正中间那张，是 57。42 比它小，右半肯定没有，整半扔掉，只在左半接着找。</p>
+<p>要把乱的一叠排好：分成两叠，你和朋友各排一叠，再每次比较两叠最上面那张，小的先放，合成一叠。</p>
+<p>另一件事：周末的活动时间互相冲突，想参加尽量多的。每次挑<strong>结束最早</strong>的，划掉和它冲突的，再挑下一个。</p>
+<p>这四种做法，就是课上的四种算法设计思路。认出一个算法属于哪种，它的递推式和复杂度也就大致有数了。</p>
+
+<h2>它是什么</h2>
+<p>简单说，设计思路（design paradigm）就是<strong>怎样把问题变小、每一步怎样做决定</strong>的套路。期末复习课分成四种，对回刚才的场景：</p>
+<ul>
+  <li><strong>蛮力（brute force）</strong>：把所有候选逐个检查一遍，不利用问题的结构。像一张张翻卡片：翻完答案一定对，但候选多就慢。</li>
+  <li><strong>减治（decrease-and-conquer）</strong>：每步做一点工作，把问题变成<strong>一个</strong>更小的同类问题，只解它。像扔掉一半接着找。可以减一（n → n−1），也可以减半（n → n/2）。</li>
+  <li><strong>分治（divide-and-conquer）</strong>：拆成几个互不重叠的小问题，<strong>每个都要解</strong>，再合并答案。像两人分头排再合并。</li>
+  <li><strong>贪心（greedy）</strong>：用于求最大、最小的最优化问题。每步挑眼下最好的（局部最优，locally optimal），<strong>挑了不改</strong>。像挑最早结束的活动。</li>
+</ul>
 <figure class="fig">
 <svg viewBox="0 0 440 410" width="440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="四种设计思路和例子">
 <defs><marker id="dp-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="rgba(255,255,255,0.55)"/></marker></defs>
@@ -76,38 +90,29 @@
 </svg>
 <figcaption>四种设计思路和课上的例子。减治画了两种缩小方式：减一和减半。</figcaption>
 </figure>
-
-<h2>蛮力</h2>
-<p>在无序数组或链表里找键 42，没有任何顺序可以利用，只能从第一个元素看到最后一个，最坏比较 n 次。<strong>蛮力（brute force）就是把所有可能的候选逐个检查一遍</strong>，不利用问题的结构。只要枚举完整，答案一定对；代价是“候选个数 × 检查一个的代价”，通常很大。</p>
+<p>图里的例子要背。几个不太直观的：</p>
 <ul>
-  <li><strong>线性查找（linear search）</strong>：候选是 n 个位置，最坏 Θ(n)。</li>
-  <li><strong>最近点对（closest pair）</strong>：算出全部 n(n−1)/2 对点的距离再取最小，Θ(n²)（见 1.11 最近点对）。</li>
-  <li><strong>遍历找元素</strong>：在普通二叉树（不是 BST）或图里找一个值，只能遍历，把每个结点都访问一遍，O(n) 或 O(V + E)。</li>
-  <li>排档期问题试遍全部 2ⁿ 个工作子集，只在 n 很小时可行。</li>
+  <li>蛮力：<strong>线性查找（linear search）</strong>从头看到尾，最坏 Θ(n)；<strong>最近点对（closest pair）</strong>逐对算 n(n−1)/2 个距离，Θ(n²)（见 1.11）；在普通二叉树或图里找值，只能遍历。</li>
+  <li>减一：<strong>插入排序（insertion sort）</strong>先排好前 n−1 个，再插入第 n 个；<strong>选择排序（selection sort）</strong>先把最小值放最前，再排剩下 n−1 个；<strong>拓扑排序（topological sort）</strong>删源点法每次输出并删掉一个入度为 0 的顶点。</li>
 </ul>
 
-<h2>减治</h2>
-<p>插入排序要排好 n 个元素：先把前 n−1 个排好，再把第 n 个插到正确位置。“排好前 n−1 个”是同一个问题，只是规模小了 1。选择排序反过来：先找出最小值放到最前面，剩下的 n−1 个再排。</p>
-<p><strong>减治（decrease-and-conquer）：每一步做一点工作，把问题变成同类的一个更小的实例，只解这一个，再由它的答案得到原问题的答案。</strong>按缩小的方式分两种：</p>
-<table>
-<thead><tr><th>缩小方式</th><th>例子</th><th>递推式</th><th>复杂度</th></tr></thead>
-<tbody>
-<tr><td>减一：n → n−1</td><td>选择排序、插入排序</td><td>T(n) = T(n−1) + cn</td><td>Θ(n²)（插入排序指最坏情况，最好 Θ(n)）</td></tr>
-<tr><td>减一：V → V−1</td><td>拓扑排序（删源点法）：输出一个入度为 0 的顶点并删掉它和它的出边，剩下的仍是 DAG</td><td>每个顶点、每条边各处理一次</td><td>O(V + E)</td></tr>
-<tr><td>按比例：n → n/2</td><td>二分查找：和中间元素比一次，丢掉一半</td><td>T(n) = T(n/2) + c</td><td>最坏 Θ(log n)</td></tr>
-</tbody>
-</table>
-<p>递推式的解法见 1.8 递推式与展开法。</p>
-<div class="callout note" data-label="注意">
-<p>第 6 周讲递推式时，课上用二分查找作为“规模按比例缩小”、也就是分治的第一个例子；期末复习课的分类则把它列入<strong>减治</strong>，理由是它只解一半。配对题按复习课答：<strong>二分查找 → 减治</strong>。</p>
-</div>
-
-<h2>分治</h2>
-<p>归并排序把数组从中间切成两半，两半分别递归排好，再把两个有序半段合并（merge）成一个。两半<strong>都要解</strong>，哪一半都不能丢。</p>
-<p><strong>分治（divide-and-conquer）：把问题拆成几个互不重叠、规模约 n/b 的子问题，全部递归解完，再把它们的解合并成原问题的解。</strong>递推式是主定理（Master Theorem）的形式 T(n) = aT(n/b) + f(n)：a 是要解的子问题个数，f(n) 是拆分加合并的非递归代价（见 1.9 主定理）。</p>
-
-<h3>减治还是分治：数要解几个子问题</h3>
-<p>二分查找也把数组“分成两半”，区别在下一步：它<strong>只在一半里继续</strong>，另一半直接丢掉；快速排序和归并排序<strong>两半都要解</strong>，解完一半再解另一半。按递推式画成递归树（n = 8，结点里写子问题规模）：</p>
+<h2>看个例子：二分查找和归并排序</h2>
+<p>最容易混的是减治和分治。二分查找（binary search）和归并排序（merge sort）都从中间分两半，为什么一个算减治、一个算分治？拿 n = 8 走一遍。</p>
+<p><strong>二分查找</strong>在 8 个有序数里找 key：</p>
+<ol>
+  <li>和中间元素比一次，key 小去左半、大去右半，剩 4 个。</li>
+  <li>再比一次，剩 2 个。</li>
+  <li>再比一次，剩 1 个，比完就知道在不在。</li>
+</ol>
+<p>每步只留一半，另一半扔掉不再看。递推式（recurrence）T(n) = T(n/2) + c，log₂ n 层、每层常数，最坏 Θ(log n)。</p>
+<p><strong>归并排序</strong>排 8 个数：</p>
+<ol>
+  <li>切成两份 4 个，两份都要排，哪份都不能扔。</li>
+  <li>每份再切成两份 2 个，共 4 份，全要排。</li>
+  <li>切到 8 份，每份 1 个，天然有序。</li>
+  <li>往回合并（merge）：1+1 → 2，2+2 → 4，4+4 → 8，每层合并共处理 n 个数。</li>
+</ol>
+<p>递推式 T(n) = 2T(n/2) + cn，log₂ n 层、每层 cn，Θ(n log n)。画成递归树（结点里是子问题规模）：</p>
 <figure class="fig">
 <svg viewBox="0 0 400 275" width="400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="二分查找的递归树">
 <line x1="150" y1="40" x2="95" y2="105" stroke="#4ade80" stroke-width="2"/>
@@ -194,111 +199,71 @@
 </svg>
 <figcaption>上：二分查找，T(n) = T(n/2) + c；下：归并排序，T(n) = 2T(n/2) + cn。绿色是真正递归求解的子问题，虚线是被丢掉的一半。</figcaption>
 </figure>
-<p>两棵树层数相同，差别在每层的结点数：二分查找每层 1 个，归并排序第 k 层 2<sup>k</sup> 个。主定理对 a = 1 也适用（课上就用它解二分查找），所以写成 aT(n/b) + f(n) 后看 a 最直接：<strong>a = 1（只解一个子问题）是减治，a ≥ 2（几个子问题都要解）是分治</strong>。</p>
-
-<h3>拆分、求解、合并</h3>
-<p>课上把分治写成三步：<strong>拆分（split）、求解（solve）、合并（join）</strong>。同样是分治，力气花在不同的地方：</p>
-<table>
-<thead><tr><th>算法</th><th>拆分</th><th>求解</th><th>合并</th><th>递推式</th></tr></thead>
-<tbody>
-<tr><td>快速排序</td><td>partition：小于 pivot 的放左、大于的放右，O(n)</td><td>两边都递归</td><td>无</td><td>最好情况 2T(n/2) + cn</td></tr>
-<tr><td>归并排序</td><td>从中间切开，概念上 O(1)</td><td>两半都递归</td><td>merge 两个有序半段，O(n)</td><td>2T(n/2) + cn</td></tr>
-<tr><td>最近点对（分治）</td><td>按 x 坐标从中线切开</td><td>两半都递归，得 d<sub>L</sub>、d<sub>R</sub></td><td>检查中线两侧宽 d 的带状区，O(n)</td><td>2T(n/2) + O(n)</td></tr>
-<tr><td>二分查找（对照）</td><td>和中间元素比较，O(1)</td><td><strong>只递归一半</strong></td><td>无</td><td>T(n/2) + c</td></tr>
-</tbody>
-</table>
-<p><strong>快速排序“难分易合”</strong>：partition 之后 pivot 已在最终位置，两边各自排好，整个数组就排好了。<strong>归并排序“易分难合”</strong>：切开不需要比较，排序的工作全在 merge 里。</p>
-
-<h3>代码：调用自己一次还是两次</h3>
-<p>三个最小的例子，分别是蛮力、减治、分治。读递归代码时数一数函数调用自己几次、规模变成多少，就能写出递推式。</p>
-<pre><code>/* 蛮力：从头到尾逐个检查，最坏 Θ(n) */
-int linear_search(const int A[], int n, int key) {
-    for (int i = 0; i &lt; n; i++) {
-        if (A[i] == key) return i;
-    }
-    return -1;
-}
-
-/* 减治：和中间元素比一次，只在其中一半里继续
-   T(n) = T(n/2) + c，最坏 Θ(log n) */
-int bin_search(const int A[], int lo, int hi, int key) {
-    if (lo &gt; hi) return -1;                  /* 空区间：不存在 */
-    int mid = (lo + hi + 1) / 2;             /* 偶数个时取靠右的中间，同课上例子 */
-    if (key == A[mid]) return mid;
-    if (key &lt; A[mid]) return bin_search(A, lo, mid - 1, key);  /* 只解左半 */
-    return bin_search(A, mid + 1, hi, key);                    /* 只解右半 */
-}
-
-/* 分治：从中间切开，两半都解，再合并
-   T(n) = 2T(n/2) + c，Θ(n) */
-int max_dc(const int A[], int lo, int hi) {
-    if (lo == hi) return A[lo];              /* 只有一个元素 */
-    int mid = (lo + hi) / 2;
-    int left = max_dc(A, lo, mid);           /* 解左半 */
-    int right = max_dc(A, mid + 1, hi);      /* 解右半 */
-    return left &gt; right ? left : right;      /* 合并：O(1) */
-}</code></pre>
-<p>n = 16 时，max_dc 一共被调用 31 次（2n − 1：16 个叶子加 15 个内部结点），bin_search 最多被调用 6 次（最后一次是空区间）。max_dc 的递推式代入主定理：a = 2，b = 2，d = 0，a &gt; b<sup>d</sup>，结果 Θ(n<sup>log₂ 2</sup>) = Θ(n)，和一个 for 循环一样。<strong>分治本身不保证更快</strong>。排序用分治能从 n² 降到 n log n，是因为每层只花线性时间，而层数从 n 降到了 log₂ n。</p>
-
-<h2>贪心</h2>
-<p>排档期问题（见 1.1 什么是算法）的正确做法：每次挑<strong>结束最早</strong>的工作，删掉与它冲突的，重复。每一步只看眼前哪个选择最好，选了就不再改。</p>
-<p><strong>贪心（greedy）：用于求最大或最小的最优化问题。逐步构造解，每一步做当前看来最好的选择（局部最优），之后不回头。</strong>贪心通常很快，但局部最优不一定带来全局最优：说它对要靠证明（交换论证、反证法），<strong>说它错只需一个反例</strong>，“最早开始优先”和“最短优先”就是这样被否定的。课上的贪心算法：</p>
-<ul>
-  <li><strong>区间调度</strong>：每次选结束时间最早的工作，结果最优。</li>
-  <li><strong>Dijkstra</strong>：每轮取出暂定距离最小的顶点并永久确定。边权非负时正确，有负权边就会出错。以每个顶点为起点各跑一次 Dijkstra 求全源最短路，也归为贪心。</li>
-  <li><strong>Prim</strong>：每轮加入连接“树内顶点”和“树外顶点”的最便宜的边，最后得到最小生成树。</li>
-</ul>
-<div class="callout warn" data-label="易错">
-<p>选择排序每轮也挑最小值，但课上把它归入<strong>减治</strong>。选择排序的“挑最小”不可能选错，最小值本来就必须放在最前面，这一步只是让规模减一。贪心是在几个可行方案里押一个，押错了就得不到最优解。</p>
+<p>两棵树层数一样，差在每层的结点数：二分查找每层 1 个，归并排序第 k 层 2<sup>k</sup> 个。所以把递推式写成主定理（Master Theorem）的形式 T(n) = aT(n/b) + f(n)，看 a 就行（见 1.9）：</p>
+<div class="callout key" data-label="考点">
+<p><strong>a = 1（只解一个子问题）是减治；a ≥ 2（几个都要解）是分治。</strong></p>
+</div>
+<div class="callout note" data-label="注意">
+<p>第 6 周讲递推式时，课上把二分查找和分治放在一起讲；期末复习课的分类把它列入减治。配对题按复习课答：<strong>二分查找 → 减治</strong>。</p>
 </div>
 
-<h2>按解的类型分类</h2>
-<p>另一个角度看结果有多好，和用哪种思路无关：</p>
+<h2>补充：分治的三步</h2>
+<p>课上把分治写成<strong>拆分（split）、求解（solve）、合并（join）</strong>三步，不同算法力气花在不同地方：</p>
 <table>
-<thead><tr><th>类型</th><th>含义</th><th>例子</th></tr></thead>
+<thead><tr><th>算法</th><th>拆分</th><th>求解</th><th>合并</th></tr></thead>
 <tbody>
-<tr><td>精确（exact）</td><td>保证给出正确（最优）的答案</td><td>最早结束优先；边权非负时的 Dijkstra</td></tr>
-<tr><td>近似（approximate）</td><td>不一定最优，但与最优解的差距有可证明的界</td><td>保证给出的路线不超过最短路长度的 2 倍</td></tr>
-<tr><td>启发式（heuristic）</td><td>给出一个看起来合理的答案，没有任何保证</td><td>最早开始优先</td></tr>
-<tr><td>随时（anytime）</td><td>任何时刻都能交出有效答案，算得越久越好</td><td>—</td></tr>
+<tr><td>快速排序（quicksort）</td><td>partition：比 pivot 小的放左、大的放右，O(n)</td><td>两边都递归</td><td>无</td></tr>
+<tr><td>归并排序</td><td>从中间切开，O(1)</td><td>两半都递归</td><td>merge 两个有序半段，O(n)</td></tr>
+<tr><td>最近点对（分治版）</td><td>按 x 坐标从中线切开</td><td>两半都递归</td><td>检查中线附近的带状区，O(n)</td></tr>
 </tbody>
 </table>
-<p>同样是贪心，“最早开始优先”只是启发式：它总能选出一组互不冲突的工作，但最先开始的若是一份覆盖全程的长工作，就会挡掉其余 n−1 份，结果 1 份对最优的 n−1 份。</p>
+<p>所以<strong>快速排序“难分易合”</strong>：partition 完 pivot 已在最终位置，两边排好就结束；<strong>归并排序“易分难合”</strong>：活全在 merge 里。另外，分治本身不保证更快：排序能从 n² 降到 n log n，是因为层数降到了 log₂ n、每层只花线性时间。</p>
+<iframe class="video-frame" src="https://www.youtube-nocookie.com/embed/2Rr2tW9zvRg" title="2 Divide And Conquer" loading="lazy" allowfullscreen></iframe>
+<p class="anim-caption">视频：Abdul Bari《2 Divide And Conquer》（英文），讲分治的一般步骤：拆成同类的小问题、递归求解、再合并。他按多数教材把二分查找算作分治，本课期末按减治答。</p>
+
+<h2>补充：贪心对不对，要看证明</h2>
+<p>排档期问题（见 1.1）里“每次挑结束最早的”能选出最多的工作，这是<strong>区间调度（interval scheduling）</strong>。课上另外两个贪心：</p>
+<ul>
+  <li><strong>Dijkstra</strong>：每轮取出暂定距离最小的顶点，永久确定。边权非负时正确。对每个顶点各跑一次求全源最短路，也算贪心。</li>
+  <li><strong>Prim</strong>：每轮加入连接树内、树外顶点的最便宜的边，得到最小生成树（minimum spanning tree, MST）。</li>
+</ul>
+<p>局部最优不一定带来全局最优。<strong>说贪心对要靠证明，说它错只需一个反例。</strong>比如面额 {1, 3, 4} 凑 6，规则是“每次拿不超过余额的最大面额”：拿 4、1、1 共 3 枚，可 3 + 3 只要 2 枚。</p>
+<div class="callout warn" data-label="易错">
+<p>选择排序每轮也“挑最小”，但课上归入<strong>减治</strong>：最小值本来就必须放最前，这一步不会挑错，只是让规模减一。贪心是在几个可行方案里押一个，可能押错。</p>
+</div>
+
+<h3>按解的类型分类</h3>
+<p>另一个分类角度看结果有多好，和用哪种思路无关：</p>
+<ul>
+  <li><strong>精确（exact）</strong>：保证最优。如最早结束优先、边权非负的 Dijkstra。</li>
+  <li><strong>近似（approximate）</strong>：不一定最优，但差距有可证明的界，如路线保证不超过最短的 2 倍。</li>
+  <li><strong>启发式（heuristic）</strong>：答案看着合理，没有任何保证。如“最早开始优先”：最先开始的若是一份覆盖全程的长工作，会挡掉其余 n−1 份。上面的硬币规则也是。</li>
+  <li><strong>随时（anytime）</strong>：随时能交出有效答案，算得越久越好。</li>
+</ul>
 
 <h2>考试怎么考</h2>
 <ul>
-  <li><strong>配对题 / 选择题（最常见）</strong>：算法和思路连线。<strong>四种思路各自的课上例子要背下来</strong>，公式表上没有。</li>
-  <li><strong>简答题</strong>：减治和分治的区别（只解一个子问题 vs 全部都解，各举一例）；快速排序和归并排序在拆分、合并上的差别。</li>
-  <li><strong>读代码</strong>：数递归调用的个数和规模，写出递推式，判断思路和复杂度（见 1.8、1.9）。</li>
-  <li><strong>贪心的正确性</strong>：给一条贪心规则，举反例说明它不是最优。</li>
+  <li><strong>配对 / 选择题（最常见）</strong>：算法连思路。四种思路的课上例子要背，公式表上没有。</li>
+  <li><strong>简答</strong>：减治和分治的区别，各举一例；快排和归并在拆分、合并上的差别。</li>
+  <li><strong>读代码</strong>：数递归调用几次、规模多大，写递推式，判断思路和复杂度。</li>
+  <li><strong>贪心</strong>：举反例说明某条贪心规则不是最优。</li>
 </ul>
-<div class="callout warn" data-label="易错">
-<ul>
-  <li>快速排序最坏情况的递推式 T(n) = T(n−1) + cn 和选择排序一样，但它仍是分治：思路看算法怎么设计（拆成两部分、都要解），不看某个输入下拆得好不好。</li>
-  <li>最近点对有两个版本：逐对比较是蛮力 Θ(n²)，按中线拆开是分治 Θ(n log n)。</li>
-  <li>“分治一定比蛮力快”是错的，max_dc 仍是 Θ(n)。</li>
-</ul>
-</div>
 
-<h2>练习</h2>
-<details class="qa">
-  <summary class="ripple-surface">1. 配对：把每个算法归入蛮力、减治、分治、贪心之一。(a) 插入排序 (b) 归并排序 (c) Prim (d) 在无序链表里找一个键 (e) 二分查找 (f) 逐对计算距离求最近点对 (g) 快速排序 (h) 拓扑排序（删源点法）(i) 区间调度：每次选结束最早的 (j) Dijkstra (k) 选择排序</summary>
-  <div class="qa__body">
+<h3>例题 1：配对</h3>
+<p>把每个算法归入蛮力、减治、分治、贪心之一：(a) 插入排序 (b) 归并排序 (c) Prim (d) 在无序链表里找一个键 (e) 二分查找 (f) 逐对计算距离求最近点对 (g) 快速排序 (h) 拓扑排序（删源点法）(i) 区间调度：每次选结束最早的 (j) Dijkstra (k) 选择排序。</p>
 <table>
 <thead><tr><th>思路</th><th>算法</th><th>理由</th></tr></thead>
 <tbody>
 <tr><td>蛮力</td><td>(d) (f)</td><td>逐个元素、逐对点检查全部候选</td></tr>
-<tr><td>减治</td><td>(a) (e) (h) (k)</td><td>每步只剩一个更小的实例：n−1 个元素、一半区间、V−1 个顶点</td></tr>
-<tr><td>分治</td><td>(b) (g)</td><td>拆成两部分，两部分都要递归</td></tr>
-<tr><td>贪心</td><td>(c) (i) (j)</td><td>每步做局部最优的选择且不再撤销：最便宜的边、最早结束的工作、dist 最小的顶点</td></tr>
+<tr><td>减治</td><td>(a) (e) (h) (k)</td><td>每步只剩一个更小的问题：n−1 个元素、一半区间、V−1 个顶点</td></tr>
+<tr><td>分治</td><td>(b) (g)</td><td>拆成两部分，都要递归</td></tr>
+<tr><td>贪心</td><td>(c) (i) (j)</td><td>每步选局部最优、不撤销：最便宜的边、最早结束的工作、距离最小的顶点</td></tr>
 </tbody>
 </table>
-<p>陷阱是 (e) 和 (k)：二分查找只解一半；选择排序的“挑最小”不是押注式的选择。两者都是减治。</p>
-  </div>
-</details>
-<details class="qa">
-  <summary class="ripple-surface">2. 下面两个函数都计算 xⁿ（n ≥ 0）。分别写出递推式和 Θ，说明各属哪种思路，并算出 n = 16 时各自被调用多少次。</summary>
-  <div class="qa__body">
+<p>陷阱是 (e) 二分查找和 (k) 选择排序，都是减治。</p>
+
+<h3>例题 2：读代码</h3>
+<p>两个函数都算 xⁿ（n ≥ 0）。写出递推式和 Θ，说明属于哪种思路，并算 n = 16 时各被调用几次。</p>
 <pre><code>long power_a(long x, int n) {          /* 版本 A */
     if (n == 0) return 1;
     long half = power_a(x, n / 2);
@@ -311,17 +276,22 @@ long power_b(long x, int n) {          /* 版本 B */
     if (n % 2 == 0) return power_b(x, n / 2) * power_b(x, n / 2);
     return power_b(x, n / 2) * power_b(x, n / 2) * x;
 }</code></pre>
-<p><strong>版本 A</strong>：只调用自己一次，规模减半，其余是常数次乘法。T(n) = T(n/2) + c，a = 1，b = 2，d = 0，a = b<sup>d</sup>，<strong>Θ(log n)</strong>。只解一个子问题，是<strong>减治</strong>（按比例缩小）。n = 16 时调用链是 n = 16、8、4、2、1、0，共 <strong>6 次</strong>。</p>
-<p><strong>版本 B</strong>：调用自己两次，每次规模 n/2。T(n) = 2T(n/2) + c，a = 2 &gt; b<sup>d</sup> = 1，<strong>Θ(n<sup>log₂ 2</sup>) = Θ(n)</strong>。形式上是<strong>分治</strong>。调用次数 C(0) = 1，C(n) = 1 + 2C(⌊n/2⌋)：C(1) = 3，C(2) = 7，C(4) = 15，C(8) = 31，C(16) = <strong>63 次</strong>。</p>
-<p>B 慢的原因：两个子问题完全相同，同一个值被重复计算，和朴素递归求斐波那契一样。A 把结果存进 <code>half</code> 只算一次。</p>
-  </div>
-</details>
-<details class="qa">
-  <summary class="ripple-surface">3. 硬币面额为 {1, 3, 4}，要用最少的硬币凑出金额 6。贪心规则：每次拿不超过剩余金额的最大面额。(a) 贪心给出几枚？(b) 最优是几枚？(c) 这条贪心规则属于哪种解的类型？</summary>
-  <div class="qa__body">
-<p>(a) 剩 6，拿 4；剩 2，拿 1；剩 1，拿 1。共 <strong>3 枚</strong>（4 + 1 + 1）。</p>
-<p>(b) 6 不是一种面额，1 枚不够；3 + 3 = 6，所以最优是 <strong>2 枚</strong>。一个反例就说明这条规则不是精确算法。</p>
-<p>(c) 因为有面额 1，它总能凑出一个有效组合，但对一般的面额没有任何质量保证，可以差得任意远：面额 {1, 10, 11} 凑 20，贪心是 11 + 9 × 1 共 10 枚，最优 10 + 10 只要 2 枚。所以它是<strong>启发式</strong>。</p>
-  </div>
-</details>
+<p>逐行看：两个函数各自的第 2 行是基本情况（base case），x⁰ = 1。A 的第 3 行递归算出 x<sup>⌊n/2⌋</sup> 存进 <code>half</code>，第 4、5 行按 n 的奇偶返回 half² 或 half²·x。B 算的是同一个东西，但不存结果，把 <code>power_b(x, n / 2)</code> 调了两遍。</p>
+<p><strong>A</strong>：调用自己一次，规模减半。T(n) = T(n/2) + c，a = 1，b = 2，d = 0，a = b<sup>d</sup>，<strong>Θ(log n)</strong>，是<strong>减治</strong>。n = 16 时调用链是 16、8、4、2、1、0，共 <strong>6 次</strong>。</p>
+<p><strong>B</strong>：调用自己两次，规模各 n/2。T(n) = 2T(n/2) + c，a = 2 &gt; b<sup>d</sup> = 1，<strong>Θ(n<sup>log₂ 2</sup>) = Θ(n)</strong>，形式上是<strong>分治</strong>。调用次数 C(0) = 1，C(n) = 1 + 2C(⌊n/2⌋)，依次 C(1) = 3，C(2) = 7，C(4) = 15，C(8) = 31，C(16) = <strong>63 次</strong>。两个子问题完全相同却算了两遍，分治反而更慢。</p>
+<div class="callout warn" data-label="易错">
+<ul>
+  <li>快速排序最坏 T(n) = T(n−1) + cn，和选择排序一样，但它仍是分治：看算法怎么设计，不看某个输入拆得好不好。</li>
+  <li>最近点对：逐对比较是蛮力 Θ(n²)，按中线拆开是分治 Θ(n log n)。</li>
+</ul>
+</div>
+
+<h2>小结</h2>
+<ul>
+  <li><strong>蛮力</strong>：逐个试所有候选（线性查找、逐对最近点对、遍历找元素）。</li>
+  <li><strong>减治</strong>：每步只留一个更小的同类问题（插入排序、选择排序、拓扑排序、二分查找）。</li>
+  <li><strong>分治</strong>：拆成几块、块块都解、再合并（快速排序、归并排序、最近点对分治版）。</li>
+  <li><strong>贪心</strong>：每步挑局部最优、不回头（最早结束优先、Dijkstra、Prim）；说它错只需一个反例。</li>
+  <li>减治还是分治，看 T(n) = aT(n/b) + f(n) 的 a：a = 1 是减治，a ≥ 2 是分治。</li>
+</ul>
 `;

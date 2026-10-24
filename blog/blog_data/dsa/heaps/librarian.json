@@ -15,8 +15,8 @@
         "en": "6.1 Heaps: Definition & Array Layout"
       },
       "excerpt": {
-        "zh": "完全二叉树 + 堆条件 · 最大堆与最小堆 · 判断是不是堆 · 数组下标从 1：2i、2i+1、⌊i/2⌋ · 最后一个父结点 ⌊n/2⌋ · 0 起公式与 d 叉堆",
-        "en": "Complete binary tree + heap condition · max-heap vs min-heap · is it a heap? · 1-based array: 2i, 2i+1, ⌊i/2⌋ · last parent ⌊n/2⌋ · 0-based and d-ary formulas"
+        "zh": "完全二叉树 + 堆条件 · 最大堆 / 最小堆 · 数组下标从 1 开始（2i、2i+1、⌊i/2⌋） · 0 起与 d 叉堆公式 · 判断是不是堆",
+        "en": "Complete binary tree + heap condition · max-heap vs min-heap · 1-based array layout (2i, 2i+1, ⌊i/2⌋) · 0-based & d-ary formulas · is it a heap?"
       },
       "tags": [
         "c",
@@ -34,14 +34,14 @@
         "en": "6.2 Heap Insert & Delete-Max"
       },
       "excerpt": {
-        "zh": "插入 · 上浮 sift up · 找最大值 · 删除最大值 · 下沉 sift down · 与较大的孩子交换 · 删除任意位置 · Θ(log n) · C 代码",
-        "en": "Insert · sift up · find max · delete max · sift down · swap with the larger child · arbitrary delete · Θ(log n) · C code"
+        "zh": "插入 · 上浮 sift up · 删除最大值 · 下沉 sift down · 和较大的孩子交换 · Θ(log n)",
+        "en": "Insert · sift up · delete-max · sift down · swap with the larger child · Θ(log n)"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -53,8 +53,8 @@
         "en": "6.3 Building a Heap"
       },
       "excerpt": {
-        "zh": "逐个插入 Θ(n log n) · 自底向上 heapify · 倒序 sift down · Θ(n) 推导 · 2015 真题最小堆",
-        "en": "Repeated insertion Θ(n log n) · Bottom-up heapify · Reverse-order sift down · Θ(n) proof · 2015 min-heap question"
+        "zh": "逐个插入 · 自底向上 · sift down · Θ(n) vs Θ(n log n) · 2015 最小堆手算",
+        "en": "Repeated insertion · bottom-up heapify · sift down · Θ(n) vs Θ(n log n) · 2015 min-heap trace"
       },
       "tags": [
         "c",
@@ -72,8 +72,8 @@
         "en": "6.4 Heapsort"
       },
       "excerpt": {
-        "zh": "建堆 + n − 1 轮堆顶换到末尾再下沉 · 课上数组完整追踪 · 1 起 / 0 起 C 代码 · 最坏也是 Θ(n log n) · 原地 · 不稳定 · 不自适应",
-        "en": "Build heap + n − 1 swap-root-and-sift-down rounds · full lecture trace · 1-based / 0-based C code · guaranteed Θ(n log n) · in-place · unstable · not adaptive"
+        "zh": "建最大堆 · 换、缩、沉 · n − 1 轮 · 最坏 Θ(n log n) · 原地 · 不稳定",
+        "en": "Build max-heap · swap, shrink, sift down · n − 1 rounds · worst-case Θ(n log n) · in-place · unstable"
       },
       "tags": [
         "c",
@@ -91,8 +91,8 @@
         "en": "6.5 Priority Queues & Top-k"
       },
       "excerpt": {
-        "zh": "优先队列 ADT · 无序/有序数组、链表、堆、平衡 BST 的代价 · changeWeight 与下标表 · Dijkstra/Prim 换 PQ 的复杂度 · Top-k：O(n + k log n) 与 O(n log k)",
-        "en": "Priority queue ADT · costs of unsorted/sorted arrays, lists, heaps, balanced BSTs · changeWeight with an index map · Dijkstra/Prim complexity per PQ · top-k: O(n + k log n) vs O(n log k)"
+        "zh": "优先队列 ADT · 四种实现的代价 · 改优先级与任意删除 · Top-k：大小为 k 的最大堆 · Dijkstra 换优先队列",
+        "en": "Priority queue ADT · implementation costs · changeWeight & arbitrary delete · top-k with a size-k max-heap · Dijkstra with different PQs"
       },
       "tags": [
         "c",

@@ -15,14 +15,14 @@
         "en": "1.1 What Is an Algorithm"
       },
       "excerpt": {
-        "zh": "计算机算法五条要求 · 区间调度三条贪心规则 · 反例推翻 · 交换论证 · 三种正确 · 枚举/证明/反例 · 按任务/方法/解的类型分类",
-        "en": "Five properties of a computer algorithm · interval scheduling and three greedy rules · counterexamples · exchange argument · three kinds of correctness · enumeration/proof/counterexample · classifying algorithms by task, approach and solution type"
+        "zh": "算法五条要求 · 区间调度 · 贪心反例 · 最早结束优先 · 三种正确 · 算法分类",
+        "en": "Five properties of an algorithm · interval scheduling · greedy counterexamples · earliest finish first · three kinds of correctness · classifying algorithms"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 7,
       "lang": "zh"
     },
     {
@@ -34,14 +34,14 @@
         "en": "1.2 Fibonacci Three Ways"
       },
       "excerpt": {
-        "zh": "直接递归 · 递归树与重复子问题 · 调用次数 2F(n+1)−1 · T(n)=T(n−1)+T(n−2)+3 · 指数级 O(2ⁿ) 但非 Θ(2ⁿ) · memoization · 时间–空间权衡 · 两变量 O(1) 空间 · long long 溢出",
-        "en": "naive recursion · recursion tree & repeated subproblems · 2F(n+1)−1 calls · T(n)=T(n−1)+T(n−2)+3 · exponential, O(2ⁿ) but not Θ(2ⁿ) · memoization · time–space trade-off · two variables, O(1) space · long long overflow"
+        "zh": "直接递归 · 递归树 · 数调用次数与 T(n) · 记忆化 memoization · 两个变量的循环 · 时间–空间权衡 · 溢出",
+        "en": "Naive recursion · recursion tree · counting calls and T(n) · memoization · two-variable loop · time–space trade-off · overflow"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 8,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -53,8 +53,8 @@
         "en": "1.3 Counting Operations & Growth Rates"
       },
       "excerpt": {
-        "zh": "不计时间数操作 · 基本操作与 T(n) · 主导操作 · 快递 / 循环赛 / 汉诺塔三个例子 · 增长率表（10⁹ 次/秒） · 复杂度阶梯 1 &lt; log n &lt; … &lt; 3ⁿ &lt; n! · 单层、嵌套、翻倍循环怎么数",
-        "en": "Count operations, not time · unit-cost operations and T(n) · dominant operation · courier / round-robin / Tower of Hanoi · growth-rate table at 10⁹ ops/s · class ladder 1 &lt; log n &lt; … &lt; 3ⁿ &lt; n! · counting single, nested and doubling loops"
+        "zh": "基本操作 · T(n) · 循环赛 n(n−1)/2 · 汉诺塔 2ⁿ − 1 · 增长率表 · 复杂度阶梯 · 数循环",
+        "en": "Basic operations · T(n) · round robin n(n−1)/2 · Tower of Hanoi 2ⁿ − 1 · growth-rate table · complexity ladder · counting loops"
       },
       "tags": [
         "c",
@@ -91,14 +91,14 @@
         "en": "1.5 Big-Omega & Big-Theta"
       },
       "excerpt": {
-        "zh": "Ω 定义 · 最大下界 · 对偶 f∈Ω(g)⇔g∈O(f) · Θ 夹逼证明 · O 嵌套与 Θ 不相交 · 没有 Θ 的函数 · 判断题",
-        "en": "Big-Omega definition · Largest lower bound · Duality with Big-O · Θ sandwich proofs · Nested O vs disjoint Θ · Functions with no Θ · True/false drills"
+        "zh": "下界 Ω · 紧确界 Θ · 对偶性 · 找常数证明 · O 类嵌套、Θ 类不相交",
+        "en": "Big-Omega lower bound · Big-Theta tight bound · duality · constant-finding proofs · nested O classes, disjoint Θ classes"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 6,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
@@ -110,14 +110,14 @@
         "en": "1.6 Logs, Exponentials & Combining Bounds"
       },
       "excerpt": {
-        "zh": "换底公式 · 对数底数不影响类 · 3ⁿ ∉ O(2ⁿ) · 2³ⁿ 与 2ⁿ⁺ᵏ · 相加与相乘 · O(m + n) 与 O(mn) · 六个读代码片段",
-        "en": "Change of base · Log base doesn't matter · 3ⁿ ∉ O(2ⁿ) · 2³ⁿ vs 2ⁿ⁺ᵏ · Adding & multiplying bounds · O(m + n) vs O(mn) · Code-reading drill"
+        "zh": "对数换底只差常数 · 指数底数决定类 · 先后相加 · 嵌套相乘 · 逐轮求和 · 两个输入 m 和 n",
+        "en": "Log base is a constant factor · Exponential base changes the class · Sequential code adds · Nested loops multiply · Summing dependent loops · Two inputs m and n"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -129,14 +129,14 @@
         "en": "1.7 Best, Worst & Average Cases"
       },
       "excerpt": {
-        "zh": "最好 / 最坏 / 平均情况 · 情况 ≠ O/Ω/Θ · 顺序查找 1 · (n+1)/2 · n · 二分查找是 O(log n)、Ω(1) 但不是 Θ(log n) · 在 X 后插入的最好情况：有序数组 Θ(log n)、有序链表 Θ(1) · 二分 vs 顺序：目标在 / 不在",
-        "en": "best / worst / average case · cases ≠ O/Ω/Θ · linear search 1 · (n+1)/2 · n · binary search is O(log n) and Ω(1) but not Θ(log n) · best case of insert-after-X: sorted array Θ(log n), sorted list Θ(1) · binary vs sequential search, target present / absent"
+        "zh": "最好 / 最坏 / 平均情况 · 顺序查找 (n+1)/2 · 二分查找不是 Θ(log n) · 两步操作的最好情况",
+        "en": "Best / worst / average case · linear search (n+1)/2 · binary search is not Θ(log n) · best case of a two-step operation"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -148,8 +148,8 @@
         "en": "1.8 Recurrences & Telescoping"
       },
       "excerpt": {
-        "zh": "从代码写递推式 · 基本情况 T(1) · 减一 T(n−1)+cn 逐行相加消项 → Θ(n²) · 减半 T(n/2)+c → Θ(log n) · 2T(n/2)+cn → Θ(n log n) · 令 2^i = n · 递归树：每层代价 × 层数 · 快速排序最好与最坏情况",
-        "en": "Writing recurrences from code · base case T(1) · decrease by one T(n−1)+cn, telescoping sum → Θ(n²) · halving T(n/2)+c → Θ(log n) · 2T(n/2)+cn → Θ(n log n) · set 2^i = n · recursion tree: cost per level × levels · quicksort best vs worst case"
+        "zh": "写递推式 · 减一 T(n−1)+cn · 减半 T(n/2)+c · 一分为二 2T(n/2)+cn · 展开法 · 递归树",
+        "en": "Writing recurrences · T(n−1)+cn · T(n/2)+c · 2T(n/2)+cn · telescoping · recursion tree"
       },
       "tags": [
         "c",
@@ -167,14 +167,14 @@
         "en": "1.9 The Master Theorem"
       },
       "excerpt": {
-        "zh": "T(n)=aT(n/b)+f(n) · 每层代价比 a/bᵈ · 三种情况 · 读出 a、b、d · d=0 陷阱 · 从代码写递推式 · 不适用的三类 · Big-O 版本",
-        "en": "T(n)=aT(n/b)+f(n) · per-level ratio a/b^d · three cases · reading off a, b, d · the d=0 trap · recurrences from code · when it fails · Big-O version"
+        "zh": "T(n) = aT(n/b) + f(n) · 读出 a、b、d · a 对 b^d 三种情况 · 常数 f(n) 的 d = 0 · 从代码写递推式 · 不能套用的递推式 · Big-O 版本",
+        "en": "T(n) = aT(n/b) + f(n) · reading off a, b, d · a vs b^d, three cases · constant f(n) means d = 0 · recurrence from code · when it does not apply · Big-O version"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 7,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -186,14 +186,14 @@
         "en": "1.10 Algorithm Design Paradigms"
       },
       "excerpt": {
-        "zh": "蛮力 · 减治（减一 / 减半）· 分治 · 贪心 · 只解一半 vs 两半都解 · 拆分-求解-合并 · 解的类型 · 算法 ↔ 思路配对",
-        "en": "Brute force · decrease-and-conquer (by one / by half) · divide-and-conquer · greedy · keep one half vs solve both · split-solve-join · solution types · algorithm ↔ paradigm matching"
+        "zh": "蛮力 · 减治 · 分治 · 贪心 · 二分查找 vs 归并排序 · 拆分-求解-合并 · 配对题",
+        "en": "Brute force · Decrease-and-conquer · Divide-and-conquer · Greedy · Binary search vs merge sort · Split-solve-join · Matching questions"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 9,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
@@ -205,14 +205,14 @@
         "en": "1.11 The Closest Pair Problem"
       },
       "excerpt": {
-        "zh": "欧氏距离 · 蛮力 n(n−1)/2 对 Θ(n²) · 一维排序扫描 · 一维分治 min(dL, dR, dM) · 二维分治 · 中间带 · 每点常数次比较 · T(n)=2T(n/2)+Θ(n) → Θ(n log n)",
-        "en": "Euclidean distance · brute force n(n−1)/2 pairs Θ(n²) · 1D sort and scan · 1D divide and conquer min(dL, dR, dM) · 2D divide and conquer · the strip · constant checks per point · T(n)=2T(n/2)+Θ(n) → Θ(n log n)"
+        "zh": "蛮力 n(n−1)/2 对 · 一维排序看相邻 · 一维分治 min(dL, dR, dM) · 中间带 · 带内按 y 扫描 · T(n) = 2T(n/2) + Θ(n)",
+        "en": "Brute force n(n−1)/2 pairs · 1D sort and scan · 1D divide and conquer min(dL, dR, dM) · the strip · y-order scan · T(n) = 2T(n/2) + Θ(n)"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     }
   ]

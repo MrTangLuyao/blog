@@ -15,14 +15,14 @@
         "en": "5.1 Sorting: Definition & Properties"
       },
       "excerpt": {
-        "zh": "为什么排序 · 非递减排列 · 比较排序下界 n log n · 原地 O(1) · 稳定性与反例 · 按两个键排序 · 自适应 · 排序算法一览",
-        "en": "Why sort · non-decreasing permutation · n log n comparison lower bound · in-place O(1) · stability and counterexamples · two-key sorting · adaptive · overview of the sorts"
+        "zh": "排序定义 · 非递减排列 · 原地 · 稳定 · 自适应 · 反例 2₁ 2₂ 1 · 按两个键排序 · n log n 下界",
+        "en": "Sorting definition · non-decreasing permutation · in-place · stable · adaptive · counterexample 2₁ 2₂ 1 · two-key sorting · n log n lower bound"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
@@ -34,14 +34,14 @@
         "en": "5.2 Selection Sort"
       },
       "excerpt": {
-        "zh": "每轮选最小 · 课上数组完整追踪 · C 实现 · n(n−1)/2 次比较与 n − 1 次交换 · 最好=平均=最坏 Θ(n²) · 原地 · 不稳定反例 2₁ 2₂ 1 · 不自适应 · 减治 T(n)=T(n−1)+O(n) · 写得少",
-        "en": "Pick the minimum each round · full trace of the lecture array · C code · n(n−1)/2 comparisons and n − 1 swaps · best = average = worst Θ(n²) · in-place · unstable (2₁ 2₂ 1) · not adaptive · decrease-and-conquer T(n)=T(n−1)+O(n) · few writes"
+        "zh": "每轮挑最小 · 课上例子手算 · n(n−1)/2 次比较 · n − 1 次交换 · 永远 Θ(n²) · 原地 · 不稳定",
+        "en": "Pick the minimum each round · lecture trace · n(n−1)/2 comparisons · n − 1 swaps · always Θ(n²) · in-place · unstable"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 8,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -53,14 +53,14 @@
         "en": "5.3 Insertion Sort"
       },
       "excerpt": {
-        "zh": "整理手牌 · val 加右移 · [2,0,9,7,1,5,2] 逐轮追踪 · 最好 Θ(n) / 最坏 Θ(n²) · 二分查找为何无效 · 稳定 · 原地 · 自适应",
-        "en": "Card-hand idea · val + shifting · trace of [2,0,9,7,1,5,2] · best Θ(n) / worst Θ(n²) · why binary search doesn't help · stable · in-place · adaptive"
+        "zh": "整理手牌 · val 加右移 · 最好 Θ(n) / 最坏 Θ(n²) · 二分查找救不了 · 稳定 · 原地 · 自适应",
+        "en": "Hand of cards · val and shifting · best Θ(n) / worst Θ(n²) · binary search does not help · stable · in-place · adaptive"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 8,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -72,8 +72,8 @@
         "en": "5.4 Distribution Counting"
       },
       "excerpt": {
-        "zh": "计数数组 · 下标偏移 v − lo · O(n + K) · 非比较排序 · 非原地 · 非自适应 · 实数与巨大值域 · 起始位置与稳定性",
-        "en": "Count array · offset v − lo · O(n + K) · non-comparison sort · not in-place · not adaptive · reals and huge ranges · start positions and stability"
+        "zh": "非比较排序 · 计数数组 count[v − lo] · 写回 · O(n + K) · 不是原地 · 记录版起始位置与稳定性 · 什么时候不能用",
+        "en": "Non-comparison sort · count array count[v − lo] · rebuild · O(n + K) · not in-place · start positions and stability for records · when it cannot be used"
       },
       "tags": [
         "c",
@@ -91,8 +91,8 @@
         "en": "5.5 Quicksort: Pivot & Partition"
       },
       "excerpt": {
-        "zh": "pivot 落到最终位置 · 课上分区方案（i 找 ≥、j 找 <、交叉后与 A[j] 交换）· 逐步追踪 · partition O(n) · C 代码 · pivot 序列与“保持相对顺序”真题",
-        "en": "Pivot lands in its final place · the course's partition (i stops at ≥, j at <, swap pivot with A[j] after crossing) · step-by-step trace · O(n) partition · C code · listing pivots and the \"keep relative order\" exam question"
+        "zh": "pivot 取第一个元素 · 双指针分区 · 交叉后与 A[j] 交换 · 分区 O(n) · 列出 pivot 序列",
+        "en": "First-element pivot · two-pointer partition · swap pivot with A[j] after crossing · O(n) partition · listing the pivots"
       },
       "tags": [
         "c",
@@ -110,14 +110,14 @@
         "en": "5.6 Quicksort: Analysis & Properties"
       },
       "excerpt": {
-        "zh": "递归树 · 每层 O(n) × 层数 · 最好 Θ(n log n) · 最坏 Θ(n²)（已排序/逆序/全相等）· 平均 Θ(n log n) · pivot 选法与三数取中 · 不稳定 · 递归栈 O(log n) · 原地之争",
-        "en": "Recursion tree · O(n) per level × levels · best Θ(n log n) · worst Θ(n²) (sorted / reverse / all-equal) · average Θ(n log n) · pivot strategies & median-of-3 · unstable · O(log n) stack space · in-place debate"
+        "zh": "递归树 · 每层 O(n) × 层数 · 最好 / 最坏 / 平均 · pivot 选择 · 三数取中 · 不稳定 · 递归栈 O(log n)",
+        "en": "Recursion tree · O(n) per level × levels · best / worst / average · pivot choice · median-of-3 · unstable · O(log n) stack space"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -129,14 +129,14 @@
         "en": "5.7 Merge Sort (Top-Down)"
       },
       "excerpt": {
-        "zh": "拆分轻合并重 · 双指针合并 Θ(n) · 相等取左保证稳定 · 自顶向下递归 · T(n)=2T(n/2)+cn · 三种情况都是 Θ(n log n) · O(n) 额外空间 · 不自适应",
-        "en": "Light split, heavy join · two-pointer merge Θ(n) · ties take left for stability · top-down recursion · T(n)=2T(n/2)+cn · Θ(n log n) in all cases · O(n) extra space · not adaptive"
+        "zh": "分治 · 合并两个有序数组 · 相等取左 · 深度优先 · Θ(n log n) · 稳定 · O(n) 额外空间",
+        "en": "Divide and conquer · merging two sorted arrays · ties take left · depth-first order · Θ(n log n) · stable · O(n) extra space"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -148,8 +148,8 @@
         "en": "5.8 Bottom-Up & Adaptive Merge Sort"
       },
       "excerpt": {
-        "zh": "自底向上归并 · 宽度 1、2、4… · 轮空的 run · 合并次数 n − 1 · 自适应归并 · natural run · 最好 Θ(n) · 快排对比",
-        "en": "Bottom-up merge sort · widths 1, 2, 4… · leftover run · n − 1 merges · adaptive merge sort · natural runs · best case Θ(n) · vs quicksort"
+        "zh": "自底向上 · 宽度 1/2/4 两两合并 · 轮空 · 合并次数 n − 1 · natural run · 自适应最好 Θ(n) · 链表与外部排序",
+        "en": "Bottom-up passes · widths 1/2/4 · carried-over runs · n − 1 merges · natural runs · adaptive best case Θ(n) · linked lists & external sorting"
       },
       "tags": [
         "c",
@@ -167,14 +167,14 @@
         "en": "5.9 Choosing a Sorting Algorithm"
       },
       "excerpt": {
-        "zh": "没有最好的排序 · n 小用插入排序 · 全部排序性质总表 · 选择规则 · 混合排序与阈值 · qsort / std::sort / 稳定性",
-        "en": "No single best sort · insertion sort for small n · master property table · decision rules · hybrid sorts & cutoff · qsort / std::sort / stability"
+        "zh": "没有最好的排序 · 总表 · n 小用插入排序 · 稳定 / 原地 / 最坏 · 混合排序 · qsort 与 introsort",
+        "en": "No single best sort · Master table · Insertion sort for small n · Stable / in-place / worst case · Hybrid sorts · qsort & introsort"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 8,
       "lang": "zh"
     }
   ]

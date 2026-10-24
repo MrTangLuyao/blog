@@ -1,20 +1,25 @@
 /* Post body — dsa-btree-bplus / zh */
 
 (window.__BLOG_POSTS = window.__BLOG_POSTS || {})['dsa-btree-bplus:zh'] = `
-<p class="lead">B 树（B-tree）让一个结点装很多个键，结点是一段连续数组，正好占一块磁盘块，从根到叶只需跟很少几次指针；查找仍是 O(log n)。B+ 树（B+ tree）再把数据全放进叶子、把叶子连成链表，找“下一个键”和范围查询因此很快。</p>
+<p class="lead">B 树（B-tree）让一个结点装很多个键，树因此很矮，跟指针、读磁盘的次数少得多，但查找仍是 O(log n)；B+ 树（B+ tree）再把数据全放进叶子、把叶子串成链表，让找“下一个”和范围查询变快。</p>
 
-<h2>B 树：m 阶多路搜索树</h2>
-<p>2-3 树（见 3.7 2-3 树）的结点有 1 或 2 个键、2 或 3 个孩子。把上限放宽到 m 个孩子，就是 <strong>m 阶 B 树（B-tree of order m）</strong>：</p>
+<h2>从一个场景说起：查一本厚字典</h2>
+<p>查一本很厚的纸质字典，最费劲的是翻页；可一旦翻开，这一页上几百个词一眼就扫完了。</p>
+<p>如果字典每页只印一个词，再写着“比它小去第几页，比它大去第几页”，那就是一棵 BST，100 万个词要翻大约 20 次。真实的字典是一页索引列出很多个范围，挑对了再翻，几次就到。</p>
+<p>电脑里也一样：树存在磁盘上时，每跟一次指针都可能要读一块新的磁盘块（disk block），比读内存慢好几个数量级；在内存里，连续的数组也比零散的结点更容易整块进缓存（cache）。所以<strong>翻一页很贵，就让每一页多装点东西</strong>，这就是 B 树。</p>
+
+<h2>B 树是什么</h2>
+<p>简单说，B 树就是<strong>一个结点能放很多个键、所有叶子一样深</strong>的搜索树，是 2-3 树（见 3.7 2-3 树）的推广。它的大小用阶（order）来描述，<strong>m 阶 B 树（B-tree of order m）</strong>有三条规则：</p>
 <ul>
-<li>每个结点<strong>最多 m 个孩子、最多 m − 1 个键</strong>，键在结点内从小到大排成数组；</li>
-<li>有 k 个键的内部结点恰有 k + 1 个孩子，每个孩子里的键夹在它左右两个键之间；</li>
-<li><strong>所有叶子在同一深度</strong>（完美平衡）。</li>
+<li><strong>结点是一个有序数组</strong>：最多 m 个孩子、最多 m − 1 个键，从小到大排好。一个结点占一块磁盘块，相当于字典的一页。</li>
+<li><strong>键是路标</strong>：有 k 个键的内部结点恰有 k + 1 个孩子，每个孩子里的键都夹在它左右两个键之间。</li>
+<li><strong>所有叶子在同一深度</strong>：插入和 2-3 树一样，先放进叶子，键达到 m 个就<strong>分裂（split）</strong>，中间的键提到父结点，必要时一路往上分裂，根分裂时长出新根。</li>
 </ul>
 <p>5 阶 B 树的一个满结点（4 个键、5 个孩子）：</p>
 <pre><code class="lang-text">           [ 20 | 40 | 60 | 80 ]
           /     |    |    |     \\
        &lt;20   20~40 40~60 60~80  &gt;80</code></pre>
-<p>插入和 2-3 树一样：像 BST 那样往下找到叶子，按顺序放进去；结点里的键达到 m 个就<strong>分裂</strong>，中间的键提到父结点，左右两半成为两个结点，父结点满了再往上分裂，根分裂时长出新根。例如 5 阶 B 树的叶子 [10 20 30 40] 插入 25，变成 5 个键 [10 20 25 30 40]，中间的 25 上移，留下 [10 20] 和 [30 40]。</p>
+<p>找 50：50 夹在 40 和 60 之间，走第 3 个孩子。再看分裂：叶子 [10 20 30 40] 插入 25，变成 5 个键 [10 20 25 30 40]，超了；中间的 25 上移，剩下 [10 20] 和 [30 40]。</p>
 
 <table>
 <thead><tr><th>阶 m</th><th>每个结点的键</th><th>孩子</th><th>名字</th></tr></thead>
@@ -28,32 +33,30 @@
 
 <div class="callout key" data-label="考点">
 <p><strong>阶数数的是孩子，不是键</strong>：m 阶 = 最多 m 个孩子 = 最多 m − 1 个键。<strong>2-3 树 = 3 阶 B 树，2-3-4 树 = 4 阶 B 树。</strong></p>
-<p><strong>没有 2 阶 B 树</strong>：每个结点 1 个键就是 BST，拆不出“中间键 + 左右两半”，没有东西可分裂，平衡只能靠旋转（AVL，见 3.6 AVL 旋转）。</p>
+<p><strong>没有 2 阶 B 树</strong>：每个结点 1 个键就是 BST，拆不出“中间键 + 左右两半”，平衡只能靠旋转（AVL，见 3.6 AVL 旋转）。</p>
 </div>
 
-<h2>为什么把结点做大</h2>
-<p>BST 的每个结点单独 malloc，孩子可能在内存的任意位置，往下走一层就要按指针去别处取数据。树大到放在磁盘上时，每跟一次指针都可能要读一块新的磁盘块，比读内存慢几个数量级。在内存里也类似：连续数组能整块进 CPU 缓存（cache），零散的结点容易缓存未命中。</p>
-<p>B 树的一个结点是一段连续数组，正好一块。读进来一次就能比较很多次，树也矮得多。以 n = 10⁶ 个键为例：</p>
+<h2>B 树让查找变快了吗</h2>
+<p>先看树有多矮。以 n = 10⁶ 个键为例：</p>
 <ul>
-<li>平衡 BST：h 层最多放 2<sup>h</sup> − 1 个键，2<sup>19</sup> − 1 = 524287 &lt; 10⁶ ≤ 2<sup>20</sup> − 1，<strong>至少 20 层</strong>，查找最坏要读 20 个散在各处的结点。</li>
-<li>256 阶 B 树：h 层最多放 256<sup>h</sup> − 1 个键，256² − 1 = 65535 &lt; 10⁶ ≤ 256³ − 1 ≈ 1.7 × 10⁷，<strong>3 层就够</strong>，查找只读 3 块。</li>
+<li>平衡 BST：h 层最多放 2<sup>h</sup> − 1 个键，2<sup>19</sup> − 1 = 524287 不够，<strong>至少 20 层</strong>，最坏读 20 个散在各处的结点。</li>
+<li>256 阶 B 树：h 层最多放 256<sup>h</sup> − 1 个键，256² − 1 = 65535 不够，256³ − 1 ≈ 1.7 × 10⁷ 够了，<strong>3 层</strong>，只读 3 块。</li>
 </ul>
-
-<h2>B 树改变复杂度类吗？</h2>
-<p>课上的投票题：结点里的键变多、树变矮，查找的复杂度类会变好吗？<strong>不会，仍是 O(log n)</strong>。查找代价 = 层数 × 每层在结点里的工作：</p>
+<p>那复杂度类变好了吗？这是课上的投票题，答案是<strong>没有，仍是 O(log n)</strong>。查找代价 = 层数 × 每层在结点里的工夫：</p>
 <ul>
-<li><strong>层数</strong>约 log<sub>m</sub> n = log n / log m（换底公式，公式表上有）。m 是设计时定下的常数，所以层数仍是 Θ(log n)；分裂保证除根外每个结点至少约半满，最坏也只有约 log<sub>m/2</sub> n 层。</li>
-<li>结点内<strong>线性查找</strong>：每层 O(m)，共 O(m · log n / log m)。</li>
-<li>结点内<strong>二分查找</strong>（键是有序数组）：每层 O(log m)，共 O(log m · log n / log m) = <strong>O(log n)</strong>。</li>
+<li><strong>层数</strong>约 log<sub>m</sub> n = log n / log m（换底公式）。m 是定好的常数，除以常数还是 Θ(log n)。</li>
+<li><strong>每层</strong>：结点里最多 m − 1 个键，线性查找 O(m)；它是有序数组，也可以二分查找（binary search），O(log m)。</li>
+<li>用二分时总共 O(log m × log n / log m) = <strong>O(log n)</strong>，log m 正好约掉。</li>
 </ul>
-<p>代回上面的例子：256 阶 B 树每个结点最多 255 个键，二分查找最多比较 8 次，3 层共约 24 次，并不比 BST 的 20 次少。<strong>减少的是读块、跟指针的次数（20 → 3），比较次数没有减少</strong>：层数省下的时间都花在了结点内部的查找上。</p>
+<p>代回数字：255 个键二分最多比较 8 次，3 层共约 24 次，并不比 BST 的 20 次少。<strong>省下的是读块、跟指针的次数（20 → 3），比较次数没有省。</strong></p>
 
 <div class="callout key" data-label="考点">
-<p>“B 树能否改进查找的复杂度类？”<strong>不能：层数 log₂ n → log<sub>m</sub> n 只少了常数倍，结点内又多花 O(log m) 或 O(m)，总体仍是 O(log n)。</strong>真正的好处是访存：跟指针、读磁盘块的次数少得多。</p>
+<p>“B 树能否改进查找的复杂度类？”<strong>不能：层数 log₂ n → log<sub>m</sub> n 只少了常数倍，结点内又多花 O(log m) 或 O(m)，总体仍是 O(log n)。</strong>真正的好处在访存：跟指针、读磁盘块的次数少得多。</p>
 </div>
 
-<h2>BST 里找后继要走整个树高</h2>
-<p><strong>后继（successor）</strong>是比给定键大的键中最小的那个。课上的 BST（再插入 17、71）：</p>
+<h2>B+ 树：数据放进叶子，叶子串成链</h2>
+<p>再回到字典。查“所有以 app 开头的词”，你不会每个词都回索引重查，而是翻到第一个，再往后一页页读下去。</p>
+<p>BST 做不到这一点。找<strong>后继（successor）</strong>，也就是比它大的键里最小的那个，要在树里上下走。看课上的 BST（再插入 17、71）：</p>
 <pre><code class="lang-text">            32
           /    \\
         14      53
@@ -62,19 +65,19 @@
          /      \\    \\
        17        50   71</code></pre>
 <ul>
-<li>28 的后继：28 没有右孩子，只能往上。28 是 14 的右孩子，14 更小，继续往上；14 是 32 的左孩子，<strong>后继是 32</strong>。需要 parent 指针（或查找时记下的路径），往上走了 2 层。</li>
-<li>32 的后继：32 有右子树，后继是其中最小的键：先到 53，再往左到 42，<strong>后继是 42</strong>，往下走了 2 层。</li>
+<li>28 的后继：28 没有右孩子，只能往上。先回到 14，比 28 小，不是；再上到 32，<strong>后继是 32</strong>。往上走了 2 层，要有 parent 指针。</li>
+<li>32 的后继：在右子树里找最小的，从 53 往左走到 42，<strong>后继是 42</strong>，往下走了 2 层。</li>
 </ul>
-<p>最坏情况两种都要走一整个树高，<strong>BST 找一次后继是 O(height)</strong>。范围查询（找出 [a, b] 内的所有键，数据库里叫过滤）要一个接一个地找后继，每一步都可能这样上下来回。普通 B 树也一样：内部结点里一个键的后继，在它右边那棵子树最左的叶子里。</p>
-
-<h2>B+ 树：数据全在叶子，叶子连成链表</h2>
-<p>B+ 树在 B 树上改了三点：</p>
+<p>最坏要走一整个树高，<strong>BST 找一次后继是 O(height)</strong>。范围查询（range query，找出 [a, b] 里的所有键，数据库里叫过滤）要一个接一个找后继，就得在树里来回跑。普通 B 树也有同样的问题。</p>
+<p>简单说，<strong>B+ 树就是把数据全放到最底层、再把最底层串成链表的 B 树</strong>。它在 B 树上改了三点：</p>
 <ol>
-<li><strong>内部结点只存键</strong>，作为路标指示往哪个孩子走，不存数据；</li>
-<li><strong>所有数据（记录）都在叶子里</strong>；</li>
-<li><strong>叶子之间用 next 指针按从小到大连成链表</strong>。</li>
+<li><strong>内部结点只存键</strong>，只当路标，像字典的索引页；</li>
+<li><strong>所有数据（记录）都在叶子里</strong>，像正文页；</li>
+<li><strong>叶子之间用 next 指针按从小到大串起来</strong>，像正文页一页接一页。</li>
 </ol>
-<p>下图是存 10 个键的 3 阶 B+ 树（内部结点最多 3 个孩子，叶子最多 2 个键）。这里约定路标等于它右边子树里最小的键，<strong>查找键 &lt; 路标往左，≥ 路标往右</strong>。</p>
+
+<h2>看个例子：在 B+ 树上做范围查询</h2>
+<p>把同样 10 个键存进 3 阶 B+ 树（内部结点最多 3 个孩子，叶子最多 2 个键），得到下图。这里约定路标等于它右边子树里最小的键，<strong>查找键 &lt; 路标往左，≥ 路标往右</strong>。</p>
 
 <figure class="fig">
 <svg viewBox="0 0 592 226" width="592" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="3 阶 B+ 树：内部结点只存路标，叶子用 next 指针相连；范围查询 [17, 50] 先下到叶子再沿叶子扫描">
@@ -132,15 +135,23 @@
 <figcaption>橙色是查找 17 的路径，绿色是范围 [17, 50] 扫到的键和用到的 next 指针，红色的 53 超过上界，扫描到此为止。路标 17、32、50、64 在叶子里又各存了一次。</figcaption>
 </figure>
 
-<ul>
-<li><strong>查找 28</strong>（课上的例子）：28 &lt; 32 往左；28 ≥ 17 往右，到叶子 [17 28]。找 32 也要走到叶子：根里的 32 只是路标，32 ≥ 32 往右，32 &lt; 50 往左，到 [32 42]。</li>
-<li><strong>28 的后继</strong>：28 是叶子 [17 28] 的最后一个键，沿 next 一步到 [32 42]，后继是 32，<strong>O(1)</strong>，不用回到上层。</li>
-<li><strong>范围查询 [17, 50]</strong>：先像查找 17 一样走到叶子 [17 28]，O(log n)；然后沿叶子往右扫：17、28，next，32、42，next，50，遇到 53 &gt; 50 停。总代价 <strong>O(log n + k)</strong>，k 是结果个数。同一查询在上面的 BST 里逐个找后继共走 11 条边，B+ 树只跟 4 次指针（往下 2 次，next 2 次）。</li>
-</ul>
+<h3>查找 28 和 32</h3>
+<p>找 28（课上的例子）：在根 [32]，28 &lt; 32，往左；在 [17]，28 ≥ 17，往右，到叶子 [17 28]，找到。</p>
+<p>找 32 也要一路走到叶子。根里的 32 只是路标，不带数据：32 ≥ 32 往右，32 &lt; 50 往左，到叶子 [32 42] 才拿到记录。<strong>B+ 树的查找总要走到叶子。</strong></p>
+
+<h3>后继和范围查询 [17, 50]</h3>
+<p>28 的后继：28 是叶子 [17 28] 的最后一个键，沿 next 一步到 [32 42]，后继是 32，<strong>O(1)</strong>，不用回到上层。</p>
+<p>范围查询 [17, 50] 分两步：</p>
+<ol>
+<li><strong>往下走</strong>：像查找 17 一样走到叶子 [17 28]，O(log n)。</li>
+<li><strong>往右扫</strong>：输出 17、28；next 到 [32 42]，输出 32、42；next 到 [50 53]，输出 50；遇到 53 &gt; 50，停。</li>
+</ol>
+<p>总代价 <strong>O(log n + k)</strong>，k 是结果个数。这里只跟了 4 次指针（往下 2 次，next 2 次）；在上面的 BST 里逐个找后继要走 11 条边。</p>
 
 <iframe class="anim-frame" src="blog/blog_data/dsa-btree-bplus/anims/bplus-range.html" loading="lazy" style="height: 500px;" title="B+ 树范围查询与 BST 逐个找后继"></iframe>
-<p class="anim-caption">选范围（或自己输入上下界）后逐步播放；切到 BST 看同一查询要在树里上下走多少条边。</p>
+<p class="anim-caption">默认就是 [17, 50]：逐步播放，看查询先往下到叶子，再沿 next 往右扫。再点“BST”，看同一查询要上下走多少条边。</p>
 
+<h2>B 树和 B+ 树的区别</h2>
 <table>
 <thead><tr><th></th><th>B 树</th><th>B+ 树</th></tr></thead>
 <tbody>
@@ -151,125 +162,52 @@
 <tr><td>空间</td><td>每个键存一次</td><td>路标键多存一次，叶子多一个 next 指针</td></tr>
 </tbody>
 </table>
-<p>多花一点空间，换来快速的“下一个”和范围扫描，所以<strong>数据库的索引常用 B+ 树</strong>：既要按键查一条记录，也要做“年龄在 20 到 30 之间”这类过滤。</p>
+<p>多花一点空间，换来快速的“下一个”和范围扫描。数据库既要按键查一条记录，也常做“年龄在 20 到 30 之间”这类过滤，所以<strong>数据库索引常用 B+ 树</strong>。</p>
 
-<h2>C 代码：B+ 树的范围查询</h2>
-<p>同一个结构体表示内部结点和叶子。真实系统的叶子存（键, 记录）对，这里只存键。</p>
-<pre><code>#include &lt;stdio.h&gt;
-#define ORDER 3                     /* 每个结点最多 ORDER 个孩子 */
-
-typedef struct bpnode bpnode_t;
-struct bpnode {
-    int is_leaf;                    /* 1 = 叶子，0 = 内部结点 */
-    int nkeys;                      /* 现有键数，最多 ORDER - 1 */
-    int keys[ORDER - 1];            /* 从小到大；内部结点里只是路标 */
-    bpnode_t *child[ORDER];         /* 内部结点用：nkeys + 1 个孩子 */
-    bpnode_t *next;                 /* 叶子用：右边那片叶子，最后一片为 NULL */
-};
-
-/* 从根走到 key 所在（或应在）的叶子：key &gt;= 路标就往右 */
-bpnode_t *find_leaf(bpnode_t *t, int key) {
-    while (!t-&gt;is_leaf) {
-        int i = 0;
-        while (i &lt; t-&gt;nkeys &amp;&amp; key &gt;= t-&gt;keys[i]) {
-            i++;
-        }
-        t = t-&gt;child[i];            /* 每层一次指针跳转 */
-    }
-    return t;
-}
-
-/* 从小到大打印 [lo, hi] 内的键，返回个数 */
-int range_query(bpnode_t *root, int lo, int hi) {
-    int count = 0;
-    bpnode_t *leaf;
-    for (leaf = find_leaf(root, lo); leaf != NULL; leaf = leaf-&gt;next) {
-        for (int i = 0; i &lt; leaf-&gt;nkeys; i++) {
-            if (leaf-&gt;keys[i] &gt; hi) {
-                return count;       /* 后面的键只会更大，停 */
-            }
-            if (leaf-&gt;keys[i] &gt;= lo) {
-                printf("%d\\n", leaf-&gt;keys[i]);
-                count++;
-            }
-        }
-    }
-    return count;                   /* 走完最后一片叶子 */
-}</code></pre>
-<p><code>find_leaf</code> 每层跳一次指针，O(height)；之后每片叶子只用一次 <code>next</code>。起点叶子里可能一个符合的键都没有（练习 3），所以 <code>keys[i] &lt; lo</code> 时是跳过而不是停。</p>
+<iframe class="video-frame" src="https://www.youtube-nocookie.com/embed/aZjYr87r1b8" title="10.2  B Trees and B+ Trees. How they are useful in Databases" loading="lazy" allowfullscreen></iframe>
+<p class="anim-caption">视频：Abdul Bari《B Trees and B+ Trees. How they are useful in Databases》（英文，约 40 分钟），从磁盘块和数据库索引讲到 B 树、B+ 树。多级索引等细节本课不考，看懂结构和用途就够。</p>
 
 <h2>考试怎么考</h2>
 <ul>
-<li><strong>选择 / 多选</strong>：阶数的含义；2-3 树、2-3-4 树是几阶；有没有 2 阶 B 树；叶子是否同深度；B 树和 B+ 树的区别（上表各行）。</li>
-<li><strong>“B 树能否改进查找的复杂度类？”</strong>：第 12 周复习时专门提到。答“不能”，写出层数 log n / log m 和结点内 O(m) 或 O(log m) 两部分，再说明好处在访存。</li>
-<li><strong>小计算</strong>：给 n 和阶数求最少层数，和 BST 比读块次数（练习 2）；在给定的 B+ 树上走一遍范围查询（练习 3）。</li>
-<li><strong>要背</strong>：定义和两个考点框里的结论。公式表只给换底公式 log<sub>a</sub> x = log<sub>b</sub> x / log<sub>b</sub> a。</li>
+<li><strong>选择 / 多选</strong>：阶数的含义、2-3 树和 2-3-4 树是几阶、有没有 2 阶、B 树和 B+ 树的区别。</li>
+<li><strong>概念题</strong>：“B 树能否改进查找的复杂度类？”第 12 周复习专门提到。答“不能”，写出层数和结点内查找两部分，再说好处在访存。</li>
+<li><strong>小计算</strong>：给 n 和阶数求最少层数；在给定的 B+ 树上走一遍范围查询。</li>
 </ul>
+<p>公式表只给换底公式 log<sub>a</sub> x = log<sub>b</sub> x / log<sub>b</sub> a，其余要自己记。</p>
+
+<h3>例题 1：多选</h3>
+<p>下列哪些正确？A. m 阶 B 树的每个结点最多有 m 个键；B. 2-3 树是 3 阶 B 树，2-3-4 树是 4 阶 B 树；C. 2 阶 B 树每个结点 1 个键，靠分裂保持平衡；D. B 树的所有叶子在同一深度；E. 用 256 阶 B 树代替平衡 BST，查找从 O(log n) 变成更好的 O(log₂₅₆ n)；F. B+ 树的内部结点只存键，查找总要走到叶子；G. 同样的数据，B+ 树比 B 树省空间。</p>
+<p><strong>答案：B、D、F。</strong></p>
+<ul>
+<li>A 错：m 阶是最多 m 个<strong>孩子</strong>，键最多 m − 1 个。</li>
+<li>C 错：没有 2 阶 B 树，1 个键的结点就是 BST，平衡要靠旋转。</li>
+<li>E 错：log₂₅₆ n = log₂ n / 8，只差常数倍，仍是 O(log n)；何况结点内还要查找。</li>
+<li>G 错：路标键在叶子里又存一次，叶子还多 next 指针，B+ 树更占空间。</li>
+</ul>
+
+<h3>例题 2：算层数</h3>
+<p>一个磁盘块正好放下 1000 阶 B 树的一个结点（最多 999 个键），要存 n = 10⁸ 个键。B 树和平衡 BST 各至少几层、最坏各读几块？结点内用二分，B 树约比较几次？复杂度类变了吗？</p>
+<ul>
+<li><strong>B 树</strong>：h 层最多 1000<sup>h</sup> − 1 个键，1000² − 1 = 999999 不够，1000³ − 1 = 999999999 够，<strong>至少 3 层，读 3 块</strong>。</li>
+<li><strong>BST</strong>：2<sup>26</sup> − 1 = 67108863 不够，2<sup>27</sup> − 1 = 134217727 够，<strong>至少 27 层</strong>，最坏 27 个结点，可能各在不同的块。</li>
+<li><strong>比较次数</strong>：999 个键二分最多 10 次（2¹⁰ = 1024 &gt; 999），3 层约 30 次，和 BST 的 27 次差不多。</li>
+<li><strong>复杂度类</strong>：没变，都是 O(log n)。log₁₀₀₀ n = log₂ n / log₂ 1000，结点内二分又乘回 log₂ 1000。省下的是读块（27 → 3），不是比较。</li>
+</ul>
+
 <div class="callout warn" data-label="易错">
 <ul>
 <li>把 O(log<sub>m</sub> n) 当成更好的复杂度类，或只算层数、忘了结点内查找的代价。</li>
-<li>以为普通 B 树的叶子也连成链表，或 B+ 树的查找能停在内部结点。</li>
-<li>范围查询的起点叶子里可能没有结果，要接着沿 next 走，不能直接判“空”。</li>
-<li>2-3-4 树只考概念、红黑树不考；2-3 树的插入分裂要会画（见 3.7）。</li>
+<li>以为普通 B 树的叶子也串成链表，或 B+ 树的查找能停在内部结点。</li>
+<li>范围查询的起点叶子里可能没有结果：在上图查 [30, 60]，先到的叶子 [17 28] 两个键都 &lt; 30，要接着沿 next 走，得到 32 42 50 53，不能直接判“空”。</li>
 </ul>
 </div>
 
-<h2>练习</h2>
-<details class="qa">
-<summary class="ripple-surface">1. 多选：下列哪些正确？A. m 阶 B 树的每个结点最多有 m 个键　B. 2-3 树是 3 阶 B 树，2-3-4 树是 4 阶 B 树　C. 2 阶 B 树每个结点 1 个键，靠分裂保持平衡　D. B 树的所有叶子在同一深度　E. 用 256 阶 B 树代替平衡 BST，查找从 O(log n) 变成更好的复杂度类 O(log₂₅₆ n)　F. B+ 树的内部结点只存键，查找总要走到叶子　G. 同样的数据，B+ 树比 B 树省空间</summary>
-<div class="qa__body">
-<p>选 <strong>B、D、F</strong>。</p>
+<h2>小结</h2>
 <ul>
-<li>A 错：m 阶是最多 m 个<strong>孩子</strong>，键最多 m − 1 个。</li>
-<li>C 错：没有 2 阶 B 树。每个结点 1 个键就是 BST，没有可分裂的结点，平衡要靠旋转。</li>
-<li>E 错：log₂₅₆ n = log₂ n / 8，只差常数倍，仍是 O(log n)；何况每层结点内还要查找。</li>
-<li>G 错：B+ 树的路标键在叶子里又存一次，叶子还多 next 指针，更占空间。</li>
+<li>m 阶 B 树：最多 m 个孩子、m − 1 个键，叶子同深度，满了就分裂。2-3 树 = 3 阶，2-3-4 树 = 4 阶，没有 2 阶。</li>
+<li>把结点做大是为了少跟指针、少读磁盘块，层数约 log n / log m。</li>
+<li>B 树<strong>不改变</strong>查找的复杂度类：层数少了常数倍，结点内又要 O(log m) 或 O(m)，仍是 O(log n)。</li>
+<li>BST 找后继 O(height)；B+ 树数据全在叶子、叶子串成链，后继 O(1)，范围查询 O(log n + k)。</li>
+<li>B+ 树多花空间换快速的范围扫描，数据库索引常用它。</li>
 </ul>
-</div>
-</details>
-
-<details class="qa">
-<summary class="ripple-surface">2. 一个磁盘块正好放下 1000 阶 B 树的一个结点（最多 999 个键），要存 n = 10⁸ 个键。(a) B 树至少几层？平衡 BST 至少几层？(b) 查找最坏各读几块？(c) 结点内用二分查找，B 树查找最多约比较几次？(d) 复杂度类变了吗？</summary>
-<div class="qa__body">
-<p>(a) h 层的 1000 阶 B 树最多放 1000<sup>h</sup> − 1 个键：1000² − 1 = 999999 &lt; 10⁸ ≤ 1000³ − 1 = 999999999，所以<strong>至少 3 层</strong>。平衡 BST：2<sup>26</sup> − 1 = 67108863 &lt; 10⁸ ≤ 2<sup>27</sup> − 1 = 134217727，<strong>至少 27 层</strong>。</p>
-<p>(b) 每层读一块：B 树 3 块，BST 最坏 27 个结点（每个都可能在不同的块）。</p>
-<p>(c) 999 个键的有序数组，二分查找最多比较 10 次（2¹⁰ = 1024 &gt; 999），3 层共约 30 次，和 BST 的 27 次差不多。</p>
-<p>(d) 没变，都是 O(log n)：log₁₀₀₀ n = log₂ n / log₂ 1000，只差常数倍，结点内二分又乘回 log₂ 1000。省下的是读块次数（27 → 3），不是比较次数。</p>
-</div>
-</details>
-
-<details class="qa">
-<summary class="ripple-surface">3. 在正文图中的 B+ 树上做范围查询 [30, 60]：依次访问哪些结点？输出什么？一共跟了几次指针？</summary>
-<div class="qa__body">
-<ul>
-<li>根 [32]：30 &lt; 32，往左到 [17]。</li>
-<li>[17]：30 ≥ 17，往右到叶子 [17 28]。</li>
-<li>[17 28]：17、28 都 &lt; 30，跳过。<strong>起点叶子里一个结果都没有</strong>：30 落在 28 和 32 之间，路标 32 把它导向了左边。</li>
-<li>next 到 [32 42]：输出 32、42。</li>
-<li>next 到 [50 53]：输出 50、53。</li>
-<li>next 到 [64 71]：64 &gt; 60，停。</li>
-</ul>
-<p>访问 6 个结点：[32]、[17]、[17 28]、[32 42]、[50 53]、[64 71]；输出 <strong>32 42 50 53</strong>；跟指针 <strong>5 次</strong>（往下 2 次，next 3 次）。结果全在根的右子树里，但不需要回到根，沿叶子链表走过去就行。</p>
-</div>
-</details>
-
-<details class="qa">
-<summary class="ripple-surface">4. 用正文的结构体写 int bp_successor(bpnode_t *root, int x, int *succ)：找比 x 大的最小键，存入 *succ 并返回 1；没有则返回 0。x 不一定在树里。代价是多少？</summary>
-<div class="qa__body">
-<pre><code>int bp_successor(bpnode_t *root, int x, int *succ) {
-    bpnode_t *leaf;
-    for (leaf = find_leaf(root, x); leaf != NULL; leaf = leaf-&gt;next) {
-        for (int i = 0; i &lt; leaf-&gt;nkeys; i++) {
-            if (leaf-&gt;keys[i] &gt; x) {
-                *succ = leaf-&gt;keys[i];
-                return 1;
-            }
-        }
-    }
-    return 0;                       /* x 不小于最大的键：没有后继 */
-}</code></pre>
-<p>在图中的树上：x = 28 得 32（沿 next 到下一片叶子），x = 30 也得 32，x = 14 得 17，x = 71 返回 0。</p>
-<p>代价：<code>find_leaf</code> 是 O(log n)。之后最多看两片叶子：<code>find_leaf</code> 停下的叶子里没有更大的键时，下一片叶子的第一个键不小于把 x 引向左边的那个路标，而路标 &gt; x，所以它就是答案。总共 O(log n)；已经站在叶子上时只要 O(1)。</p>
-</div>
-</details>
 `;

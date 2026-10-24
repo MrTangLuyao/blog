@@ -15,14 +15,14 @@
         "en": "8.1 Guest Lecture: Building an Order Book"
       },
       "excerpt": {
-        "zh": "订单簿 · L3 消息 add / modify · 哈希表 + 有序映射 · 为什么不用堆 · AVL 设计与稳定指针 · 有序数组与反转数组 · P50 / P99 · Big-O 只是参考",
-        "en": "Order book · L3 add / modify messages · hash map + sorted map · why not a heap · AVL design & stable pointers · sorted vs reversed array · P50 / P99 · Big-O is only a guide"
+        "zh": "L3 行情 · 哈希表 + 有序映射 · 为什么不用堆 · AVL 存价位指针 · 有序数组最优价放末尾 · 缓存局部性 · P50 / P99",
+        "en": "L3 market data · hash map + sorted map · why not a heap · AVL with level pointers · sorted array with best price at the end · cache locality · P50 / P99"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 11,
       "lang": "zh"
     },
     {
@@ -34,14 +34,14 @@
         "en": "8.2 Cheat Sheet I: Dictionaries, Queues & PQs"
       },
       "excerpt": {
-        "zh": "先定位再修改 · 字典九种实现 × find/insert/delete/build · 最好/平均/最坏与空间 · 有序数组插入最好 Θ(log n) · 栈与队列（forward/backward/循环数组） · 优先队列五种实现 · 堆下标公式",
-        "en": "Locate then modify · nine dictionary implementations × find/insert/delete/build · best/average/worst and space · sorted-array insert best Θ(log n) · stacks & queues (forward/backward/circular) · priority-queue implementations · heap index formulas"
+        "zh": "定位 + 修改 · 有序数组插入最好 Θ(log n) · BST 最坏 O(n) · 哈希表平均与最坏 · 队列 forward / backward / 循环数组 · 优先队列实现 · 堆下标公式",
+        "en": "Locate + modify · sorted-array insert best Θ(log n) · BST worst O(n) · hash table average vs worst · queue forward / backward / circular · priority queue implementations · heap index formulas"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 8,
+      "readingTime": 15,
       "lang": "zh"
     },
     {
@@ -53,14 +53,14 @@
         "en": "8.3 Cheat Sheet II: Sorting & Graph Algorithms"
       },
       "excerpt": {
-        "zh": "排序总表 · 稳定 / 原地 / 自适应 · 图算法总表 · 邻接表 vs 邻接矩阵 · Dijkstra/Prim 换 PQ · 稀疏与稠密 · 搜索最优性 · 递推式 → Θ · 主定理 a、b、d",
-        "en": "Sorting table · stable / in-place / adaptive · graph algorithms table · adjacency list vs matrix · Dijkstra/Prim by PQ · sparse vs dense · search optimality · recurrences → Θ · Master Theorem a, b, d"
+        "zh": "排序总表 · 稳定 / 原地 / 自适应 · 邻接表 vs 邻接矩阵 · Dijkstra / Prim 换 PQ · 搜索最优性 · 主定理 a、b、d",
+        "en": "Sorting table · stable / in-place / adaptive · adjacency list vs matrix · Dijkstra / Prim with different PQs · search optimality · Master Theorem a, b, d"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 8,
+      "readingTime": 13,
       "lang": "zh"
     },
     {
@@ -72,14 +72,14 @@
         "en": "8.4 Common Exam Traps"
       },
       "excerpt": {
-        "zh": "二分查找不是 Θ(log n) · 在 X 后插入的最好情况 · 任意 BST 查找 O(n) · AVL 要查每个结点 · 2n + 1 次调用 · 100 槽哈希函数 · 堆只比父子 · 排序稳定与原地 · BFS 入队即标记 · 负权与负环 · Floyd 的 k 在最外层 · MST ≠ 最短路 · 拓扑序不唯一",
-        "en": "Binary search is not Θ(log n) · best case of insert-after-X · any BST find is O(n) · AVL checks every node · 2n + 1 calls · hash function for 100 slots · heaps compare parent and child only · stable vs in-place sorts · BFS marks on enqueue · negative edges vs negative cycles · Floyd-Warshall keeps k outermost · MST ≠ shortest paths · many topological orders"
+        "zh": "O/Ω/Θ 与最好最坏情况 · 最好情况算同一输入 · 均摊扩容 · BST 最坏 O(n) · AVL 要查每个结点 · 堆兄弟不比较 · 排序稳定与原地 · BFS / Dijkstra / Floyd-Warshall 的前提 · 拓扑序不唯一",
+        "en": "O/Ω/Θ vs best/worst case · best case means one input · amortised growth · any BST is O(n) worst · AVL checks every node · heap siblings never compared · stability & in-place · preconditions of BFS / Dijkstra / Floyd-Warshall · many topological orders"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 8,
+      "readingTime": 13,
       "lang": "zh"
     },
     {
@@ -91,14 +91,14 @@
         "en": "8.5 C Patterns for Coding Questions"
       },
       "excerpt": {
-        "zh": "纯文本框答题 · 链表 prev/curr 模板 · BST 递归 · AVL 旋转 · 堆 siftup/siftdown · 循环队列 + BFS · 回文双指针 · malloc + strcpy 修正 · 内存清单",
-        "en": "Plain-text answers · Linked-list prev/curr · BST recursion · AVL rotations · Heap sift up/down · Circular queue + BFS · Two-pointer palindrome · malloc + strcpy fix · Memory checklist"
+        "zh": "链表插入与删除 · BST 与 AVL 旋转 · 堆 siftdown · 循环队列与 BFS · 字符串与 malloc",
+        "en": "Linked-list insert and delete · BST and AVL rotations · heap sift-down · circular queue and BFS · strings and malloc"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 12,
+      "readingTime": 17,
       "lang": "zh"
     },
     {
@@ -110,14 +110,14 @@
         "en": "8.6 Answering Algorithm-Design Questions"
       },
       "excerpt": {
-        "zh": "五步答题模板 · 最小肥度路径（max 版 Dijkstra / MST）· 场景→算法对照表 · 不连通图的 Prim · BFS 判环 · 堆求最小 k 个 · 套利即负权环",
-        "en": "Five-step answer template · minimum-fatness path (max-Dijkstra / MST) · scenario-to-algorithm map · Prim on disconnected graphs · BFS cycle detection · k smallest with a heap · arbitrage as a negative cycle"
+        "zh": "答题五步 · 最小肥度路径（max 版 Dijkstra / MST） · 不连通图的 Prim · BFS 判环 · 最小 k 个数 · 货币套利与负权环",
+        "en": "Five-step answer template · Min-fatness path (max-Dijkstra / MST) · Prim on a disconnected graph · Cycle detection with BFS · k smallest with a heap · Currency arbitrage as a negative cycle"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 11,
       "lang": "zh"
     },
     {
@@ -129,14 +129,14 @@
         "en": "8.7 Past Papers Walkthrough (2015 / 2016)"
       },
       "excerpt": {
-        "zh": "C 编程 · 复杂度填空 · 堆 · 哈希 · 旋转 · 图算法 · 排序 · 官方解答勘误",
-        "en": "C coding · complexity fill-ins · heaps · hashing · rotations · graph algorithms · sorting · corrections to the official solutions"
+        "zh": "C 编程题 · 复杂度填空 · 自底向上建堆 · d 叉堆下标 · 线性探测 vs 双重哈希 · 旋转 · Dijkstra / Prim 复杂度 · 拓扑排序 · 官方答案勘误",
+        "en": "C coding questions · complexity fill-ins · bottom-up heap building · d-ary heap indices · linear probing vs double hashing · rotations · Dijkstra / Prim complexity · topological sort · fixes to the official solutions"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 18,
+      "readingTime": 26,
       "lang": "zh"
     }
   ]

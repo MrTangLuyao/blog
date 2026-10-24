@@ -1,27 +1,53 @@
 /* Post body — dsa-omega-theta / zh */
 
 (window.__BLOG_POSTS = window.__BLOG_POSTS || {})['dsa-omega-theta:zh'] = `
-<p class="lead">大 O 只限制函数最多长多快。<strong>大 Ω（Big-Omega）</strong>给出下界（lower bound），说明函数至少长多快；<strong>大 Θ（Big-Theta）</strong>同时给出上界（upper bound）和下界，把函数夹在同一个 g(n) 的两个常数倍之间，叫紧确界（tight bound）。</p>
+<p class="lead">大 O 只说一个函数“最多长多快”。大 Ω（Big-Omega）说“至少长多快”，是下界；大 Θ（Big-Theta）从上下两边一起夹住，是紧确界。</p>
 
-<h2>Ω：把不等号反过来</h2>
-<p>顺序扫描找最大值：第一个数当作当前最大值，后面 n − 1 个数各比较一次，比较次数 T(n) = n − 1。要说明它“至少是线性的”，就要找 n 的一个常数倍垫在它下面。取 1·n 不行，n − 1 ≥ n 对任何 n 都不成立。取一半：n − 1 ≥ n/2 等价于 n ≥ 2。所以取 c₀ = 1/2、n₀ = 2，对所有 n &gt; n₀ 都有 n − 1 ≥ ½·n，即 n − 1 ∈ Ω(n)。</p>
+<h2>从一个场景说起</h2>
+<p>你帮图书馆把 n 箱书搬上三楼。一箱最快 1 分钟，累了歇一歇，最慢也就 3 分钟。管理员问：一共要多久？</p>
+<p>你可以说“<strong>最多 3n 分钟</strong>”。这是上界，就是 1.4 讲的大 O。</p>
+<p>可“最多 n² 分钟”“最多一整年”也都没说错。光给上界，对方还是不知道到底有多慢。所以你补一句：“<strong>至少也要 n 分钟</strong>。”这是下界。</p>
+<p>两句合起来，总时间就夹在 n 和 3n 之间。箱子多一倍，时间也大约多一倍，快不到哪去，也慢不到哪去。增长速度被钉死在“线性”这一档。</p>
+<p>“至少”那句就是 Ω，两句合起来就是 Θ。</p>
 
+<h2>它是什么</h2>
+<p>简单说：<strong>f(n) ∈ Ω(g(n)) 的意思是，n 足够大以后，f(n) 至少是 g(n) 的某个常数倍。</strong>它是下界（lower bound）。</p>
+<p><strong>f(n) ∈ Θ(g(n)) 的意思是，n 足够大以后，f(n) 被 g(n) 的两个常数倍一上一下夹住。</strong>它是紧确界（tight bound）。</p>
 <div class="callout key" data-label="考点">
 <p><strong>f(n) ∈ Ω(g(n))</strong> 当且仅当存在常数 c₀ &gt; 0 和 n₀，使得对所有 n &gt; n₀，<strong>f(n) ≥ c₀·g(n)</strong>。</p>
-<p>和大 O 的定义（见 1.4 大 O）只差不等号的方向。c₀ 必须大于 0，但可以小于 1。</p>
+<p><strong>f(n) ∈ Θ(g(n))</strong> 当且仅当存在常数 c₁ &gt; 0、c₂ &gt; 0 和 n₀，使得对所有 n &gt; n₀，<strong>c₁·g(n) ≤ f(n) ≤ c₂·g(n)</strong>。</p>
+<p>两个定义都<strong>不在公式表上</strong>，要背。</p>
 </div>
+<p>对回搬书的场景，拆开看：</p>
+<ul>
+<li><strong>Ω 就是把大 O 的 ≤ 换成 ≥。</strong>c₀ 是垫在下面的乘数，场景里“每箱至少 1 分钟”的那个 1。它必须大于 0，但经常要取比 1 小的数（下面例 1）。</li>
+<li><strong>Θ 要三个常数</strong>：c₁ 垫在下面（场景里的 1），c₂ 压在上面（场景里的 3），n₀ 还是“从哪儿算起”。</li>
+<li><strong>Θ = O 加 Ω</strong>：f ∈ Θ(g) 当且仅当 f ∈ O(g) 且 f ∈ Ω(g)。证 Θ 就是上下各证一次，两边的 n₀ 不同时取大的那个。</li>
+</ul>
+<p>还有一条常用的性质，叫对偶（duality）：<strong>f ∈ Ω(g) ⇔ g ∈ O(f)</strong>。把 f(n) ≥ c₀·g(n) 两边除以 c₀，就得到 g(n) ≤ (1/c₀)·f(n)。所以“n² ∈ Ω(n)”和“n ∈ O(n²)”说的是同一件事。</p>
 
-<p>课上的例子 n² ∈ Ω(n) 更直接：取 c₀ = 1、n₀ = 1，n &gt; 1 时 n² = n·n ≥ n。</p>
-<p>下界也有松紧之分。n² 同时属于 Ω(n²)、Ω(n)、Ω(log n)、Ω(1)，这些都是真命题。<strong>惯例是报告最大的下界</strong>，这里是 Ω(n²)，正如大 O 报告最近的上界。Ω(1) 对任何至少做一次操作的算法都成立，不提供信息。</p>
+<h2>看个例子</h2>
+<h3>例 1：找最大值，n − 1 ∈ Ω(n)</h3>
+<p>在 n 个数里找最大值：先把第一个数当作当前最大值，后面 n − 1 个数各比较一次。比较次数 f(n) = n − 1。它至少是线性的吗？</p>
+<p>先试 c₀ = 1：要 n − 1 ≥ n，永远差 1，不成立。那就把垫子放低一点，试 c₀ = 1/2：</p>
+<pre><code class="lang-text">n − 1 ≥ n/2  ⇔  n/2 ≥ 1  ⇔  n ≥ 2
+取 c₀ = 1/2，n₀ = 2。对所有 n &gt; 2：n − 1 ≥ ½·n。
+由定义，n − 1 ∈ Ω(n)。</code></pre>
+<p>第 1 行移项化简，看出不等式从 n = 2 起成立；第 2 行亮出常数；第 3 行按定义下结论。下界只要垫得住，垫低一点无妨，所以 c₀ 小于 1 完全合法。</p>
 
-<h3>对偶：f ∈ Ω(g) ⇔ g ∈ O(f)</h3>
-<p>Ω 和 O 互为对偶（duality）。把 f(n) ≥ c₀·g(n) 两边除以 c₀，得到 g(n) ≤ (1/c₀)·f(n)，n₀ 不变，这正是 g ∈ O(f) 的定义；反过来也一样。所以 “n² ∈ Ω(n)” 和 “n ∈ O(n²)” 说的是同一件事。上面的 n − 1 ∈ Ω(n)（c₀ = 1/2）也就给出 n ∈ O(n − 1)，常数是 2。</p>
-
-<h3>证明“不属于”</h3>
-<p>n ∈ Ω(n²) 是假的，用反证法（proof by contradiction）说明。假设存在 c₀ &gt; 0 和 n₀，使所有 n &gt; n₀ 都满足 n ≥ c₀·n²。两边除以 n 得 n ≤ 1/c₀，但 n 可以取得比 n₀ 和 1/c₀ 都大，例如 c₀ = 0.01 时 n = 101 就不满足。<strong>不论 c₀ 多小，总有更大的 n 让不等式失败</strong>，所以这样的常数不存在。由对偶性，这同时证明了 n² ∉ O(n)。</p>
-
-<h2>Θ：从上下两边夹住</h2>
-<p>课上的例子是 T(n) = 2n² + 4。一方面 2n² + 4 ≥ 1·n²；另一方面 n ≥ 1 时 4 ≤ 4n²，所以 2n² + 4 ≤ 2n² + 4n² = 6n²。T(n) 被夹在 n² 和 6n² 之间。两条边界都是 n² 的常数倍，T(n) 的增长率就固定在 n² 这一级：不比 n² 快，也不比 n² 慢。</p>
+<h3>例 2：课上的 2n² + 4 ∈ Θ(n²)</h3>
+<p>要在上下两边各找一个 n² 的常数倍：</p>
+<ul>
+<li><strong>下面</strong>：2n² + 4 显然不小于 n²，c₁ = 1 就够。</li>
+<li><strong>上面</strong>：多出来的 4 是个麻烦。但 n ≥ 1 时 4 ≤ 4n²，可以把它“升级”成 4n²，于是 2n² + 4 ≤ 6n²，c₂ = 6。</li>
+</ul>
+<p>考试这样写：</p>
+<pre><code class="lang-text">要证  2n² + 4 ∈ Θ(n²)
+取 n₀ = 1，c₁ = 1，c₂ = 6。对所有 n &gt; 1：
+  下界  1·n² ≤ 2n² ≤ 2n² + 4
+  上界  2n² + 4 ≤ 2n² + 4n² = 6n²        （n &gt; 1 时 4 ≤ 4n²）
+所以  1·n² ≤ 2n² + 4 ≤ 6·n²，即 2n² + 4 ∈ Θ(n²)。</code></pre>
+<p>第 2 行一次亮出三个常数；第 3 行是 Ω 那一半，第 4 行是 O 那一半；最后一行把两半拼成定义里的夹心不等式。</p>
 
 <figure class="fig">
 <svg viewBox="0 0 520 285" width="520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="f(n) = 2n² + 4 被夹在 n² 和 6n² 之间，n 小于 1 时 f 高于 6n²">
@@ -52,25 +78,25 @@
 <figcaption>2n² + 4 被夹在 n² 与 6n² 之间。n₀ = 1 右边三条线的上下顺序不再改变；左边红色区域里 f 高于 6n²，上界不成立，所以需要 n₀。</figcaption>
 </figure>
 
-<div class="callout key" data-label="考点">
-<p><strong>f(n) ∈ Θ(g(n))</strong> 当且仅当存在常数 c₁ &gt; 0、c₂ &gt; 0 和 n₀，使得对所有 n &gt; n₀，<strong>c₁·g(n) ≤ f(n) ≤ c₂·g(n)</strong>。</p>
-<p>要给出<strong>三个常数</strong>。等价说法：<strong>f ∈ Θ(g) ⇔ f ∈ O(g) 且 f ∈ Ω(g)</strong>，上界和下界各自的 n₀ 取较大的一个即可。</p>
-</div>
+<p>课上的第二个练习 3n + 3 ∈ Θ(n) 一模一样：n ≥ 1 时 n ≤ 3n + 3 ≤ 3n + 3n = 6n，取 n₀ = 1、c₁ = 1、c₂ = 6。</p>
+<p>系数都非负的多项式有固定套路：<strong>n₀ = 1，c₂ = 所有系数之和，c₁ = 最高次项的系数</strong>。课上直接取 c₁ = 1，最高次项系数不小于 1 时也行。带减号的项要另外处理，见后面的例题 1。</p>
 
-<p>考试里的证明写成这样：</p>
-<pre><code class="lang-text">要证  2n² + 4 ∈ Θ(n²)
-取 n₀ = 1, c₁ = 1, c₂ = 6。对所有 n &gt; 1：
-  下界  1·n² ≤ 2n² ≤ 2n² + 4
-  上界  2n² + 4 ≤ 2n² + 4n² = 6n²        （n &gt; 1 时 4 ≤ 4n²）
-所以  1·n² ≤ 2n² + 4 ≤ 6·n²，即 2n² + 4 ∈ Θ(n²)。
-</code></pre>
-<p>课上第二个练习 3n + 3 ∈ Θ(n) 同样处理：n₀ = 1、c₁ = 1、c₂ = 6，因为 n ≤ 3n + 3 ≤ 3n + 3n = 6n。</p>
-<p>系数都非负的多项式有固定套路：<strong>n₀ = 1，c₂ = 所有系数之和</strong>（每一项都放大成最高次幂），c₁ 取最高次项的系数。课上直接取 c₁ = 1，在最高次项系数 ≥ 1 时没问题；系数小于 1 时会失败，例如 n²/2 + n ≥ n² 只在 n ≤ 2 时成立。带减号的项要另外估计（练习 2）。</p>
+<iframe class="video-frame" src="https://www.youtube-nocookie.com/embed/A03oI0znAoc" title="1.8.1 Asymptotic Notations Big Oh - Omega - Theta #1" loading="lazy" allowfullscreen></iframe>
+<p class="anim-caption">视频：Abdul Bari《1.8.1 Asymptotic Notations Big Oh - Omega - Theta #1》（英文）。前半段是大 O（1.4 讲过），后半段讲 Ω 和 Θ 的定义、怎么找常数，看后半段就够。视频里写 n ≥ n₀，课上写 n &gt; n₀，对证明没有影响。</p>
 
-<h2>集合的角度：O 层层嵌套，Θ 互不相交</h2>
-<p>O(g) 是一个函数集合，叫复杂度类（complexity class）。增长慢的函数也被更快的上界盖住，所以 O 类一层套一层：</p>
+<h2>补充：怎么证明“不属于”</h2>
+<p>n ∈ Ω(n²) 是假的。和大 O 一样，举一组不行的常数不算数，要说明<strong>任何</strong>常数都不行。标准写法是反证法（proof by contradiction）：</p>
+<pre><code class="lang-text">假设存在 c₀ &gt; 0 和 n₀，使所有 n &gt; n₀ 都有 n ≥ c₀·n²。
+两边除以 n：所有 n &gt; n₀ 都有 n ≤ 1/c₀。
+但 n 可以取得比 n₀ 和 1/c₀ 都大，矛盾。
+所以这样的常数不存在，n ∉ Ω(n²)。</code></pre>
+<p>直觉是：c₀ 再小也是个固定的正数，n² 涨得比 n 快，c₀·n² 迟早超过 n。比如 c₀ = 0.01 时，n = 101 就有 0.01 × 101² = 102.01 &gt; 101。由对偶性，这同时证明了 n² ∉ O(n)。</p>
+
+<h2>补充：O 类层层嵌套，Θ 类互不相交</h2>
+<p>O(g) 是一个函数集合，叫复杂度类（complexity class）。上界可以很松，所以 O 类一层套一层：</p>
 <p><strong>O(1) ⊂ O(log n) ⊂ O(n) ⊂ O(n log n) ⊂ O(n²) ⊂ O(n³) ⊂ O(2ⁿ) ⊂ O(n!)</strong></p>
-<p>3n + 3 属于 O(n)，因此也属于外面的每一层。Ω 的包含方向相反：Ω(n!) ⊂ … ⊂ Ω(n) ⊂ Ω(1)，所以 n² 也属于 Ω(1)。Θ 类不同：一个函数属于 Θ(n)，就不可能再属于 Θ(n²) 或 Θ(log n)，<strong>不同的 Θ 类互不相交</strong>。</p>
+<p>3n + 3 在 O(n) 里，也就在外面的每一层里。Ω 的方向反过来：Ω(n²) ⊂ Ω(n) ⊂ Ω(1)，所以 n² 也属于 Ω(n) 和 Ω(1)。这些都是真命题，只是太松、没信息，所以约定<strong>报告最紧的上界、最大的下界</strong>。</p>
+<p>Θ 类不一样。一个函数在 Θ(n) 里，就不可能同时在 Θ(n²) 或 Θ(log n) 里：<strong>不同的 Θ 类互不相交</strong>。把每个 Θ 类想成阶梯上的一级台阶，一个函数最多站在一级上。</p>
 
 <figure class="fig">
 <svg viewBox="0 0 540 272" width="540" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="嵌套的 O 类，每一层里有一个不相交的 Θ 类">
@@ -113,9 +139,8 @@
 </figure>
 
 <h3>不是每个函数都有 Θ 界</h3>
-<p>课上的例子：输入长度 n 为偶数时做 n 次操作，为奇数时做 n² 次。写成代码：</p>
-<pre><code>/* 输入长度 n 为偶数时做 n 次操作，奇数时做 n*n 次 */
-long count_ops(int n) {
+<p>课上的例子：输入长度 n 是偶数时做 n 次操作，奇数时做 n² 次。</p>
+<pre><code>long count_ops(int n) {
     long ops = 0;
     if (n % 2 == 0) {
         for (int i = 0; i &lt; n; i++)
@@ -127,98 +152,71 @@ long count_ops(int n) {
     }
     return ops;
 }</code></pre>
+<p>第 3 行用 n % 2 判断奇偶。偶数走第 4–5 行，一层循环，ops 加 n 次；奇数走第 7–9 行，两层循环，ops 加 n × n 次。算出来：</p>
 <table>
 <thead><tr><th>n</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th></tr></thead>
 <tbody><tr><td>T(n)</td><td>1</td><td>2</td><td>9</td><td>4</td><td>25</td><td>6</td><td>49</td><td>8</td></tr></tbody>
 </table>
-<p>每个 n 都满足 n ≤ T(n) ≤ n²，所以 T ∈ O(n²) 且 T ∈ Ω(n)。但 T ∉ O(n)：奇数 n 一旦大于 c₀，就有 n² &gt; c₀·n（c₀ = 10 时 n = 11 就失败）。T ∉ Ω(n²)：偶数 n 一旦大于 1/c₀，就有 n &lt; c₀·n²（c₀ = 0.1 时 n = 12 失败）。<strong>最紧的上界 O(n²) 和最大的下界 Ω(n) 不在同一类，T(n) 不属于阶梯上的任何一个 Θ 类。</strong>（形式上 T ∈ Θ(T) 总成立，但这对比较算法没有帮助。）</p>
-<p>T(n) 的上下界不同，原因只在 n 的奇偶，和输入怎么排列无关：同一个 n 只有一种代价，谈不上最好或最坏情况。<strong>O、Ω、Θ 是函数的界；最好、最坏、平均情况（best / worst / average case）是挑哪一种输入。</strong>两者互相独立，每种情况各是一个函数，可以各有自己的 Θ（见 1.7 最好、最坏、平均情况）。</p>
-
-<h2>判断题：先定 Θ 类，再比位置</h2>
-<p>判断 “f ∈ O(g) / Ω(g) / Θ(g)” 时，先去掉 f 的常数系数和低阶项，得到它的 Θ 类 h，再在阶梯 1 &lt; log n &lt; n &lt; n log n &lt; n² &lt; n³ &lt; 2ⁿ &lt; n! 上比较 h 和 g：</p>
+<p>每个 n 都满足 n ≤ T(n) ≤ n²，所以 T ∈ O(n²)，T ∈ Ω(n)。但是：</p>
 <ul>
-<li><strong>O</strong>：g 与 h 同级或在 h 右边，命题为真；</li>
-<li><strong>Ω</strong>：g 与 h 同级或在 h 左边，命题为真；</li>
-<li><strong>Θ</strong>：g 与 h 同级，命题才为真。</li>
+<li><strong>T ∉ O(n)</strong>：奇数 n 时 T(n) = n²，n 一超过 c₀，就有 n² &gt; c₀·n。</li>
+<li><strong>T ∉ Ω(n²)</strong>：偶数 n 时 T(n) = n，n 一超过 1/c₀，就有 n &lt; c₀·n²。</li>
 </ul>
-<table>
-<thead><tr><th>命题</th><th>真假</th><th>理由</th></tr></thead>
-<tbody>
-<tr><td>n² ∈ O(n³)</td><td>真</td><td>n³ 在 n² 右边，松的上界</td></tr>
-<tr><td>n² ∈ Ω(n³)</td><td>假</td><td>Ω 要求 g 不在 h 右边</td></tr>
-<tr><td>n² ∈ Ω(n)</td><td>真</td><td>c₀ = 1，n₀ = 1</td></tr>
-<tr><td>n ∈ Ω(n²)</td><td>假</td><td>上文已反证</td></tr>
-<tr><td>n² ∈ Ω(1)</td><td>真</td><td>松的下界</td></tr>
-<tr><td>n log n ∈ Ω(n)</td><td>真</td><td>n ≥ 2 时 log₂ n ≥ 1，取 c₀ = 1</td></tr>
-<tr><td>3n + 3 ∈ Θ(n²)</td><td>假</td><td>属于 O(n²)，不属于 Ω(n²)</td></tr>
-<tr><td>100n² + 5n ∈ Θ(n²)</td><td>真</td><td>c₁ = 100，c₂ = 105，n₀ = 1</td></tr>
-</tbody>
-</table>
+<p>最紧的上界是 n²，最大的下界是 n，不在同一级台阶上，所以 <strong>T(n) 不属于阶梯上任何一个 Θ 类</strong>。</p>
+<p>注意，这里上下界不同，是因为 n 的奇偶，不是因为输入的排列：同一个 n 只有一种代价。<strong>O、Ω、Θ 是函数的界；最好、最坏、平均情况（best / worst / average case）是挑哪一种输入</strong>，这是两件独立的事（见 1.7）。</p>
 
 <h2>考试怎么考</h2>
 <ul>
-<li><strong>判断、单选、多选</strong>：给一组 O、Ω、Θ 命题挑真或挑假，第 2 周课堂竞赛、第 4 周小测和期末复习课的 trivia 都出过。课上特别提醒：<strong>作答前先看清是 O 还是 Ω</strong>。</li>
-<li><strong>短证明</strong>：期末复习课要求会写三个定义，并给出常数证明属于关系。Θ 写 c₁、c₂、n₀，Ω 写 c₀、n₀，再写一条对所有 n &gt; n₀ 成立的不等式链。证明“不属于”用反证：说明任何常数都会在足够大的 n 处失败。</li>
-<li><strong>读代码</strong>：问一段程序的复杂度，选项里混着 O、Ω、Θ。先弄清代价是否随输入排列变化，再判断哪些界成立。</li>
-<li><strong>必须背</strong>：三个定义（公式表上没有，公式表只有对数恒等式、求和公式、主定理和哈希估计）；f ∈ Ω(g) ⇔ g ∈ O(f)；Θ = O 且 Ω；O 类嵌套、Θ 类不相交；报告最近的上界、最大的下界。</li>
+<li><strong>判断、单选、多选</strong>：一组 O、Ω、Θ 命题挑真挑假，课上竞赛、小测和期末复习都出过。课上特别提醒：<strong>作答前先看清是 O 还是 Ω</strong>。</li>
+<li><strong>短证明</strong>：用定义证明属于关系。Θ 写 c₁、c₂、n₀，Ω 写 c₀、n₀，再写一条对所有 n &gt; n₀ 成立的不等式链。证“不属于”用反证法。</li>
+<li><strong>读代码</strong>：问一段程序的复杂度，选项里混着 O、Ω、Θ，比如上面的奇偶函数。</li>
 </ul>
+<p>判断题有个快办法：先去掉 f 的常数系数和低阶项，得到它所在的 Θ 类 h；再在阶梯 1 &lt; log n &lt; n &lt; n log n &lt; n² &lt; n³ &lt; 2ⁿ &lt; n! 上比较 h 和题目里的 g：</p>
+<ul>
+<li><strong>f ∈ O(g)</strong> 为真：g 和 h 同级，或在 h 右边；</li>
+<li><strong>f ∈ Ω(g)</strong> 为真：g 和 h 同级，或在 h 左边；</li>
+<li><strong>f ∈ Θ(g)</strong> 为真：g 和 h 必须同级。</li>
+</ul>
+
+<h3>例题 1：证明 n² − 3n ∈ Θ(n²)</h3>
+<p>上界很容易：减掉 3n 只会变小，n² − 3n ≤ n²，取 c₂ = 1。</p>
+<p>下界要小心。c₁ = 1 要求 n² − 3n ≥ n²，也就是 −3n ≥ 0，n &gt; 0 时永远不成立。所以 c₁ 必须小于 1，试 c₁ = 1/2：</p>
+<pre><code class="lang-text">n² − 3n ≥ ½n²  ⇔  ½n² ≥ 3n  ⇔  n ≥ 6
+取 n₀ = 6，c₁ = 1/2，c₂ = 1。对所有 n &gt; 6：
+  下界  ½·n² ≤ n² − 3n            （n ≥ 6 时成立）
+  上界  n² − 3n ≤ 1·n²            （3n ≥ 0）
+所以  ½·n² ≤ n² − 3n ≤ 1·n²，即 n² − 3n ∈ Θ(n²)。</code></pre>
+<p>验算一下边界：n = 6 时 36 − 18 = 18，正好等于 ½ × 36；n = 5 时 25 − 15 = 10，小于 12.5。所以不等式从 n = 6 起才成立，n₀ 取 5 或 6 都对（定义要的是 n &gt; n₀）。</p>
+<p>这题的坑在于“系数和”套路失效了。<strong>有减号时，上界可以直接丢掉负项，下界不行</strong>，得找一个小于 1 的 c₁，再算出足够大的 n₀。</p>
+
+<h3>例题 2：多选，哪些为真？</h3>
+<p>(a) 100n + 7 ∈ Ω(n)　(b) n log n ∈ Θ(n)　(c) n² ∈ Ω(n² log n)　(d) n² ∈ Θ(n² + n)　(e) 若 f ∈ O(n²) 且 f ∈ Ω(n)，则 f ∈ Θ(n²)</p>
+<p>答案是 <strong>(a)(d)</strong>。</p>
+<ul>
+<li>(a) 真。100n + 7 ≥ 100n，取 c₀ = 100、n₀ = 0。</li>
+<li>(b) 假。n log n 在阶梯上比 n 高一级：它属于 Ω(n)，但不属于 O(n)。n log₂ n ≤ c₀·n 化简成 log₂ n ≤ c₀，n &gt; 2<sup>c₀</sup> 时就失败。</li>
+<li>(c) 假。n² 在 n² log n 左边，Ω 要求 g 不能在右边。成立的是 n² ∈ O(n² log n)。</li>
+<li>(d) 真。g 不必写成最简形式，n² + n 本身就在 Θ(n²) 里。具体常数：n² ≤ 1·(n² + n)；n ≥ 1 时 n² ≥ n，所以 n² ≥ ½(n² + n)。取 c₁ = 1/2、c₂ = 1、n₀ = 1。</li>
+<li>(e) 假。只知道上界 n² 和下界 n，推不出 Θ。f = n 满足两个条件，却不在 Θ(n²) 里；上面的奇偶函数 T(n) 也满足，它连 Θ 类都没有。</li>
+</ul>
+
 <div class="callout warn" data-label="易错">
 <ul>
-<li>把 Ω 读成 O：n² ∈ O(n³) 为真，n² ∈ Ω(n³) 为假。</li>
-<li>以为松的界是假命题：n² ∈ Ω(1)、n ∈ O(n!) 都为真，只是题目要求“最紧的界”时不能这样答。</li>
-<li>常数取 0：Ω 取 c₀ = 0 时 f ≥ 0 对任何非负函数都成立，等于没证；O 取 c₀ = 0 则要求 f ≤ 0，本身就不成立。定义要求 c₀、c₁、c₂ 都大于 0。</li>
-<li>把 O、Ω、Θ 等同于最坏、最好、平均情况。不指明情况时，“某算法是 Θ(g)” 要对所有输入都成立：二分查找最好情况只比较 1 次，所以 “二分查找是 Θ(log n)” 为假（见 1.7）。</li>
-<li>Θ 只证了一边：只写出 f ≤ c₂·g，证明的只是 O。</li>
+<li>把 Ω 看成 O：n² ∈ O(n³) 为真，n² ∈ Ω(n³) 为假。</li>
+<li>以为松的界是假的：n² ∈ Ω(1)、n ∈ O(n!) 都为真，只是题目要“最紧的界”时不能这样答。</li>
+<li>常数取 0：c₀ = 0 时 f ≥ 0 对任何非负函数都成立，等于没证。定义要求 c₀、c₁、c₂ 都大于 0。</li>
+<li>Θ 只证了一边：只写出 f ≤ c₂·g，证的只是 O。</li>
+<li>把 O、Ω、Θ 当成最坏、最好、平均情况。二分查找最好情况只比较 1 次，所以不指明哪种情况时，说“二分查找是 Θ(log n)”是错的（见 1.7）。</li>
 </ul>
 </div>
 
-<h2>练习</h2>
-<details class="qa">
-<summary class="ripple-surface">1. 证明 5n² + 3n + 2 ∈ Θ(n²)，写出 c₁、c₂、n₀。</summary>
-<div class="qa__body">
-<p>取 n₀ = 1、c₁ = 5、c₂ = 10。对所有 n &gt; 1：</p>
-<pre><code class="lang-text">下界  5n² ≤ 5n² + 3n + 2                       （3n + 2 &gt; 0）
-上界  5n² + 3n + 2 ≤ 5n² + 3n² + 2n² = 10n²    （n &gt; 1 时 n ≤ n²，1 ≤ n²）
-所以  5n² ≤ 5n² + 3n + 2 ≤ 10n²，即 5n² + 3n + 2 ∈ Θ(n²)。
-</code></pre>
-<p>c₁ 取 1（课上的写法）也对，c₂ 取任何不小于 10 的数也对。常数不唯一，要求的只是不等式链每一步都成立。</p>
-</div>
-</details>
-
-<details class="qa">
-<summary class="ripple-surface">2. 证明 n² − 3n ∈ Θ(n²)。为什么这里 c₁ 不能取 1？</summary>
-<div class="qa__body">
-<p><strong>上界</strong>：n² − 3n ≤ n²，取 c₂ = 1。</p>
-<p><strong>下界</strong>：c₁ = 1 要求 n² − 3n ≥ n²，即 −3n ≥ 0，对任何 n &gt; 0 都不成立，所以 c₁ 必须小于 1。取 c₁ = 1/2：n² − 3n ≥ n²/2 ⇔ n²/2 ≥ 3n ⇔ n ≥ 6。</p>
-<p>于是取 n₀ = 6、c₁ = 1/2、c₂ = 1，对所有 n &gt; 6 有 ½·n² ≤ n² − 3n ≤ 1·n²。检查边界：n = 6 时 36 − 18 = 18，正好等于 ½·36；n = 5 时 10 &lt; 12.5，不成立。定义要求的是 n &gt; n₀，所以 n₀ 最小可以取 5（从 n = 6 起都成立），取 6 也对。c₁ 取得更小，n₀ 也能更小，例如 c₁ = 1/4 时 n ≥ 4 就成立。</p>
-</div>
-</details>
-
-<details class="qa">
-<summary class="ripple-surface">3. 多选：下列哪些为真？(a) 100n + 7 ∈ Ω(n)　(b) n log n ∈ Θ(n)　(c) n³ ∈ Ω(n² log n)　(d) n² ∈ Θ(n² + n)　(e) n² ∈ Ω(n² log n)　(f) 若 p ∈ O(q) 且 q ∈ O(p)，则 p ∈ Θ(q)</summary>
-<div class="qa__body">
-<p>答案 <strong>(a)(c)(d)(f)</strong>。</p>
+<h2>小结</h2>
 <ul>
-<li>(a) 真：100n + 7 ≥ 100n，取 c₀ = 100、n₀ = 0。</li>
-<li>(b) 假：它属于 Ω(n)，但不属于 O(n)。n log₂ n ≤ c₀·n 等价于 log₂ n ≤ c₀，n &gt; 2<sup>c₀</sup> 时失败（c₀ = 5 时 n = 33 就失败）。</li>
-<li>(c) 真：n ≥ 1 时 n ≥ log₂ n，所以 n³ = n²·n ≥ n²·log₂ n，取 c₀ = 1、n₀ = 1。</li>
-<li>(d) 真：g 不必是最简形式。n² ≤ 1·(n² + n)；n ≥ 1 时 n² ≥ n，所以 n² ≥ ½(n² + n)。取 c₁ = 1/2、c₂ = 1、n₀ = 1。</li>
-<li>(e) 假：需要 n² ≥ c₀·n² log₂ n，即 log₂ n ≤ 1/c₀，n &gt; 2<sup>1/c₀</sup> 时失败（c₀ = 1/2 时 n = 5 就失败）。n² 的 Θ 类在 n² log n 左边，成立的是 n² ∈ O(n² log n)。</li>
-<li>(f) 真：由对偶性，q ∈ O(p) 就是 p ∈ Ω(q)，再加上 p ∈ O(q)，即 p ∈ Θ(q)。</li>
+<li>Ω 是下界：存在 c₀ &gt; 0 和 n₀，对所有 n &gt; n₀ 都有 f(n) ≥ c₀·g(n)。和大 O 只差不等号方向，c₀ 可以小于 1。</li>
+<li>Θ 是紧确界：c₁·g(n) ≤ f(n) ≤ c₂·g(n)，三个常数都要写；Θ 就是 O 且 Ω。</li>
+<li>对偶：f ∈ Ω(g) ⇔ g ∈ O(f)。</li>
+<li>O 类层层嵌套，Θ 类互不相交；答题报告最紧的上界、最大的下界。不是每个函数都有 Θ 界。</li>
+<li>证明：多项式取 n₀ = 1、c₂ = 系数和；有负项时下界要取小于 1 的 c₁；证“不属于”用反证法。</li>
+<li>O、Ω、Θ 是函数的界，和最好、最坏情况是两回事。</li>
 </ul>
-</div>
-</details>
-
-<details class="qa">
-<summary class="ripple-surface">4. 已知 f(n) ∈ O(n²) 且 f(n) ∈ Ω(n)。下列哪些<strong>一定</strong>成立？A. f ∈ Θ(n²)　B. f ∈ O(n³)　C. f ∈ Ω(1)　D. f ∈ Θ(n)　E. f ∈ Θ(n log n)</summary>
-<div class="qa__body">
-<p>答案 <strong>B、C</strong>。</p>
-<ul>
-<li>B：n ≥ 1 时 n² ≤ n³，所以 f ≤ c₀·n² ≤ c₀·n³。O 类嵌套，O(n²) ⊂ O(n³)。</li>
-<li>C：n ≥ 1 时 f ≥ c₀·n ≥ c₀·1。Ω 方向相反，Ω(n) ⊂ Ω(1)。</li>
-<li>A、D、E 都可能不成立，各举一个满足条件的反例：f = n 满足两个条件，但不属于 Θ(n²) 和 Θ(n log n)；f = n² 也满足，但不属于 Θ(n)。上文的奇偶函数 T(n) 同样满足两个条件，而 A、D、E 一个都不成立。</li>
-</ul>
-<p>只知道上界和下界、而两者不同级时，推不出任何 Θ。</p>
-</div>
-</details>
 `;

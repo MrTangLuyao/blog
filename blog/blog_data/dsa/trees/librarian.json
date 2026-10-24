@@ -15,8 +15,8 @@
         "en": "3.1 Binary Tree Basics"
       },
       "excerpt": {
-        "zh": "从有序链表到二叉树 · 结点结构 · 术语 · 深度（根 = 0）与高度（叶子 = 1）· 第 k 层最多 2ᵏ · 完全二叉树与 ⌊log₂ n⌋+1 · 数组存储 2i+1/2i+2 · 普通二叉树查找 O(n)",
-        "en": "From sorted list to binary tree · node struct · terminology · depth (root = 0) vs height (leaf = 1) · at most 2^k nodes per level · complete trees and height ⌊log₂ n⌋+1 · array storage 2i+1/2i+2 · O(n) find in a plain binary tree"
+        "zh": "结点与术语 · 深度与高度（根深度 0、叶子高度 1）· 完全二叉树 · ⌊log₂ n⌋ + 1 · 数组存储 2i+1 / 2i+2",
+        "en": "Node struct & terminology · depth vs height (root depth 0, leaf height 1) · complete binary trees · ⌊log₂ n⌋ + 1 · array storage 2i+1 / 2i+2"
       },
       "tags": [
         "c",
@@ -34,8 +34,8 @@
         "en": "3.2 Tree Traversals"
       },
       "excerpt": {
-        "zh": "前序 · 中序 · 后序 · 自底向上填表 · BST 中序有序 · visit n 次与 2n+1 次调用 · n+1 个空指针 · Θ(n) 与 O(h) 栈",
-        "en": "Pre-order · in-order · post-order · bottom-up table method · in-order of a BST is sorted · n visits and 2n+1 calls · n+1 NULL pointers · Θ(n) time, O(h) stack"
+        "zh": "前序 · 中序 · 后序 · 从下往上拼 · BST 中序 = 升序 · 调用 2n + 1 次",
+        "en": "Pre-order · in-order · post-order · bottom-up assembly · BST in-order = sorted · 2n + 1 calls"
       },
       "tags": [
         "c",
@@ -72,8 +72,8 @@
         "en": "3.4 BST Deletion"
       },
       "excerpt": {
-        "zh": "中序前驱与后继 · 叶子 / 一个孩子 / 两个孩子 · 递归删除的 C 代码 · O(h) 代价 · AVL 删除一路查到根、可能多次旋转",
-        "en": "In-order predecessor & successor · leaf / one child / two children · recursive C delete · O(h) cost · AVL deletion checks up to the root, possibly several rotations"
+        "zh": "中序前驱与后继 · 叶子 / 一个孩子 / 两个孩子 · 递归删除返回新根 · O(h) · AVL 删除一路查到根",
+        "en": "In-order predecessor & successor · leaf / one child / two children · recursive delete returning the new root · O(h) · AVL delete checks up to the root"
       },
       "tags": [
         "c",
@@ -91,8 +91,8 @@
         "en": "3.5 Balance & the AVL Condition"
       },
       "excerpt": {
-        "zh": "平衡与完美平衡的课程定义 · 只看根不够（两条链反例） · AVL 条件与平衡因子 · 后序检查 C 代码 O(n) · 插入后第一个失衡结点 · 最少结点 N(h) 与 1.44·log₂ n · 取舍",
-        "en": "Course definitions of balanced and perfectly balanced · why checking only the root fails (two-chain counterexample) · AVL condition and balance factor · O(n) post-order check in C · first unbalanced node after an insert · minimum nodes N(h) and the 1.44·log₂ n bound · trade-offs"
+        "zh": "平衡与完美平衡 · 平衡因子 BF · 每个结点都要查 · 第一个失衡结点 · 树高 1.44·log₂ n",
+        "en": "Balanced vs perfectly balanced · balance factor · check every node · first unbalanced node · height ≤ 1.44·log₂ n"
       },
       "tags": [
         "c",
@@ -110,14 +110,14 @@
         "en": "3.6 AVL Rotations"
       },
       "excerpt": {
-        "zh": "平衡因子判四种失衡 · LL/RR 单旋转 · LR/RL 双旋转 · 中间子树换父亲 · 三指针旋转代码 · 插入演练",
-        "en": "Balance factors and the four cases · LL/RR single rotation · LR/RL double rotation · middle subtree changes parent · three-pointer rotation code · insertion walkthrough"
+        "zh": "LL/RR 单旋转 · LR/RL 双旋转 · 用 BF 判断情况 · 中间子树换父亲 · 旋转的指针代码",
+        "en": "LL/RR single rotation · LR/RL double rotation · identifying the case from BFs · middle subtree changes parent · rotation pointer code"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 12,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -129,8 +129,8 @@
         "en": "3.7 2-3 Trees"
       },
       "excerpt": {
-        "zh": "2-node 与 3-node · 查找 · 插入放进叶子 · 溢出分裂、中间键上提 · 只在根部长高 · 高度介于 log₃ n 与 log₂ n",
-        "en": "2-nodes & 3-nodes · search · insert into a leaf · split on overflow, promote the middle key · grows only at the root · height between log₃ n and log₂ n"
+        "zh": "2-node 与 3-node · 插入进叶子 · 分裂与上提 · 只从根长高 · 高度 Θ(log n)",
+        "en": "2-nodes and 3-nodes · insert into a leaf · split and promote · grows only at the root · height Θ(log n)"
       },
       "tags": [
         "c",
@@ -148,14 +148,14 @@
         "en": "3.8 B-Trees & B+ Trees"
       },
       "excerpt": {
-        "zh": "m 阶 B 树 · 2-3 / 2-3-4 树的阶 · 没有 2 阶 B 树 · 磁盘块与少跟指针 · 复杂度类不变 O(log n) · BST 后继 O(height) · B+ 树叶子链表 · O(1) 后继 · 范围查询 O(log n + k)",
-        "en": "B-tree of order m · 2-3 / 2-3-4 as orders 3 / 4 · no order-2 B-tree · disk blocks and fewer pointer hops · complexity class unchanged O(log n) · BST successor O(height) · B+ tree linked leaves · O(1) successor · range query O(log n + k)"
+        "zh": "m 阶 B 树 · 结点分裂 · 复杂度类不变 · 后继 · B+ 树叶子链表 · 范围查询",
+        "en": "Order-m B-trees · node splits · same complexity class · successor · B+ tree linked leaves · range queries"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -167,14 +167,14 @@
         "en": "3.9 Splay Trees"
       },
       "excerpt": {
-        "zh": "自调整 BST · 访问即转到根 · zig / zig-zig / zig-zag · 先转祖父的顺序 · 深度 5 结点伸展例题 · 父指针 C 代码 · 单次 O(n)、摊还 O(log n) · 与 AVL 对比",
-        "en": "Self-adjusting BST · move the accessed node to the root · zig / zig-zig / zig-zag · grandparent-first order · worked splay of a depth-5 node · parent-pointer C code · O(n) single op, O(log n) amortised · comparison with AVL"
+        "zh": "访问即搬到根 · zig / zig-zig / zig-zag · 手算伸展 · 单次 O(n)、均摊 O(log n)",
+        "en": "Move-to-root on access · zig / zig-zig / zig-zag · Splaying by hand · O(n) worst, O(log n) amortised"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -186,8 +186,8 @@
         "en": "3.10 Quadtrees & k-d Trees"
       },
       "excerpt": {
-        "zh": "四叉树 · NW/NE/SW/SE 四象限 · 图像压缩与棋盘格最坏情况 · k-d 树按深度轮换 x/y · 插入 · 范围查找剪枝 · 最近邻 · 平衡 O(log n) 与退化 O(n)",
-        "en": "Quadtree · NW/NE/SW/SE quadrants · image compression & checkerboard worst case · k-d tree alternating x/y by depth · insertion · range search pruning · nearest neighbour · balanced O(log n) vs degenerate O(n)"
+        "zh": "四叉树 · NW/NE/SW/SE · 图像压缩 · k-d 树 · x、y 轮换比较 · 范围查找剪枝 · O(log n) 与退化",
+        "en": "Quadtree · NW/NE/SW/SE · image compression · k-d tree · alternating x/y · range search pruning · O(log n) vs degenerate"
       },
       "tags": [
         "c",
@@ -205,14 +205,14 @@
         "en": "3.11 Tries, Radix Trees & Patricia Tries"
       },
       "excerpt": {
-        "zh": "Trie 结构与词尾标记 · 查找/插入 O(L) 与 n 无关 · 前缀查询与字典序 · 26 指针结点的 C 实现 · radix 树合并单孩子链与拆分 · Patricia 树按位分叉（D/P 第 4 位）· n − 1 个内部结点",
-        "en": "Trie structure and end-of-word marker · O(L) search/insert independent of n · prefix queries and sorted order · C implementation with 26 child pointers · radix tree chain compression and node splitting · Patricia trie branching on bits (D/P at bit 4) · n − 1 internal nodes"
+        "zh": "前缀共享 · 词尾标记 · 查找插入 O(L) · 前缀查询 · Radix 压缩 · Patricia 按位分叉",
+        "en": "Shared prefixes · end-of-word marker · O(L) search/insert · prefix queries · radix compression · Patricia bit branching"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     }
   ]

@@ -15,14 +15,14 @@
         "en": "2.1 ADTs & the Dictionary"
       },
       "excerpt": {
-        "zh": "ADT vs 具体结构 · 栈 / 队列 / 字典 / 优先队列 · 键与五个操作 · build 与 update 的拆解 · C 头文件接口",
-        "en": "ADT vs concrete structure · Stack / queue / dictionary / PQ · Keys & five operations · Build and update reduced · C header as interface"
+        "zh": "ADT 与具体数据结构 · 四个 ADT · 字典的五个操作 · build 与 update 怎么拼 · 复杂度看实现",
+        "en": "ADT vs concrete structure · stack, queue, dictionary, priority queue · dictionary operations · build = n inserts, update = find + delete + insert · cost depends on the implementation"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
@@ -34,14 +34,14 @@
         "en": "2.2 Memory, Pointers & Arrays"
       },
       "excerpt": {
-        "zh": "RAM 字节编址 · 指针 & 与 * · 数组连续存放与 O(1) 下标 · A[k] ≡ *(A+k) · 二维数组按行存放与地址公式 · int *A[10] 不是二维数组 · 数组操作代价",
-        "en": "Byte-addressed RAM · pointers & and * · contiguous arrays and O(1) indexing · A[k] ≡ *(A+k) · row-major 2D arrays and the address formula · int *A[10] is not a 2D array · array operation costs"
+        "zh": "内存与地址 · 指针 &amp; 和 * · 数组下标 O(1) · 指针运算 · 二维数组按行存放",
+        "en": "Memory & addresses · pointers (&, *) · O(1) array indexing · pointer arithmetic · row-major 2D arrays"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 9,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
@@ -53,14 +53,14 @@
         "en": "2.3 Arrays as Dictionaries & Binary Search"
       },
       "excerpt": {
-        "zh": "无序数组线性查找 O(n) · 开头插入/删除要移位 · 二分查找与偶数取整规则 · 循环不变式 · 有序数组逐个插入 O(n²) · n 次插入 + m 次查找要不要排序",
-        "en": "Linear search O(n) · shifting at the front · binary search and the even-count rounding rule · loop invariant · sorted build by insertion O(n²) · n inserts + m finds: sort or not"
+        "zh": "无序数组 · 线性查找 · 二分查找 · 向上取整 · 移位 · 建立 O(n²) · n 次插入 + m 次查找",
+        "en": "Unsorted array · linear search · binary search · round-up middle · shifting · O(n²) build · n inserts + m finds"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -72,14 +72,14 @@
         "en": "2.4 Linked Lists in C"
       },
       "excerpt": {
-        "zh": "结点 = 数据 + next · head 与 NULL · 头插两行的顺序 · 遍历与 O(n) 查找 · 已知前驱的 O(1) 插入/删除 · 先存 p 再 free · 释放整表 · 有序插入与按键删除完整程序",
-        "en": "Node = data + next · head and NULL · order of the two head-insertion lines · traversal and O(n) search · O(1) insert/delete after a known predecessor · save p before free · freeing a list · full sorted-insert / delete-by-key program"
+        "zh": "结点与 next · 头插 · 查找 · 中间插入 · 删除与 free · 改指针的顺序",
+        "en": "Nodes & next · head insertion · search · insert after a node · delete & free · pointer order"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -91,14 +91,14 @@
         "en": "2.5 Arrays vs Linked Lists"
       },
       "excerpt": {
-        "zh": "随机访问 vs 顺着 next 走 · 对比表 · 有序链表不能二分 · 插入 O(1) 的前提 · 字典 n 次插入 + m 次查找 · 在 X 后插入的最好/最坏 · 缓存局部性 · 尾指针、双向链表、捷径指针",
-        "en": "Random access vs pointer walking · comparison table · no binary search on sorted lists · when list insert is O(1) · dictionary cost for n inserts + m finds · insert-after-X best/worst · cache locality · tail pointer, doubly linked lists, shortcut pointers"
+        "zh": "随机访问 · 有序链表不能二分 · 插入 O(1) 的前提 · 字典复杂度 · 缓存局部性 · 尾指针与双向链表",
+        "en": "Random access · No binary search on sorted lists · When list insertion is O(1) · Dictionary costs · Cache locality · Tail pointers & doubly linked lists"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -110,14 +110,14 @@
         "en": "2.6 Dynamic Arrays & Amortised Analysis"
       },
       "excerpt": {
-        "zh": "定长数组装满 · +1 扩容 Θ(n²) · 翻倍扩容 · 均摊 O(1) · ×3 与任意倍数 · realloc 与临时指针 · 悬空指针 · 去均摊（不考）",
-        "en": "Fixed-size arrays · +1 growth Θ(n²) · doubling · amortised O(1) · tripling and any constant factor · realloc with a temp pointer · dangling pointers · de-amortisation (not examinable)"
+        "zh": "满了就搬家 · +1 扩容 Θ(n²) · 翻倍扩容 · 均摊 O(1) · ×3 也行 · realloc 写 append",
+        "en": "Grow when full · +1 growth Θ(n²) · doubling · amortised O(1) · tripling works too · append with realloc"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {
@@ -129,14 +129,14 @@
         "en": "2.7 Stacks, Queues & Circular Arrays"
       },
       "excerpt": {
-        "zh": "LIFO / FIFO · 数组栈与链表栈 · 队列 forward / backward · 循环数组取模 · 满与空的判断 · 代价表 · 链表队列代码",
-        "en": "LIFO vs FIFO · array and linked-list stacks · forward/backward queues · circular array with modulo · full vs empty · cost table · linked-list queue code"
+        "zh": "LIFO / FIFO · 数组栈与链表栈 · 循环数组队列 · 满和空 · 实现代价表",
+        "en": "LIFO / FIFO · array & linked-list stacks · circular-array queue · full vs empty · cost table"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     }
   ]
