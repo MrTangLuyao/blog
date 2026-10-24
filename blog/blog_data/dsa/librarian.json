@@ -126,8 +126,8 @@
         "en": "Part 8 · Review & Past Papers"
       },
       "excerpt": {
-        "zh": "客座讲座：订单簿该用什么数据结构 · 复杂度总表（一）：字典、队列与优先队列 · 复杂度总表（二）：排序与图算法 · 高频陷阱题 · C 代码题：常考写法 · 算法设计题怎么答",
-        "en": "Guest Lecture: Building an Order Book · Cheat Sheet I: Dictionaries, Queues & PQs · Cheat Sheet II: Sorting & Graph Algorithms · Common Exam Traps · C Patterns for Coding Questions · Answering Algorithm-Design Questions"
+        "zh": "客座讲座：订单簿该用什么数据结构 · 复杂度总表（一）：字典、队列与优先队列 · 复杂度总表（二）：排序与图算法 · 高频陷阱题 · C 代码题：常考写法 · 算法设计题怎么答 · 往年真题精讲（2015 / 2016）",
+        "en": "Guest Lecture: Building an Order Book · Cheat Sheet I: Dictionaries, Queues & PQs · Cheat Sheet II: Sorting & Graph Algorithms · Common Exam Traps · C Patterns for Coding Questions · Answering Algorithm-Design Questions · Past Papers Walkthrough (2015 / 2016)"
       }
     }
   ]

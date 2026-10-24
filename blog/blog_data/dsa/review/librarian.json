@@ -119,6 +119,25 @@
       ],
       "readingTime": 10,
       "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-past-papers",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "8.7 往年真题精讲（2015 / 2016）",
+        "en": "8.7 Past Papers Walkthrough (2015 / 2016)"
+      },
+      "excerpt": {
+        "zh": "C 编程 · 复杂度填空 · 堆 · 哈希 · 旋转 · 图算法 · 排序 · 官方解答勘误",
+        "en": "C coding · complexity fill-ins · heaps · hashing · rotations · graph algorithms · sorting · corrections to the official solutions"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 18,
+      "lang": "zh"
     }
   ]
 }
