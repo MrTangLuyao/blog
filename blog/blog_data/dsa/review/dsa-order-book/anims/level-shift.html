@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>价位数组：最优价放前面还是后面</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .wrap { width: 100%; display: flex; flex-direction: column; gap: 2px; }
+  .msg { text-align: center; font-size: 13px; min-height: 20px; }
+  .msg code { color: #ffb49d; }
+  .row-lab { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .row-lab b { color: var(--text); font-weight: 600; }
+  .row-lab .cnt { color: var(--yellow); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cells { padding: 18px 2px 22px; gap: 3px; flex-wrap: nowrap; }
+  .cell { min-width: 34px; height: 34px; padding: 0 4px; font-size: 13px; }
+  @media (max-width: 380px) {
+    .cell { min-width: 30px; padding: 0 2px; font-size: 12px; }
+    .cells { gap: 2px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">买方价位数组：最优价放前面还是后面</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background:var(--accent)"></i>本步改动的价位</span>
+  <span><i style="background:var(--yellow)"></i>要移动 / 刚移动的元素</span>
+  <span><i style="background:var(--red)"></i>被删除的价位</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const CAP = 8;                       // dynamic-array capacity shown as empty slots
+  // initial bid orders: [id, price, qty]
+  const INIT = [[1, 101, 15], [2, 100, 7], [3, 100, 6], [4, 99, 5], [5, 96, 8], [6, 94, 4], [7, 92, 9]];
+  const SCEN = {
+    near: {
+      label: '更新靠近最优价',
+      msgs: [['add', 8, 102, 6], ['modify', 8, 2], ['add', 9, 101, 3], ['modify', 8, 0], ['modify', 1, 0], ['modify', 9, 0]],
+      end: '更新集中在最优价附近时，最优价放末尾几乎不用移动元素。'
+    },
+    deep: {
+      label: '更新在深处',
+      msgs: [['add', 8, 93, 2], ['modify', 6, 0], ['add', 9, 90, 7], ['modify', 8, 0]],
+      end: '更新都落在远离最优价的深处时结果反过来，设计三移动得更多。最优价放哪一端要看数据的访问规律。'
+    }
+  };
+
+  const range = (a, b) => { const r = []; for (let k = a; k < b; k++) r.push(k); return r; };
+  const snap = arr => arr.map(x => ({ p: x.p, q: x.q }));
+
+  // where is price? desc = true: best (highest) at index 0, scan from the front;
+  // desc = false: ascending, best at the end, scan from the back.
+  function locate(arr, desc, price) {
+    if (desc) {
+      let i = 0;
+      while (i < arr.length && arr[i].p > price) i++;
+      return { i, hit: i < arr.length && arr[i].p === price };
+    }
+    let i = arr.length - 1;
+    while (i >= 0 && arr[i].p > price) i--;
+    return i >= 0 && arr[i].p === price ? { i, hit: true } : { i: i + 1, hit: false };
+  }
+
+  // add delta to the level at price; report what moved
+  function apply(arr, desc, price, delta) {
+    const before = snap(arr), n = arr.length;
+    const { i, hit } = locate(arr, desc, price);
+    if (hit) {
+      arr[i].q += delta;
+      if (arr[i].q === 0) {
+        arr.splice(i, 1);
+        return { kind: 'remove', i, before, after: snap(arr), mb: range(i + 1, n), ma: range(i, n - 1), moved: n - 1 - i };
+      }
+      return { kind: 'qty', i, before, after: snap(arr), mb: [], ma: [], moved: 0 };
+    }
+    arr.splice(i, 0, { p: price, q: delta });
+    return { kind: 'insert', i, before, after: snap(arr), mb: range(i, n), ma: range(i + 1, n + 1), moved: n - i };
+  }
+
+  const clsMap = (list, c, extra) => {
+    const m = {};
+    list.forEach(k => { m[k] = c; });
+    if (extra) m[extra[0]] = extra[1];
+    return m;
+  };
+
+  function build(key) {
+    const sc = SCEN[key];
+    const orders = new Map();
+    const F = [], E = [];
+    for (const [id, p, q] of INIT) {
+      orders.set(id, { p, q });
+      apply(F, true, p, q);
+      apply(E, false, p, q);
+    }
+    let ft = 0, et = 0;
+    const frames = [];
+    const push = (msg, f, e, fc, ec, note) => frames.push({ msg, F: f, E: e, fc, ec, ft, et, note });
+    push('', snap(F), snap(E), {}, {}, `初始：${INIT.length} 笔买单汇总成 ${F.length} 个价位。设计二按价格降序，下标 0 是最优买价 ${F[0].p}；设计三升序，末尾是 ${E[E.length - 1].p}。虚线格是动态数组还没用到的容量。`);
+
+    for (const m of sc.msgs) {
+      let price, delta, text, explain;
+      if (m[0] === 'add') {
+        const [, id, p, q] = m;
+        price = p; delta = q;
+        orders.set(id, { p, q });
+        text = `add(#${id}, bid, ${p}, ${q})`;
+        const exists = F.some(x => x.p === p);
+        explain = exists
+          ? `#${id} 记入哈希表。价位 ${p} 已存在，总数量加 ${q}。`
+          : `#${id} 记入哈希表。价格 ${p} 还没有价位，要新建一档。`;
+      } else {
+        const [, id, nq] = m;
+        const o = orders.get(id);
+        price = o.p; delta = nq - o.q;
+        text = `modify(#${id}, bid, ${nq})`;
+        const lvl = F.find(x => x.p === price).q;
+        explain = `消息里没有价格：查哈希表得 #${id} 在 ${price}、原数量 ${o.q}，价位 ${price} 的总数量 ${lvl} → ${lvl + delta}。`;
+        if (nq === 0) { orders.delete(id); explain += `#${id} 从哈希表删除。`; }
+        else o.q = nq;
+        if (lvl + delta === 0) explain += '这一档清空，要删除。';
+      }
+      const rf = apply(F, true, price, delta);
+      const re = apply(E, false, price, delta);
+      const msg = `<code>${AnimKit.esc(text)}</code>`;
+      if (rf.kind === 'qty') {
+        push(msg, rf.after, re.after, { [rf.i]: 'active' }, { [re.i]: 'active' },
+          `${explain}只改数量，两个数组都不移动元素。`);
+        continue;
+      }
+      const say = (r, dir) => r.moved ? `黄色 ${r.moved} 个元素要${dir}移一格` : '不用移动任何元素';
+      if (rf.kind === 'insert') {
+        push(msg, rf.before, re.before, clsMap(rf.mb, 'warn'), clsMap(re.mb, 'warn'),
+          `${explain}设计二应插在下标 ${rf.i}，${say(rf, '右')}；设计三应插在下标 ${re.i}，${say(re, '右')}。`);
+      } else {
+        push(msg, rf.before, re.before, clsMap(rf.mb, 'warn', [rf.i, 'bad']), clsMap(re.mb, 'warn', [re.i, 'bad']),
+          `${explain}设计二删下标 ${rf.i}，${say(rf, '左')}；设计三删下标 ${re.i}，${say(re, '左')}。`);
+      }
+      ft += rf.moved; et += re.moved;
+      push(msg, rf.after, re.after,
+        clsMap(rf.ma, 'warn', rf.kind === 'insert' ? [rf.i, 'active'] : null),
+        clsMap(re.ma, 'warn', re.kind === 'insert' ? [re.i, 'active'] : null),
+        `${rf.kind === 'insert' ? '插入' : '删除'}完成。本步移动：设计二 <b>${rf.moved}</b> 个，设计三 <b>${re.moved}</b> 个。`);
+    }
+    push('', snap(F), snap(E), {}, {}, `${sc.msgs.length} 条消息处理完。累计移动：设计二 <b>${ft}</b> 个，设计三 <b>${et}</b> 个。${sc.end}`);
+    return frames;
+  }
+
+  const stage = document.getElementById('stage');
+  const row = (arr, cls, title, total) => {
+    const vals = arr.map(x => x.p);
+    while (vals.length < CAP) vals.push(null);
+    return `<div class="row-lab"><b>${title}</b><span class="cnt">累计移动 ${total}</span></div>` +
+      AnimKit.cells(vals, {
+        idx: true,
+        cls: (v, k) => cls[k] || '',
+        ptr: k => (k < arr.length ? '×' + arr[k].q : '')
+      });
+  };
+  function render(f) {
+    stage.innerHTML = '<div class="wrap">' +
+      `<div class="msg">${f.msg || '&nbsp;'}</div>` +
+      row(f.F, f.fc, '设计二：降序，下标 0 最优', f.ft) +
+      row(f.E, f.ec, '设计三：升序，末尾最优', f.et) +
+      '</div>';
+  }
+
+  const controls = document.getElementById('controls');
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = {};
+  Object.keys(SCEN).forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = SCEN[k].label;
+    b.addEventListener('click', () => {
+      Object.values(btns).forEach(x => x.classList.toggle('active', x === b));
+      player.load(build(k));
+    });
+    btns[k] = b;
+    group.appendChild(b);
+  });
+  btns.near.classList.add('active');
+  controls.appendChild(group);
+
+  const player = AnimKit.player({ frames: build('near'), render, interval: 1600 });
+})();
+</script>
+</body>
+</html>

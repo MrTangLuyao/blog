@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快速排序的递归树</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--accent); font-size: 15px; }
+  .q-cell rect { fill: rgba(255, 255, 255, 0.04); stroke: #4a4a49; stroke-width: 1.5; transition: fill 0.25s, stroke 0.25s; }
+  .q-cell text { fill: var(--text); font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .q-cell.seg rect { fill: rgba(56, 189, 248, 0.18); stroke: var(--blue); }
+  .q-cell.pivot rect { fill: var(--accent); stroke: var(--accent); }
+  .q-cell.pivot text { fill: #fff; }
+  .q-cell.final rect { fill: rgba(74, 222, 128, 0.22); stroke: rgba(74, 222, 128, 0.75); }
+  .q-cell.cand rect { fill: rgba(251, 191, 36, 0.24); stroke: var(--yellow); }
+  .q-lab { fill: var(--muted); font-size: 11px; dominant-baseline: central; }
+  .q-lab.hot { fill: var(--accent); font-weight: 700; }
+  .q-idx { fill: var(--muted); font-size: 9px; text-anchor: middle; dominant-baseline: central; }
+  .q-sep { stroke: rgba(255, 255, 255, 0.10); stroke-width: 1; }
+  @media (max-width: 420px) {
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">快速排序的递归树：层数由 pivot 决定</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前 pivot</span>
+  <span><i style="background: var(--blue)"></i>正在分区的子数组</span>
+  <span><i style="background: rgba(74, 222, 128, 0.75)"></i>已在最终位置</span>
+  <span><i style="background: var(--yellow)"></i>三数取中的候选</span>
+</div>
+<div class="stats" id="stats"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const stats = document.getElementById('stats');
+  const pick = document.getElementById('pick');
+
+  const N = 12;
+  const DEFAULT_RANDOM = [6, 2, 5, 10, 4, 3, 12, 7, 9, 8, 1, 11];
+  const SORTED = Array.from({ length: N }, (_, k) => k + 1);
+  const MODES = [
+    { key: 'random', name: '随机输入', first: '输入是随机排列，pivot 取首元素。' },
+    { key: 'sorted', name: '已排序', first: '输入已经排好，pivot 取首元素。' },
+    { key: 'm3', name: '已排序 · 三数取中', first: '输入已经排好，pivot 用三数取中（median-of-3）。' },
+  ];
+
+  // <algo> the course partition: pivot = A[lo]; i stops at >= pivot, j stops at < pivot
+  function partition(A, lo, hi) {
+    const pivot = A[lo];
+    let i = lo + 1, j = hi;
+    while (i <= j) {
+      while (i <= j && A[i] < pivot) i++;
+      while (i <= j && A[j] >= pivot) j--;
+      if (i < j) { const t = A[i]; A[i] = A[j]; A[j] = t; i++; j--; }
+    }
+    const t = A[lo]; A[lo] = A[j]; A[j] = t;
+    return j;
+  }
+  function swapAt(A, a, b) { const t = A[a]; A[a] = A[b]; A[b] = t; }
+
+  function build(values, mode) {
+    const A = values.slice();
+    const n = A.length;
+    const fin = new Array(n).fill(false);
+    const rows = [];                 // rows[d] = segments partitioned at depth d
+    const frames = [];
+    let levels = 0, parts = 0, work = 0;
+    const header = MODES.find(m => m.key === mode).first;
+
+    function snap(note, cur) {
+      frames.push({
+        arr: A.slice(), fin: fin.slice(), cur: cur || null, levels, parts, work, note,
+        rows: rows.map(r => r.map(s => ({ lo: s.lo, hi: s.hi, vals: s.vals.slice(), piv: s.piv, cand: s.cand ? s.cand.slice() : null, phase: s.phase }))),
+      });
+    }
+    const range = (lo, hi) => '<code>A[' + lo + '..' + hi + ']</code>';
+
+    function qs(lo, hi, d) {
+      if (lo > hi) return;
+      if (lo === hi) { fin[lo] = true; return; }      // one element: already in place
+      if (!rows[d]) rows[d] = [];
+      const seg = { lo, hi, vals: A.slice(lo, hi + 1), piv: -1, cand: null, phase: 'pick' };
+      rows[d].push(seg);
+      levels = Math.max(levels, d + 1);
+      const cur = { d, lo, hi };
+      const m = hi - lo + 1;
+
+      if (mode === 'm3') {
+        const mid = lo + Math.floor((hi - lo) / 2);
+        seg.cand = mid === lo ? [lo, hi] : [lo, mid, hi];
+        const trio = mid === lo ? [A[lo], A[hi]] : [A[lo], A[mid], A[hi]];
+        const where = mid === lo ? '<code>A[' + lo + ']</code>、<code>A[' + hi + ']</code>'
+          : '<code>A[' + lo + ']</code>、<code>A[' + mid + ']</code>、<code>A[' + hi + ']</code>';
+        // order A[lo], A[mid], A[hi], then move the median to A[lo] (same steps as the C code)
+        const B = A.slice();
+        if (B[mid] < B[lo]) swapAt(B, mid, lo);
+        if (B[hi] < B[lo]) swapAt(B, hi, lo);
+        if (B[hi] < B[mid]) swapAt(B, hi, mid);
+        const med = B[mid];
+        if (mid === lo) {
+          snap('第 ' + (d + 1) + ' 层，' + range(lo, hi) + '：只有 2 个元素，mid = lo，三数取中只看 ' + where + ' = ' +
+            trio.join('、') + '，排好后较小的 <b>' + med + '</b> 在 <code>A[' + lo + ']</code> 当 pivot。', cur);
+        } else {
+          snap('第 ' + (d + 1) + ' 层，' + range(lo, hi) + '：三数取中看 ' + where + ' = ' +
+            trio.join('、') + '，中位数是 <b>' + med + '</b>。把这三个排好，再把 ' + med + ' 换到 <code>A[' + lo + ']</code> 当 pivot。', cur);
+        }
+        for (let k = lo; k <= hi; k++) A[k] = B[k];
+        swapAt(A, lo, mid);
+        seg.vals = A.slice(lo, hi + 1);
+        seg.cand = null;
+      }
+
+      seg.piv = lo;
+      seg.phase = 'before';
+      snap('第 ' + (d + 1) + ' 层：对 ' + range(lo, hi) + ' 的 ' + m + ' 个元素分区，pivot = <b>' + A[lo] + '</b>。这次分区要扫过这 ' + m + ' 个元素。', cur);
+
+      const p = partition(A, lo, hi);
+      parts++;
+      work += m;
+      fin[p] = true;
+      seg.vals = A.slice(lo, hi + 1);
+      seg.piv = p;
+      seg.phase = 'after';
+      const left = p - lo, right = hi - p;
+      let note = 'pivot ' + A[p] + ' 落在下标 ' + p + '，从此不动。左边 ' + left + ' 个，右边 ' + right + ' 个。';
+      if ((left === 0 || right === 0) && m >= 3) {
+        note += '<span class="bad">一边是空的：只放好了 pivot，其余 ' + (m - 1) + ' 个整体进入下一层。</span>';
+      } else if (left > 0 && right > 0 && Math.abs(left - right) <= 1) {
+        note += '<span class="ok">几乎对半分。</span>';
+      }
+      snap(note, cur);
+
+      qs(lo, p - 1, d + 1);
+      qs(p + 1, hi, d + 1);
+    }
+
+    snap(header + ' n = ' + n + '。每次分区扫过当前子数组的全部元素；同一层的子数组互不重叠，所以<b>每层加起来不超过 n 个</b>。下面每一行是递归树的一层。', null);
+    qs(0, n - 1, 0);
+
+    const perLevel = rows.map(r => r.reduce((s, x) => s + x.hi - x.lo + 1, 0));
+    let end = '完成：<b>' + levels + '</b> 层，各层元素数 ' + perLevel.join(' + ') + ' = <b>' + work + '</b>。';
+    const worst = (n + 2) * (n - 1) / 2;
+    if (levels === n - 1) end += '<span class="bad">层数 = n − 1，总量 (n+2)(n−1)/2 = ' + worst + '，是 n² 量级：最坏情况 Θ(n²)。</span>';
+    else end += '<span class="ok">对比最坏情况：n − 1 = ' + (n - 1) + ' 层、' + worst + ' 个；n·log₂n ≈ ' + Math.round(n * Math.log2(n)) + '。</span>';
+    snap(end, null);
+    return frames;
+  }
+  // </algo>
+
+  // geometry of the drawing (viewBox units)
+  const CW = 34, CH = 24, GAP = 2, PITCH = CW + GAP;
+  const LEFT = 52, RIGHT = 40;
+  const ARR_Y = 14, ROW0 = 54, RP = 28;
+  const W = LEFT + N * PITCH - GAP + RIGHT;
+  const H = ROW0 + (N - 1) * RP + 2;                 // room for the worst case: n − 1 levels
+
+  function cell(x, y, v, cls) {
+    return '<g class="q-cell ' + (cls || '') + '"><rect x="' + x + '" y="' + y + '" width="' + CW + '" height="' + CH + '" rx="5"/>' +
+      '<text x="' + (x + CW / 2) + '" y="' + (y + CH / 2) + '">' + K.esc(v) + '</text></g>';
+  }
+  const colX = k => LEFT + k * PITCH;
+
+  function render(f) {
+    let svg = '';
+    // full array on top
+    svg += '<text class="q-lab" x="4" y="' + (ARR_Y + CH / 2) + '">数组</text>';
+    f.arr.forEach((v, k) => {
+      svg += '<text class="q-idx" x="' + (colX(k) + CW / 2) + '" y="' + (ARR_Y - 7) + '">' + k + '</text>';
+      let cls = '';
+      if (f.fin[k]) cls = 'final';
+      else if (f.cur && k >= f.cur.lo && k <= f.cur.hi) cls = 'seg';
+      svg += cell(colX(k), ARR_Y, v, cls);
+    });
+    svg += '<line class="q-sep" x1="0" y1="' + (ROW0 - 8) + '" x2="' + W + '" y2="' + (ROW0 - 8) + '"/>';
+    // one row per recursion level
+    f.rows.forEach((row, d) => {
+      const y = ROW0 + d * RP;
+      const hot = f.cur && f.cur.d === d;
+      svg += '<text class="q-lab' + (hot ? ' hot' : '') + '" x="4" y="' + (y + CH / 2) + '">第 ' + (d + 1) + ' 层</text>';
+      let total = 0;
+      row.forEach(s => {
+        total += s.hi - s.lo + 1;
+        const isCur = f.cur && f.cur.d === d && f.cur.lo === s.lo && f.cur.hi === s.hi;
+        s.vals.forEach((v, t) => {
+          const k = s.lo + t;
+          let cls = '';
+          if (s.phase === 'pick') cls = s.cand && s.cand.indexOf(k) >= 0 ? 'cand' : 'seg';
+          else if (s.phase === 'before') cls = k === s.piv ? 'pivot' : 'seg';
+          else if (k === s.piv) cls = isCur ? 'pivot' : 'final';
+          svg += cell(colX(k), y, v, cls);
+        });
+      });
+      svg += '<text class="q-lab' + (hot ? ' hot' : '') + '" x="' + (W - RIGHT + 8) + '" y="' + (y + CH / 2) + '">' + total + ' 个</text>';
+    });
+    stage.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMin meet" xmlns="http://www.w3.org/2000/svg">' + svg + '</svg>';
+    stats.innerHTML = '<span>层数 <b>' + f.levels + '</b></span><span>分区 <b>' + f.parts + '</b> 次</span><span>各层元素数之和 <b>' + f.work + '</b></span>';
+  }
+
+  // scenario buttons (added before the player's own buttons)
+  let mode = 'random';
+  let randomInput = DEFAULT_RANDOM.slice();
+  const input = () => (mode === 'random' ? randomInput : SORTED);
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = MODES.map(m => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = m.name;
+    if (m.key === mode) b.className = 'active';
+    b.addEventListener('click', () => select(m.key));
+    group.appendChild(b);
+    return b;
+  });
+  const shuffle = document.createElement('button');
+  shuffle.type = 'button';
+  shuffle.textContent = '↻ 换一组随机数';
+  shuffle.addEventListener('click', () => {
+    const a = SORTED.slice();
+    for (let k = a.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); const t = a[k]; a[k] = a[r]; a[r] = t; }
+    randomInput = a;
+    select('random');
+  });
+  pick.appendChild(group);
+  pick.appendChild(shuffle);
+
+  function select(key) {
+    mode = key;
+    btns.forEach((b, k) => b.classList.toggle('active', MODES[k].key === key));
+    player.load(build(input(), mode));
+  }
+
+  const player = window.AnimKit.player({ frames: build(input(), mode), render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2-3 树插入与分裂</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">2-3 树：插入与分裂</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--blue)"></i>查找路径</span>
+  <span><i style="background: var(--accent)"></i>放进新键</span>
+  <span><i style="background: var(--red)"></i>溢出（3 个键）</span>
+  <span><i style="background: var(--yellow)"></i>收到上提键的父结点</span>
+  <span><i style="background: var(--green)"></i>分裂出的两半</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const SCENARIOS = [
+    { label: '1…7（课上）', keys: [1, 2, 3, 4, 5, 6, 7] },
+    { label: '混合', keys: [40, 10, 80, 30, 50, 60, 20, 90, 70, 95] },
+  ];
+  const MAX_KEYS = 20;
+
+  // <algo> 2-3 tree insertion; every node keeps an id so frames can highlight it
+  let nextId = 1;
+  const mk = (keys, children) => ({ id: nextId++, keys, children: children || [] });
+  const clone = t => t && { id: t.id, keys: t.keys.slice(), children: t.children.map(clone) };
+  const box = n => '[' + n.keys.join(' ') + ']';
+  function height(t) { let h = 0; while (t) { h++; t = t.children[0]; } return h; }
+
+  // invariants: 1-2 keys per node, children = keys + 1, search order, all leaves at one depth
+  function check(t) {
+    const depths = new Set();
+    (function walk(n, d, lo, hi) {
+      if (n.keys.length < 1 || n.keys.length > 2) throw new Error('key count ' + box(n));
+      n.keys.forEach((x, i) => {
+        if (x <= lo || x >= hi || (i > 0 && x <= n.keys[i - 1])) throw new Error('order ' + box(n));
+      });
+      if (!n.children.length) { depths.add(d); return; }
+      if (n.children.length !== n.keys.length + 1) throw new Error('child count ' + box(n));
+      const b = [lo].concat(n.keys, [hi]);
+      n.children.forEach((c, i) => walk(c, d + 1, b[i], b[i + 1]));
+    })(t, 0, -Infinity, Infinity);
+    if (depths.size !== 1) throw new Error('leaves at different depths');
+  }
+
+  function describe(n, k, i) {
+    if (n.keys.length === 1) return i === 0 ? k + ' &lt; ' + n.keys[0] + '，往左' : k + ' &gt; ' + n.keys[0] + '，往右';
+    const x = n.keys[0], y = n.keys[1];
+    if (i === 0) return k + ' &lt; ' + x + '，往左';
+    if (i === 1) return x + ' &lt; ' + k + ' &lt; ' + y + '，往中间';
+    return k + ' &gt; ' + y + '，往右';
+  }
+
+  function build(keys) {
+    nextId = 1;
+    const frames = [];
+    let root = null, splits = 0;
+    const snap = (hl, edges, note) => frames.push({ tree: clone(root), hl, edges, note });
+    snap({}, {}, '空树。依次插入 <b>' + keys.join(', ') + '</b>。');
+
+    for (const k of keys) {
+      if (!root) {
+        root = mk([k]);
+        snap({ [root.id]: 'active' }, {}, '插入 <b>' + k + '</b>：树是空的，[' + k + '] 就是根，也是叶子。');
+        continue;
+      }
+      // walk down as in a BST, remembering [node, child index] pairs
+      const path = [], steps = [];
+      let cur = root, dup = false;
+      for (;;) {
+        let i = 0;
+        while (i < cur.keys.length && k > cur.keys[i]) i++;
+        path.push([cur, i]);
+        if (i < cur.keys.length && cur.keys[i] === k) { dup = true; break; }
+        if (!cur.children.length) break;
+        steps.push(describe(cur, k, i));
+        cur = cur.children[i];
+      }
+      const hl = {}, edges = {};
+      path.forEach(([n], d) => {
+        hl[n.id] = 'visited';
+        if (d + 1 < path.length) edges[n.id + '-' + path[d + 1][0].id] = 'visited';
+      });
+      if (dup) { snap(hl, edges, '插入 <b>' + k + '</b>：' + k + ' 已在树中，不插入。'); continue; }
+
+      const leaf = path[path.length - 1][0];
+      leaf.keys.splice(path[path.length - 1][1], 0, k);
+      const where = steps.length ? steps.join('；') + '；到达叶子，' : '树只有一个结点，它就是叶子，';
+      if (leaf.keys.length < 3) {
+        hl[leaf.id] = 'active';
+        snap(hl, edges, '插入 <b>' + k + '</b>：' + where + '放进去得到 ' + box(leaf) + '，<span class="ok">装得下</span>，结束。');
+        check(root);
+        continue;
+      }
+      hl[leaf.id] = 'bad';
+      snap(hl, edges, '插入 <b>' + k + '</b>：' + where + '放进去得到 <b>' + box(leaf) + '</b>：3 个键，<span class="bad">溢出</span>，要分裂。');
+
+      // split upward while the current node holds 3 keys
+      let idx = path.length - 1, node = leaf;
+      while (node.keys.length === 3) {
+        splits++;
+        const a = node.keys[0], b = node.keys[1], c = node.keys[2];
+        const kids = node.children;
+        const right = mk([c], kids.slice(2));
+        node.keys = [a];
+        node.children = kids.slice(0, 2);
+        const kidTxt = kids.length
+          ? '；它的 4 个孩子左两个 ' + kids.slice(0, 2).map(box).join(' ') + ' 归 [' + a + ']，右两个 ' + kids.slice(2).map(box).join(' ') + ' 归 [' + c + ']'
+          : '';
+        const h = { [node.id]: 'done', [right.id]: 'done' };
+        const e = {};
+        if (idx === 0) {
+          const before = height(root);
+          root = mk([b], [node, right]);
+          h[root.id] = 'active';
+          e[root.id + '-' + node.id] = 'done';
+          e[root.id + '-' + right.id] = 'done';
+          snap(h, e, '分裂 [' + a + ' ' + b + ' ' + c + ']：它是根，中间键 <b>' + b + '</b> 上提成为<b>新根</b>，[' + a + '] 和 [' + c +
+            '] 当它的左、右孩子' + kidTxt + '。树高 ' + before + ' → ' + height(root) + '，所有叶子一起下移一层。');
+          break;
+        }
+        const parent = path[idx - 1][0], pi = path[idx - 1][1];
+        parent.keys.splice(pi, 0, b);
+        parent.children.splice(pi + 1, 0, right);
+        const over = parent.keys.length === 3;
+        h[parent.id] = over ? 'bad' : 'warn';
+        e[parent.id + '-' + node.id] = 'done';
+        e[parent.id + '-' + right.id] = 'done';
+        snap(h, e, '分裂 [' + a + ' ' + b + ' ' + c + ']：中间键 <b>' + b + '</b> 上提，插进已有的父结点，父结点变成 ' + box(parent) +
+          '；[' + a + '] 和 [' + c + '] 挂在 ' + b + ' 的两侧' + kidTxt + '。' +
+          (over ? '父结点也有 3 个键，<span class="bad">继续分裂</span>。' : '父结点装得下，<span class="ok">结束</span>。'));
+        node = parent;
+        idx--;
+      }
+      check(root);
+    }
+    if (root) snap({}, {}, '全部插入完成：树高 <b>' + height(root) + '</b>，共分裂 ' + splits + ' 次，所有叶子都在第 ' + height(root) + ' 层。');
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    stage.innerHTML = K.btree(f.tree, {
+      cls: n => f.hl[n.id] || '',
+      edgeCls: (p, c) => f.edges[p.id + '-' + c.id] || '',
+    });
+  }
+
+  let player = null;
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  function setActive(btn) {
+    group.querySelectorAll('button').forEach(o => o.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+  }
+  SCENARIOS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = s.label;
+    b.title = '插入 ' + s.keys.join(', ');
+    if (i === 0) b.classList.add('active');
+    b.addEventListener('click', () => { setActive(b); player.load(build(s.keys)); });
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = '50, 30, 70, 20, 40, 60, 80';
+  input.style.width = '150px';
+  input.setAttribute('aria-label', '自定义插入序列');
+  const go = document.createElement('button');
+  go.type = 'button';
+  go.textContent = '插入这串';
+  go.title = '用逗号或空格分隔的整数，最多 ' + MAX_KEYS + ' 个';
+  function custom() {
+    const keys = input.value.split(/[\s,，]+/).filter(Boolean).map(Number)
+      .filter(x => Number.isInteger(x) && x >= 0 && x <= 999).slice(0, MAX_KEYS);
+    setActive(null);
+    if (!keys.length) {
+      player.load([{ tree: null, hl: {}, edges: {}, note: '请输入 0 到 999 之间的整数，用逗号或空格分隔。' }]);
+      return;
+    }
+    player.load(build(keys));
+  }
+  go.addEventListener('click', custom);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') custom(); });
+  controls.appendChild(input);
+  controls.appendChild(go);
+
+  player = AnimKit.player({ frames: build(SCENARIOS[0].keys), render, interval: 1600 });
+})();
+</script>
+</body>
+</html>

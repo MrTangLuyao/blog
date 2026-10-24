@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>选择排序逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .board { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--accent); font-size: 15px; }
+  .stats .sub { font-size: 12px; }
+  .board .cells { flex-wrap: nowrap; }
+  @media (max-width: 420px) {
+    .board .cells { gap: 3px; }
+    .board .cell { min-width: 34px; height: 34px; padding: 0 3px; font-size: 13px; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">选择排序：每轮把未排部分的最小值换到最前</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: rgba(74, 222, 128, 0.7)"></i>已排好，不再改动</span>
+  <span><i style="background: var(--yellow)"></i>当前最小 min</span>
+  <span><i style="background: var(--accent)"></i>正在比较 A[j]</span>
+  <span><i style="background: var(--blue)"></i>刚交换</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  // Each item: v = key used in comparisons, t = label shown (subscripts mark equal keys).
+  const SCENARIOS = [
+    { name: '课上例子', items: [[2, '2₁'], [0], [9], [7], [1], [5], [2, '2₂']] },
+    { name: '已排好', items: [[0], [1], [2, '2₁'], [2, '2₂'], [5], [7], [9]] },
+    { name: '逆序', items: [[9], [7], [5], [2, '2₁'], [2, '2₂'], [1], [0]] },
+    { name: '反例 2₁ 2₂ 1', items: [[2, '2₁'], [2, '2₂'], [1]] },
+  ];
+
+  // <algo> selection sort exactly as the C code: min starts at i, strict <, swap always runs
+  function build(sc) {
+    const A = sc.items.map(p => ({ v: p[0], t: p.length > 1 ? p[1] : String(p[0]) }));
+    const n = A.length;
+    const frames = [];
+    let cmp = 0, sw = 0, self = 0;
+    const lab = k => '<code>A[' + k + ']</code> = ' + K.esc(A[k].t);
+    const snap = (extra) => Object.assign({
+      A: A.map(x => x.t), cmp, sw, self, sorted: 0, i: -1, j: -1, min: -1, swapped: [], round: 0,
+    }, extra);
+
+    frames.push(snap({
+      note: 'n = ' + n + '，共做 n − 1 = ' + (n - 1) + ' 轮。每轮在未排部分里找最小值的<b>下标</b>，再把它换到这一部分的最前面。',
+    }));
+    for (let i = 0; i < n - 1; i++) {
+      let min = i;
+      frames.push(snap({ round: i + 1, sorted: i, i, min,
+        note: '第 ' + (i + 1) + ' 轮：未排部分是 <code>A[' + i + '..' + (n - 1) + ']</code>，先令 <code>min = ' + i + '</code>（' + lab(i) + '）。' }));
+      for (let j = i + 1; j < n; j++) {
+        cmp++;
+        const less = A[j].v < A[min].v;
+        const old = min;
+        if (less) min = j;
+        let note = '比较 ' + lab(j) + ' 与 ' + lab(old) + '：';
+        if (less) note += K.esc(A[j].t) + ' &lt; ' + K.esc(A[old].t) + '，<b>min = ' + j + '</b>';
+        else if (A[j].v === A[old].v) note += '相等，不算更小，min 不变';
+        else note += K.esc(A[j].t) + ' &gt; ' + K.esc(A[old].t) + '，min 不变';
+        frames.push(snap({ round: i + 1, sorted: i, i, j, min, note }));
+      }
+      const a = A[i].t, b = A[min].t;
+      const t = A[i]; A[i] = A[min]; A[min] = t;
+      sw++;
+      let note;
+      if (min === i) {
+        self++;
+        note = '扫描结束，最小值 ' + K.esc(b) + ' 已在下标 ' + i + '。代码照样执行 <code>swap(&amp;A[' + i + '], &amp;A[' + i + '])</code>，和自己交换。';
+      } else {
+        note = '扫描结束，最小值 ' + K.esc(b) + ' 在下标 ' + min + '。<code>swap</code>：' + K.esc(b) + ' 换到下标 ' + i + '，' + K.esc(a) + ' 换到下标 ' + min + '。';
+      }
+      frames.push(snap({ round: i + 1, sorted: i, i, swapped: min === i ? [i] : [i, min], note }));
+    }
+    let end = '完成。比较 <b>' + cmp + '</b> 次 = ' +
+      Array.from({ length: n - 1 }, (_, k) => n - 1 - k).join(' + ') +
+      '，swap <b>' + sw + '</b> 次（其中自换 ' + self + ' 次）。';
+    const tags = A.map(x => x.t).filter(s => /[₁₂]/.test(s));
+    if (tags.length === 2) {
+      end += tags[0] === '2₁' ? '两个 2 碰巧保持了原来的先后次序。' : '<span class="bad">2₂ 跑到了 2₁ 前面：不稳定。</span>';
+    }
+    frames.push(snap({ sorted: n, round: n - 1, note: end }));
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    const n = f.A.length;
+    const cls = (v, k) => {
+      if (f.swapped.indexOf(k) >= 0) return 'visited';
+      if (k < f.sorted) return 'done';
+      if (k === f.min) return 'warn';
+      if (k === f.j) return 'active';
+      return '';
+    };
+    const ptr = k => {
+      const p = [];
+      if (k === f.i) p.push('i');
+      if (k === f.j) p.push('j');
+      if (k === f.min) p.push('min');
+      return p.join('·');
+    };
+    const stats = '<div class="stats">' +
+      '<span>' + (f.sorted === n ? '完成' : f.round ? '第 ' + f.round + ' / ' + (n - 1) + ' 轮' : '开始') + '</span>' +
+      '<span>比较 <b>' + f.cmp + '</b></span>' +
+      '<span>swap <b>' + f.sw + '</b> <span class="sub">（自换 ' + f.self + '）</span></span>' +
+      '</div>';
+    stage.innerHTML = '<div class="board">' + stats + K.cells(f.A, { cls, idx: true, ptr }) + '</div>';
+  }
+
+  let current = 0;
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = SCENARIOS.map((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.name;
+    if (k === current) b.className = 'active';
+    b.addEventListener('click', () => {
+      current = k;
+      btns.forEach((x, m) => x.classList.toggle('active', m === k));
+      player.load(build(SCENARIOS[k]));
+    });
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: build(SCENARIOS[current]), render, interval: 1100 });
+})();
+</script>
+</body>
+</html>

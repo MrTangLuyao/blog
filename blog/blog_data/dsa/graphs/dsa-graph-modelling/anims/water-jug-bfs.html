@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>倒水问题的 BFS</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .wj { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .wj-graph { flex: 1 1 auto; min-height: 0; position: relative; }
+  .wj-graph > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .wj-queue { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .wj-queue .cells { padding: 6px 2px; gap: 3px; }
+  .wj-queue .cell { min-width: 52px; height: 28px; font-size: 12px; }
+  .wj-queue .none { font-style: italic; }
+  .k-node text { font-size: 13px; }
+  svg .k-node rect.under { fill: var(--surface); stroke: none; }
+  .lvl { fill: var(--muted); font-size: 11px; font-weight: 600; text-anchor: middle; }
+</style>
+</head>
+<body>
+<div class="title">倒水问题：隐式图上的 BFS</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>展开中</span>
+  <span><i style="background: var(--yellow)"></i>新状态</span>
+  <span><i style="background: var(--blue)"></i>队列中</span>
+  <span><i style="background: var(--red)"></i>已访问</span>
+  <span><i style="background: var(--green)"></i>目标 / 路径</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+
+  const CAP = [8, 5, 3];
+  const START = [8, 0, 0];
+  const TARGET = 4;
+  const key = s => s.join(',');
+  const show = k => '(' + k + ')';
+
+  // every ordered pair of jugs, in the order 8→5, 8→3, 5→8, 5→3, 3→8, 3→5
+  function pours(s) {
+    const out = [];
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        if (i === j) continue;
+        const amt = Math.min(s[i], CAP[j] - s[j]);
+        const name = CAP[i] + '→' + CAP[j];
+        if (amt === 0) { out.push({ name, amt: 0 }); continue; }
+        const t = s.slice();
+        t[i] -= amt;
+        t[j] += amt;
+        out.push({ name, amt, t, to: key(t) });
+      }
+    }
+    return out;
+  }
+
+  // Run BFS (mark on enqueue, goal test when a state is generated) and record frames.
+  function build() {
+    const level = new Map(), parent = new Map(), order = [];
+    const queue = [];
+    const frames = [];
+    const s0 = key(START);
+    level.set(s0, 0);
+    parent.set(s0, null);
+    order.push(s0);
+    queue.push(START);
+    function snap(extra) {
+      frames.push(Object.assign({
+        found: order.slice(),
+        parent: new Map(parent),
+        queue: queue.map(key),
+        cur: null, fresh: [], seen: [], goal: null, path: [],
+      }, extra));
+    }
+    snap({ note: `起点 <b>${show(s0)}</b>：8 L 壶满，另两个空。标记为已访问并入队。图里的状态都是搜索中<b>现生成</b>的，事先并不存在。` });
+
+    let goal = null;
+    while (queue.length && !goal) {
+      const s = queue.shift();
+      const u = key(s);
+      const fresh = [], seen = [], parts = [];
+      const ok = pours(s).filter(p => p.amt);
+      for (const p of ok) {
+        if (level.has(p.to)) { seen.push(p.to); continue; }
+        level.set(p.to, level.get(u) + 1);
+        parent.set(p.to, u);
+        order.push(p.to);
+        queue.push(p.t);
+        fresh.push(p.to);
+        if (p.t.includes(TARGET)) {
+          parts.push(`${p.name} 倒 ${p.amt} L 得 <b>${show(p.to)}</b>，<span class="ok">含 4 L，找到目标，停止</span>`);
+          goal = p.to;
+          break;
+        }
+        parts.push(`${p.name} 倒 ${p.amt} L 得新状态 <b>${show(p.to)}</b>`);
+      }
+      const back = seen.length ? `回到已访问的 ${seen.map(show).join('、')}，<span class="bad">跳过</span>` : '';
+      let note = `取出队首 <b>${show(u)}</b>（第 ${level.get(u)} 层）。`;
+      if (frames.length === 1) note += `5 L、3 L 壶是空的，只有 ${ok.length} 种倒法：`;
+      if (goal) {
+        note += (back ? '先' + back + '；' : '') + parts.join('；') + '。';
+      } else if (!parts.length) {
+        note += `可行的 ${ok.length} 种倒法都${back}，没有新状态。`;
+      } else {
+        note += parts.join('；') + (frames.length <= 2 ? '，都标记为已访问、记下前驱、入队' : '，入队') +
+          (back ? '；其余倒法' + back : '') + '。';
+      }
+      snap({ cur: u, fresh, seen, goal, note });
+    }
+
+    const path = [];
+    for (let k = goal; k; k = parent.get(k)) path.unshift(k);
+    snap({
+      goal, path,
+      note: `<span class="ok">沿前驱回溯：${path.map(show).join(' → ')}，共 ${path.length - 1} 次倒水。</span>` +
+        `BFS 按层扩展，所以这是最少的次数。一共生成了 ${order.length} 个不同状态。`,
+    });
+    return { frames, level, order };
+  }
+
+  const run = build();
+
+  // fixed layout: column = BFS level, rows in discovery order
+  const BW = 48, BH = 28, GX = 84, GY = 42, PADX = 10, TOP = 26;
+  const byLevel = [];
+  run.order.forEach(k => {
+    const l = run.level.get(k);
+    (byLevel[l] = byLevel[l] || []).push(k);
+  });
+  const maxRows = Math.max(...byLevel.map(c => c.length));
+  const midY = TOP + ((maxRows - 1) * GY) / 2 + BH / 2;
+  const pos = new Map();
+  byLevel.forEach((col, l) => col.forEach((k, r) => {
+    pos.set(k, { x: PADX + l * GX + BW / 2, y: midY + (r - (col.length - 1) / 2) * GY });
+  }));
+  const W = PADX * 2 + (byLevel.length - 1) * GX + BW;
+  const H = TOP + (maxRows - 1) * GY + BH + 8;
+
+  // point where the segment from a's centre towards b leaves a's box
+  function exit(a, b, pad) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const t = Math.min(dx ? (BW / 2 + pad) / Math.abs(dx) : Infinity, dy ? (BH / 2 + pad) / Math.abs(dy) : Infinity);
+    return [a.x + dx * t, a.y + dy * t];
+  }
+  const ARROW = { '': 'rgba(255,255,255,0.45)', active: 'var(--accent)', done: 'var(--green)', bad: 'var(--red)' };
+  const defs = '<defs>' + Object.keys(ARROW).map(c =>
+    `<marker id="wj-arr${c ? '-' + c : ''}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto">` +
+    `<path d="M0,0 L10,5 L0,10 z" style="fill:${ARROW[c]}"/></marker>`).join('') + '</defs>';
+
+  function edge(u, v, cls) {
+    const a = pos.get(u), b = pos.get(v);
+    const m = cls === 'bad' ? 'bad' : cls === 'active' ? 'active' : cls === 'done' ? 'done' : '';
+    const marker = ` marker-end="url(#wj-arr${m ? '-' + m : ''})"`;
+    if (Math.abs(a.x - b.x) < 1) {
+      // same column: bow to the right so the line does not run through other boxes
+      const x0 = a.x + BW / 2, x1 = b.x + BW / 2 + 3, bow = a.x + BW / 2 + 26;
+      return `<path class="k-edge ${cls}" d="M${x0},${a.y} Q${bow},${(a.y + b.y) / 2} ${x1},${b.y}"${marker}/>`;
+    }
+    const [x1, y1] = exit(a, b, 0);
+    const [x2, y2] = exit(b, a, 3);
+    if (cls === 'bad') {
+      // a pour back to a known state: bend it so it never hides the tree edge it may run along
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const cx = (x1 + x2) / 2 - dy / len * 26, cy = (y1 + y2) / 2 + dx / len * 26;
+      return `<path class="k-edge ${cls}" d="M${x1},${y1} Q${cx},${cy} ${x2},${y2}"${marker}/>`;
+    }
+    return `<line class="k-edge ${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${marker}/>`;
+  }
+
+  function render(f) {
+    const known = new Set(f.found);
+    const inQ = new Set(f.queue);
+    const onPath = new Set(f.path);
+    const pathEdge = (u, v) => onPath.has(u) && onPath.has(v) && f.path.indexOf(v) === f.path.indexOf(u) + 1;
+    let body = defs;
+    byLevel.forEach((col, l) => {
+      if (col.some(k => known.has(k))) {
+        body += `<text class="lvl" x="${PADX + l * GX + BW / 2}" y="${TOP - 12}">倒 ${l} 次</text>`;
+      }
+    });
+    f.found.forEach(k => {
+      const p = f.parent.get(k);
+      if (!p) return;
+      const cls = pathEdge(p, k) ? 'done' : f.fresh.includes(k) ? 'active' : '';
+      body += edge(p, k, cls);
+    });
+    f.seen.forEach(k => { body += edge(f.cur, k, 'bad'); });
+    f.found.forEach(k => {
+      const p = pos.get(k);
+      let cls = '';
+      if (k === f.goal) cls = 'found';
+      else if (onPath.has(k)) cls = 'done';
+      else if (k === f.cur) cls = 'active';
+      else if (f.fresh.includes(k)) cls = 'warn';
+      else if (f.seen.includes(k)) cls = 'bad';
+      else if (inQ.has(k)) cls = 'visited';
+      const x = p.x - BW / 2, y = p.y - BH / 2;
+      body += `<g class="k-node ${cls}"><rect class="under" x="${x}" y="${y}" width="${BW}" height="${BH}" rx="7"/>` +
+        `<rect x="${x}" y="${y}" width="${BW}" height="${BH}" rx="7"/><text x="${p.x}" y="${p.y}">${K.esc(k)}</text></g>`;
+    });
+    const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
+
+    const q = f.queue.length
+      ? K.cells(f.queue, { cls: (v, i) => (v === f.goal ? 'found' : f.fresh.includes(v) ? 'warn' : i === 0 ? 'visited' : '') })
+      : '<span class="none">（空）</span>';
+    stage.innerHTML =
+      '<div class="wj">' +
+        `<div class="wj-graph">${svg}</div>` +
+        `<div class="wj-queue"><span>队列（左 = 队首）：</span>${q}</div>` +
+      '</div>';
+  }
+
+  window.AnimKit.player({ frames: run.frames, render, interval: 1600 });
+})();
+</script>
+</body>
+</html>

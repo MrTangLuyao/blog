@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>递归树逐层求和</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .rt { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; }
+  .rt-svg { flex: 1 1 auto; min-height: 0; position: relative; }
+  .rt-svg > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .rt-sum { flex: 0 0 auto; text-align: center; font-size: 14px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .rt-sum .lab { color: var(--muted); font-weight: 500; margin-right: 6px; }
+  .rt-sum.final { color: var(--accent); }
+  .rec { font-size: 15px; font-weight: 700; fill: var(--text); }
+  .hdr { font-size: 12px; font-weight: 600; fill: var(--muted); }
+  .lv-text { font-size: 14px; font-weight: 700; fill: var(--text); dominant-baseline: central; }
+  .lv-text.cur { fill: var(--accent); }
+  .lv-text.done { fill: var(--green); }
+  .lv-text.leaf { fill: var(--blue); }
+  .lv-track { fill: rgba(255, 255, 255, 0.07); }
+  .lv-bar.cur { fill: var(--accent); }
+  .lv-bar.done { fill: var(--green); opacity: 0.8; }
+  .lv-guide { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1; stroke-dasharray: 3 4; }
+</style>
+</head>
+<body>
+<div class="title">递归树：每层代价 × 层数</div>
+<div class="controls" id="controls"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // Each recurrence: how a call of size m splits (sub) and its own work in units of c (work).
+  const SCENARIOS = [
+    { kind: 'split', label: '2T(n/2)+cn', rec: 'T(n) = 2T(n/2) + cn', n: 8, t1: 1, shape: 'tree',
+      sub: m => [m / 2, m / 2], work: m => m,
+      intro: '本层工作是 c·m；每个结点分出 2 个规模减半的子问题。' },
+    { kind: 'dec', label: 'T(n−1)+cn', rec: 'T(n) = T(n−1) + cn', n: 8, t1: 0, shape: 'chain',
+      sub: m => [m - 1], work: m => m,
+      intro: '本层工作是 c·m；每个结点只分出 1 个规模少 1 的子问题，树是一条链。' },
+    { kind: 'half', label: 'T(n/2)+c', rec: 'T(n) = T(n/2) + c', n: 16, t1: 1, shape: 'chain',
+      sub: m => [m / 2], work: () => 1,
+      intro: '本层工作只有常数 c；每个结点只分出 1 个规模减半的子问题，树是一条链。' },
+  ];
+
+  const W = 400, TREE_L = 14, TREE_R = 250, COL_X = 266, BAR_W = 124, TOP = 50, R = 13;
+  const cu = k => (k === 1 ? 'c' : k + 'c');          // k·c written as "c", "8c", …
+  const times = k => (k === 1 ? '' : k + '·');         // "8·T(1)" or "T(1)"
+
+  // Run the recurrence: expand every call until it reaches the base case m = 1.
+  function expand(sc) {
+    const levels = [];
+    (function rec(m, d) {
+      const node = { m, d, kids: [] };
+      (levels[d] = levels[d] || []).push(node);
+      if (m > 1) node.kids = sc.sub(m).map(x => rec(x, d + 1));
+      return node;
+    })(sc.n, 0);
+    return levels;
+  }
+
+  // The same recurrence evaluated directly with c = 1, for the check in the last frame.
+  function direct(sc, m) {
+    if (m <= 1) return sc.t1;
+    return sc.sub(m).reduce((s, x) => s + direct(sc, x), 0) + sc.work(m);
+  }
+
+  function layout(sc, levels) {
+    const depth = levels.length;
+    const gy = sc.shape === 'tree' ? 66 : (depth > 6 ? 34 : 52);
+    levels.forEach((lv, d) => lv.forEach(nd => { nd.y = TOP + d * gy; }));
+    if (sc.shape === 'tree') {
+      const leaves = levels[depth - 1];
+      const gap = (TREE_R - TREE_L) / leaves.length;
+      leaves.forEach((nd, j) => { nd.x = TREE_L + (j + 0.5) * gap; });
+      for (let d = depth - 2; d >= 0; d--) {
+        levels[d].forEach(nd => { nd.x = nd.kids.reduce((s, k) => s + k.x, 0) / nd.kids.length; });
+      }
+    } else {
+      const dx = Math.min(30, (TREE_R - TREE_L - 2 * R - 40) / Math.max(1, depth - 1));
+      levels.forEach((lv, d) => lv.forEach(nd => { nd.x = TREE_L + R + 20 + d * dx; }));
+    }
+    const ys = levels.map(lv => lv[0].y);
+    return { ys, H: ys[depth - 1] + R + 16 };
+  }
+
+  function framesFor(sc) {
+    const levels = expand(sc);
+    const geo = layout(sc, levels);
+    const depth = levels.length, leafD = depth - 1;
+    const rows = [];                       // per level: { text, units } for the right-hand column
+    const frames = [];
+    let acc = 0;
+    const base = { sc, levels, geo, rows };
+
+    frames.push(Object.assign({}, base, {
+      cur: -1, sum: '<span class="lab">累计</span>0',
+      note: `<b>${K.esc(sc.rec)}</b>，n = ${sc.n}。圆里的数是子问题规模 m，${sc.intro}按“下一步”从根开始逐层求和。`,
+    }));
+
+    for (let d = 0; d < depth; d++) {
+      const lv = levels[d];
+      const m = lv[0].m;
+      if (lv.some(x => x.m !== m)) throw new Error('level sizes differ');
+      if (d < leafD) {
+        const each = sc.work(m), tot = lv.length * each;
+        acc += tot;
+        rows[d] = { text: lv.length > 1 ? `${lv.length} × ${cu(each)} = ${cu(tot)}` : cu(tot), units: tot };
+        let note = d === 0 ? `第 0 层（根）：规模 ${m}，工作 <b>${cu(tot)}</b>。` :
+          lv.length > 1 ? `第 ${d} 层：${lv.length} 个结点，规模都是 ${m}，本层合计 ${lv.length} × ${cu(each)} = <b>${cu(tot)}</b>。` :
+          `第 ${d} 层：规模 ${m}，工作 <b>${cu(tot)}</b>。`;
+        if (d === 1 && lv.length > 1) note += '结点数翻倍、规模减半，每层合计不变。';
+        note += `累计 ${cu(acc)}。`;
+        frames.push(Object.assign({}, base, { cur: d, sum: `<span class="lab">累计</span>${cu(acc)}`, note }));
+      } else {
+        rows[d] = { text: `${times(lv.length)}T(1)`, units: null };
+        frames.push(Object.assign({}, base, {
+          cur: d, sum: `<span class="lab">累计</span>${cu(acc)} + ${times(lv.length)}T(1)`,
+          note: `第 ${d} 层是叶子：${lv.length > 1 ? lv.length + ' 个' : ''}规模 1 的子问题，碰到基本情况 T(1)，不再递归。`,
+        }));
+      }
+    }
+
+    const leaves = levels[leafD].length;
+    const total = acc + leaves * sc.t1, check = direct(sc, sc.n);
+    const ok = total === check ? `<span class="ok">一致</span>` : `<span class="bad">不一致</span>`;
+    let note;
+    if (sc.kind === 'split') {
+      note = `内部共 ${leafD} 层（${leafD} = log₂ ${sc.n}），每层 ${cu(rows[0].units)}，再加 ${leaves} 个叶子：` +
+        `<b>cn·log₂ n + n·T(1)</b>。取 c = 1、T(1) = ${sc.t1}：${acc} + ${leaves * sc.t1} = ${total}；` +
+        `按递推式直接算 T(${sc.n}) = ${check}，${ok}。`;
+    } else if (sc.kind === 'half') {
+      note = `规模 ${levels.map(lv => lv[0].m).join(' → ')}，减半 ${leafD} 次（${leafD} = log₂ ${sc.n}），每次 c：` +
+        `<b>c·log₂ n + T(1)</b>。取 c = 1、T(1) = ${sc.t1}：${acc} + ${sc.t1} = ${total}；按递推式直接算 T(${sc.n}) = ${check}，${ok}。`;
+    } else {
+      note = `链长 ${depth}：内部各层 ${rows.slice(0, leafD).map(r => r.text).join(' + ')} = ${cu(acc)}，` +
+        `即 <b>c(n+2)(n−1)/2 + T(1)</b>。取 c = 1、T(1) = ${sc.t1}（课上的取值）：${acc} + ${sc.t1} = ${total}；` +
+        `按递推式直接算 T(${sc.n}) = ${check}，${ok}。`;
+    }
+    frames.push(Object.assign({}, base, {
+      cur: depth, final: true, sum: `T(${sc.n}) = ${cu(acc)} + ${times(leaves)}T(1)`, note,
+    }));
+    return frames;
+  }
+
+  function render(f) {
+    const { sc, levels, geo, rows } = f;
+    const depth = levels.length, leafD = depth - 1;
+    let s = `<text class="rec" x="${TREE_L}" y="22">${K.esc(sc.rec)}，n = ${sc.n}</text>`;
+    s += `<text class="hdr" x="${COL_X}" y="22">本层合计</text>`;
+
+    // edges
+    levels.forEach(lv => lv.forEach(nd => nd.kids.forEach(k => {
+      const dx = k.x - nd.x, dy = k.y - nd.y, len = Math.hypot(dx, dy) || 1;
+      s += `<line class="k-edge" x1="${nd.x + dx / len * R}" y1="${nd.y + dy / len * R}" x2="${k.x - dx / len * R}" y2="${k.y - dy / len * R}"/>`;
+    })));
+
+    // right-hand column, only for levels already reached
+    levels.forEach((lv, d) => {
+      if (d > f.cur || !rows[d]) return;
+      const y = geo.ys[d];
+      const right = Math.max(...lv.map(nd => nd.x)) + R + 6;
+      if (right < COL_X - 10) s += `<line class="lv-guide" x1="${right}" y1="${y}" x2="${COL_X - 8}" y2="${y}"/>`;
+      const st = d === leafD ? 'leaf' : d === f.cur ? 'cur' : 'done';
+      if (rows[d].units == null) {
+        s += `<text class="lv-text ${st}" x="${COL_X}" y="${y}">${K.esc(rows[d].text)}</text>`;
+      } else {
+        const w = Math.max(3, rows[d].units / sc.n * BAR_W);
+        s += `<text class="lv-text ${st}" x="${COL_X}" y="${y - 8}">${K.esc(rows[d].text)}</text>`;
+        s += `<rect class="lv-track" x="${COL_X}" y="${y + 4}" width="${BAR_W}" height="7" rx="3"/>`;
+        s += `<rect class="lv-bar ${st}" x="${COL_X}" y="${y + 4}" width="${w}" height="7" rx="3"/>`;
+      }
+    });
+
+    // nodes
+    levels.forEach((lv, d) => lv.forEach(nd => {
+      const lit = d <= f.cur;
+      const cls = !lit ? '' : d === leafD ? 'visited' : d === f.cur ? 'active' : 'done';
+      s += `<g class="k-node ${cls}"><circle cx="${nd.x}" cy="${nd.y}" r="${R}"/><text x="${nd.x}" y="${nd.y}">${nd.m}</text></g>`;
+    }));
+
+    const svg = `<svg viewBox="0 0 ${W} ${geo.H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+    stage.innerHTML = `<div class="rt"><div class="rt-svg">${svg}</div><div class="rt-sum${f.final ? ' final' : ''}">${f.sum}</div></div>`;
+  }
+
+  // scenario buttons go in before the player's own buttons
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  let player = null;
+  SCENARIOS.forEach((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    if (k === 0) b.classList.add('active');
+    b.addEventListener('click', () => {
+      group.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+      if (player) player.load(framesFor(sc));
+    });
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  player = window.AnimKit.player({ frames: framesFor(SCENARIOS[0]), render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

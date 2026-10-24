@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>斐波那契递归树</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .stage .k-node text.k-badge { fill: var(--muted); font-size: 11px; font-weight: 600; }
+  .k-node.ghost, .k-edge.ghost { opacity: 0; }
+  .info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stats { font-size: 12px; color: var(--muted); text-align: center; }
+  .stats b { color: var(--text); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 8px; }
+  .row .lab { font-size: 11px; color: var(--muted); }
+  .info .cells { padding: 15px 2px 4px; gap: 3px; }
+  .info .cell { min-width: 32px; height: 30px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="title">递归树：结点里是参数 n，上方是返回值</div>
+<div class="controls" id="controls"></div>
+<div class="legend" id="legend"></div>
+<div class="info" id="info"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const info = document.getElementById('info');
+  const legend = document.getElementById('legend');
+  const controls = document.getElementById('controls');
+
+  let mode = 'naive';
+  let N = 5;
+  let current = null;   // { root, frames } of the scenario on screen
+
+  /* Run the real algorithm and record a frame at every call and every return.
+     naive: fib(k) = fib(k-1) + fib(k-2), base cases k = 0, 1.
+     memo:  memo[0] = 0, memo[1] = 1, others -1; a call computes only when memo[k] == -1. */
+  function run(md, n) {
+    const frames = [];
+    const st = {}, val = {}, tag = {};
+    const count = new Array(n + 1).fill(0);
+    const memo = md === 'memo' ? new Array(n + 1).fill(-1) : null;
+    if (memo) { memo[0] = 0; if (n >= 1) memo[1] = 1; }
+    let calls = 0, reps = 0, hits = 0, adds = 0, nextId = 0, root = null;
+
+    const snap = (note, cur, mark) => frames.push({
+      st: Object.assign({}, st), val: Object.assign({}, val), tag: Object.assign({}, tag),
+      count: count.slice(), memo: memo ? memo.slice() : null,
+      calls, reps, hits, adds, cur, mark: mark || null, note
+    });
+
+    function finish(node, parent, v) {
+      st[node.id] = 'done';
+      val[node.id] = v;
+      if (parent) st[parent.id] = 'active';
+    }
+    const back = parent => parent ? '，返回给 fib(' + parent.key + ')。' : '。';
+
+    function call(k, parent, side) {
+      const node = { id: nextId++, key: k, left: null, right: null };
+      if (parent) { parent[side] = node; st[parent.id] = 'wait'; } else root = node;
+      st[node.id] = 'active';
+      calls++;
+      count[k]++;
+      let v;
+
+      if (md === 'naive') {
+        const rep = count[k] > 1;
+        if (rep) { tag[node.id] = 'rep'; reps++; }
+        if (k <= 1) {
+          v = k;
+          finish(node, parent, v);
+          snap('调用 <b>fib(' + k + ')</b>：基本情况，直接返回 ' + v + '。' +
+            (rep ? '这已是第 ' + count[k] + ' 次调用 fib(' + k + ')。' : ''), k);
+          return v;
+        }
+        snap('调用 <b>fib(' + k + ')</b>：' + k + ' ≥ 2，先递归算 fib(' + (k - 1) + ')。' +
+          (rep ? ' <span class="bad">fib(' + k + ') 前面已经算过，这次整棵子树重算一遍。</span>' : ''), k);
+        const a = call(k - 1, node, 'left');
+        const b = call(k - 2, node, 'right');
+        v = a + b;
+        adds++;
+        finish(node, parent, v);
+        let note = 'fib(' + k + ') = fib(' + (k - 1) + ') + fib(' + (k - 2) + ') = ' + a + ' + ' + b + ' = <b>' + v + '</b>' + back(parent);
+        if (!parent) {
+          note += '共调用 <b>' + calls + '</b> 次，不同的参数只有 ' + (n + 1) + ' 个（0…' + n + '），其余 <span class="bad">' + reps + ' 次是重复调用</span>。';
+        }
+        snap(note, k);
+        return v;
+      }
+
+      // memoization
+      if (memo[k] !== -1) {
+        tag[node.id] = 'hit';
+        hits++;
+        v = memo[k];
+        finish(node, parent, v);
+        snap('调用 <b>fib(' + k + ')</b>：memo[' + k + '] = ' + v + ' 已有值，<span class="ok">直接返回，O(1) 查表</span>。', k, { k: k, how: 'read' });
+        return v;
+      }
+      snap('调用 <b>fib(' + k + ')</b>：memo[' + k + '] = −1，还没算过，先递归算 fib(' + (k - 1) + ')。', k);
+      const a = call(k - 1, node, 'left');
+      const b = call(k - 2, node, 'right');
+      v = a + b;
+      adds++;
+      memo[k] = v;
+      finish(node, parent, v);
+      let note = 'fib(' + k + ') = ' + a + ' + ' + b + ' = <b>' + v + '</b>，写入 memo[' + k + ']' + back(parent);
+      if (!parent) {
+        note += '共调用 <b>' + calls + '</b> 次 = 2n − 1：' + adds + ' 次加法，' + hits + ' 次查表。';
+      }
+      snap(note, k, { k: k, how: 'write' });
+      return v;
+    }
+
+    const result = call(n, null, null);
+    // self-checks against the closed counts used in the article
+    const F = [0, 1];
+    for (let i = 2; i <= n + 1; i++) F[i] = F[i - 1] + F[i - 2];
+    if (result !== F[n]) throw new Error('wrong value');
+    if (md === 'naive' && calls !== 2 * F[n + 1] - 1) throw new Error('naive call count');
+    if (md === 'memo' && n >= 1 && calls !== 2 * n - 1) throw new Error('memo call count');
+    return { root, frames };
+  }
+
+  /* ─── drawing ─── */
+  function nodeCls(f) {
+    return node => {
+      const s = f.st[node.id];
+      if (!s) return 'ghost';
+      if (s === 'active') return 'active';
+      if (f.tag[node.id] === 'rep') return 'warn';
+      if (f.tag[node.id] === 'hit') return 'found';
+      return s === 'wait' ? 'visited' : 'done';
+    };
+  }
+  function edgeCls(f) {
+    return (p, c) => {
+      const s = f.st[c.id];
+      if (!s) return 'ghost';
+      return s === 'active' || s === 'wait' ? 'visited' : '';
+    };
+  }
+  function infoHtml(f) {
+    let stats, label, values, cls;
+    if (mode === 'naive') {
+      stats = '调用 <b>' + f.calls + '</b> 次 · 其中重复 <b>' + f.reps + '</b> 次 · 加法 <b>' + f.adds + '</b> 次';
+      label = '各参数被调用次数';
+      values = f.count;
+      cls = (v, k) => (k === f.cur ? 'active' : v > 1 ? 'warn' : v === 1 ? 'done' : 'dim');
+    } else {
+      stats = '调用 <b>' + f.calls + '</b> 次 · 查表 <b>' + f.hits + '</b> 次 · 加法 <b>' + f.adds + '</b> 次';
+      label = 'memo[ ]';
+      values = f.memo.map(v => (v === -1 ? '−1' : v));
+      cls = (v, k) => (f.mark && f.mark.k === k ? (f.mark.how === 'read' ? 'found' : 'active') : f.memo[k] !== -1 ? 'done' : 'dim');
+    }
+    return '<div class="stats">' + stats + '</div>' +
+      '<div class="row"><span class="lab">' + label + '</span>' + K.cells(values, { cls: cls, idx: true }) + '</div>';
+  }
+  function render(f) {
+    stage.innerHTML = K.tree(current.root, {
+      cls: nodeCls(f), edgeCls: edgeCls(f),
+      badge: node => (f.val[node.id] != null ? '=' + f.val[node.id] : ''),
+      gapX: N >= 6 ? 38 : 42, gapY: 58
+    });
+    info.innerHTML = infoHtml(f);
+  }
+  function drawLegend() {
+    const item = (bg, text) => '<span><i style="' + bg + '"></i>' + text + '</span>';
+    legend.innerHTML = item('background: var(--accent)', '当前调用') +
+      item('background: rgba(56, 189, 248, 0.35); border: 1px solid var(--blue)', '等待子调用返回') +
+      (mode === 'naive'
+        ? item('background: rgba(74, 222, 128, 0.35); border: 1px solid var(--green)', '已返回') +
+          item('background: rgba(251, 191, 36, 0.4); border: 1px solid var(--yellow)', '重复调用')
+        : item('background: rgba(74, 222, 128, 0.35); border: 1px solid var(--green)', '计算后存表') +
+          item('background: var(--green)', '查表直接返回'));
+  }
+
+  /* ─── scenario buttons (added before the player's own buttons) ─── */
+  function group(options, isActive, onPick) {
+    const g = document.createElement('span');
+    g.className = 'btn-group';
+    options.forEach(o => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = o.label;
+      if (isActive(o)) b.classList.add('active');
+      b.addEventListener('click', () => {
+        g.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        onPick(o);
+      });
+      g.appendChild(b);
+    });
+    controls.appendChild(g);
+  }
+  let P = null;
+  function reload() {
+    current = run(mode, N);
+    drawLegend();
+    if (P) P.load(current.frames);
+  }
+  group([{ label: '直接递归', v: 'naive' }, { label: '记忆化', v: 'memo' }], o => o.v === mode, o => { mode = o.v; reload(); });
+  group([4, 5, 6].map(v => ({ label: 'n = ' + v, v: v })), o => o.v === N, o => { N = o.v; reload(); });
+
+  current = run(mode, N);
+  drawLegend();
+  P = window.AnimKit.player({ frames: current.frames, render: render, interval: 1100 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>堆的数组下标</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .hx { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hx-svg { flex: 1 1 auto; min-height: 0; position: relative; }
+  .hx-svg > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .hx-arr { flex: 0 0 auto; }
+  .hx-arr .cells { padding: 18px 4px 22px; gap: 3px; flex-wrap: nowrap; }
+  .hx-arr .cell { min-width: 31px; height: 31px; padding: 0 4px; font-size: 13px; border-radius: 6px; }
+  .k-node, .cell:not(.empty) { cursor: pointer; }
+  .k-idx { fill: var(--muted); font-size: 11px; font-weight: 600; dominant-baseline: central; }
+  .k-idx.hot { fill: var(--yellow); }
+  @media (max-width: 420px) {
+    .hx-arr .cells { gap: 2px; }
+    .hx-arr .cell { min-width: 25px; height: 28px; padding: 0 2px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">堆的数组下标：点一个结点，看它的父结点和孩子在哪</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>选中的结点 i</span>
+  <span><i style="background: rgba(217, 119, 87, 0.30); border: 1px solid var(--accent)"></i>父结点</span>
+  <span><i style="background: rgba(56, 189, 248, 0.22); border: 1px solid var(--blue)"></i>孩子</span>
+  <span><i style="background: rgba(251, 191, 36, 0.22); border: 1px solid var(--yellow)"></i>有孩子的结点</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const VALUES = [27, 24, 26, 7, 12, 6, 19, 2, 7, 7];   // level order
+  const N = VALUES.length;
+  const GX = 58;
+  const gapY = d => (d === 2 ? 60 : 80);   // wider trees get taller rows so edges stay steep
+
+  // index formulas for a complete d-ary tree; base = index of the root (1 = course convention, 0)
+  function formulas(base, d) {
+    const kids = i => {
+      const out = [];
+      for (let k = 1; k <= d; k++) {
+        const c = base === 1 ? d * (i - 1) + 1 + k : d * i + k;
+        if (c <= base + N - 1) out.push(c);
+      }
+      return out;
+    };
+    const par = i => (i === base ? null : base === 1 ? Math.floor((i - 2) / d) + 1 : Math.floor((i - 1) / d));
+    return { kids, par };
+  }
+
+  // text of the formulas with the actual numbers filled in
+  function kidText(base, d, i) {
+    if (d === 2) {
+      return base === 1
+        ? [`2×${i} = ${2 * i}`, `2×${i}+1 = ${2 * i + 1}`]
+        : [`2×${i}+1 = ${2 * i + 1}`, `2×${i}+2 = ${2 * i + 2}`];
+    }
+    const lo = base === 1 ? d * i - (d - 2) : d * i + 1;
+    const hi = base === 1 ? d * i + 1 : d * i + d;
+    const loS = base === 1 ? `${d}×${i}−${d - 2}` : `${d}×${i}+1`;
+    const hiS = base === 1 ? `${d}×${i}+1` : `${d}×${i}+${d}`;
+    return [`${loS} … ${hiS} = ${lo} … ${hi}`];
+  }
+  function parText(base, d, i) {
+    if (base === 1) return d === 2 ? `⌊${i}/2⌋` : `⌊(${i}+${d - 2})/${d}⌋`;
+    return `⌊(${i}−1)/${d}⌋`;
+  }
+  function ruleText(base, d) {
+    if (base === 1) {
+      return d === 2 ? '父 <code>⌊i/2⌋</code>，左 <code>2i</code>，右 <code>2i+1</code>'
+        : `父 <code>⌊(i+${d - 2})/${d}⌋</code>，孩子 <code>${d}i−${d - 2} … ${d}i+1</code>`;
+    }
+    return d === 2 ? '父 <code>⌊(i−1)/2⌋</code>，左 <code>2i+1</code>，右 <code>2i+2</code>'
+      : `父 <code>⌊(i−1)/${d}⌋</code>，孩子 <code>${d}i+1 … ${d}i+${d}</code>`;
+  }
+
+  // <algo>
+  function build(base, d) {
+    const F = formulas(base, d);
+    const first = base, last = base + N - 1;
+    const val = i => VALUES[i - base];
+
+    // reference structure: hand out children in level order, d per node
+    const ref = new Map();
+    let next = first + 1;
+    for (let i = first; i <= last; i++) {
+      const c = [];
+      for (let k = 0; k < d && next <= last; k++) c.push(next++);
+      ref.set(i, c);
+    }
+    for (let i = first; i <= last; i++) {
+      const got = F.kids(i);
+      if (got.join() !== ref.get(i).join()) throw new Error(`children formula wrong at ${i}`);
+      got.forEach(c => { if (F.par(c) !== i) throw new Error(`parent formula wrong at ${c}`); });
+      if (F.par(i) != null && val(F.par(i)) < val(i)) throw new Error('not a max-heap');
+    }
+    const lastParent = F.par(last);
+    for (let i = first; i <= last; i++) {
+      if ((F.kids(i).length > 0) !== (i <= lastParent)) throw new Error('parents are not a prefix');
+    }
+
+    // layout: leaves take consecutive slots; the last parent keeps room for its missing children
+    const X = new Map(), Y = new Map();
+    let slot = 0;
+    (function place(i, depth) {
+      Y.set(i, depth);
+      const c = F.kids(i);
+      if (!c.length) { X.set(i, slot++); return; }
+      c.forEach(k => place(k, depth + 1));
+      const lo = X.get(c[0]);
+      let hi = X.get(c[c.length - 1]);
+      if (c.length < d) { slot += d - c.length; hi = slot - 1; }
+      X.set(i, (lo + hi) / 2);
+    })(first, 0);
+
+    const nodes = [], edges = [];
+    for (let i = first; i <= last; i++) {
+      nodes.push({ id: i, x: X.get(i) * GX, y: Y.get(i) * gapY(d), label: String(val(i)), p: F.par(i) });
+      F.kids(i).forEach(c => edges.push({ u: i, v: c }));
+    }
+
+    const frames = [];
+    const parents = [];
+    for (let i = first; i <= lastParent; i++) parents.push(i);
+    const lpCalc = base === 1
+      ? (d === 2 ? `⌊${last}/2⌋` : `⌊(${last}+${d - 2})/${d}⌋`)
+      : `⌊(${last}−1)/${d}⌋`;
+    frames.push({
+      sel: null, par: null, kids: [], parents,
+      note: `按层存进数组${base === 1 ? '（<b>下标 0 空着</b>）' : ''}。${ruleText(base, d)}。` +
+        `最后一个结点 ${last} 的父结点 ${lpCalc} = <b>${lastParent}</b> 是最后一个父结点：` +
+        `${first}…${lastParent} 有孩子（黄），${lastParent + 1}…${last} 是叶子。点结点或格子查看。`,
+    });
+
+    for (let i = first; i <= last; i++) {
+      const p = F.par(i);
+      const c = F.kids(i);
+      let s = `<b>${val(i)}</b> 在下标 ${i}：`;
+      if (p == null) s += '它是根，没有父结点；';
+      else s += `父结点 ${parText(base, d, i)} = ${p}（${val(p)}）；`;
+      const kt = kidText(base, d, i);
+      if (d === 2) {
+        const names = ['左孩子', '右孩子'];
+        const all = base === 1 ? [2 * i, 2 * i + 1] : [2 * i + 1, 2 * i + 2];
+        if (all[0] > last) s += `左孩子应在 ${kt[0]} &gt; ${last}，没有孩子。`;
+        else {
+          s += all.map((ci, k) => ci <= last
+            ? `${names[k]} ${kt[k]}（${val(ci)}）`
+            : `${names[k]} ${kt[k]} &gt; ${last}，不存在`).join('，') + '。';
+        }
+      } else {
+        const lo = base === 1 ? d * i - (d - 2) : d * i + 1;
+        if (lo > last) s += `第一个孩子应在 ${base === 1 ? `${d}×${i}−${d - 2}` : `${d}×${i}+1`} = ${lo} &gt; ${last}，没有孩子。`;
+        else s += `孩子 ${kt[0]}` + (c.length < d ? `，只有 ${c.join('、')} 在堆里` : '') + `（${c.map(val).join('、')}）。`;
+      }
+      if (!c.length) s += '它是<b>叶子</b>。';
+      const checks = [];
+      if (p != null) checks.push(`${val(p)} ≥ ${val(i)}`);
+      if (c.length) checks.push(`${val(i)} ≥ ${c.map(val).join('、')}`);
+      s += `堆条件：${checks.join('；')} <span class="ok">✓</span>`;
+      frames.push({ sel: i, par: p, kids: c, parents: [], note: s });
+    }
+    return { base, d, first, last, nodes, edges, frames, F };
+  }
+  // </algo>
+
+  let cur = null;
+  function render(f) {
+    const sc = cur;
+    const kidSet = new Set(f.kids);
+    const parentSet = new Set(f.parents);
+    const state = i => {
+      if (i === f.sel) return 'active';
+      if (i === f.par) return 'compare';
+      if (kidSet.has(i)) return 'visited';
+      if (parentSet.has(i)) return 'warn';
+      return '';
+    };
+    let svg = K.graph({ nodes: sc.nodes, edges: sc.edges, directed: false }, {
+      pad: 38,
+      nodeCls: id => state(id) + ' pos-' + id,
+      edgeCls: e => (e.v === f.sel ? 'active' : e.u === f.sel ? 'visited' : ''),
+    });
+    // index label beside each node, on the side away from the edge coming down from its parent
+    // (the root's goes on top); edges to the children leave from below, so that side stays clear
+    const at = new Map(sc.nodes.map(nd => [nd.id, nd]));
+    let labels = '';
+    sc.nodes.forEach(nd => {
+      const hot = nd.id === f.sel || nd.id === f.par || kidSet.has(nd.id);
+      const c = `k-idx${hot ? ' hot' : ''}`;
+      if (nd.p == null) labels += `<text class="${c}" x="${nd.x}" y="${nd.y - 29}" style="text-anchor:middle">${nd.id}</text>`;
+      else if (nd.x > at.get(nd.p).x) labels += `<text class="${c}" x="${nd.x + 21}" y="${nd.y}" style="text-anchor:start">${nd.id}</text>`;
+      else labels += `<text class="${c}" x="${nd.x - 21}" y="${nd.y}" style="text-anchor:end">${nd.id}</text>`;
+    });
+    svg = svg.replace(/<\/svg>$/, labels + '</svg>');
+
+    const values = [];
+    for (let k = 0; k <= sc.last; k++) values.push(k < sc.first ? '' : VALUES[k - sc.first]);
+    const ptr = {};
+    if (f.sel != null) {
+      ptr[f.sel] = 'i';
+      if (f.par != null) ptr[f.par] = '父';
+      f.kids.forEach((c, k) => {
+        ptr[c] = sc.d === 2 ? (sc.base === 1 ? ['2i', '2i+1'][k] : ['2i+1', '2i+2'][k]) : '子';
+      });
+    }
+    const arr = K.cells(values, {
+      idx: true,
+      ptr,
+      cls: (v, k) => (k < sc.first ? '' : (state(k) + ' pos-' + k)),
+    });
+    stage.innerHTML = `<div class="hx"><div class="hx-svg">${svg}</div><div class="hx-arr">${arr}</div></div>`;
+  }
+
+  // mode buttons go in before the player's own buttons
+  const built = new Map();
+  const get = (base, d) => {
+    const key = base + ':' + d;
+    if (!built.has(key)) built.set(key, build(base, d));
+    return built.get(key);
+  };
+  let base = 1, d = 2, player = null;
+
+  function group(items, isActive, onPick) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach(([label, value]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      if (isActive(value)) b.classList.add('active');
+      b.addEventListener('click', () => {
+        g.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        onPick(value);
+      });
+      g.appendChild(b);
+    });
+    controls.appendChild(g);
+  }
+  function switchMode() {
+    const keep = player ? player.index() : 0;   // same level-order position in the new mode
+    cur = get(base, d);
+    player.load(cur.frames);
+    player.go(keep);
+  }
+  group([['下标从 1', 1], ['下标从 0', 0]], v => v === base, v => { base = v; switchMode(); });
+  group([['二叉', 2], ['三叉', 3], ['四叉', 4]], v => v === d, v => { d = v; switchMode(); });
+
+  // build every mode once up front so a wrong formula fails immediately
+  [1, 0].forEach(b => [2, 3, 4].forEach(k => get(b, k)));
+
+  cur = get(base, d);
+  player = AnimKit.player({ frames: cur.frames, render, interval: 1600 });
+
+  // click a node or a cell to jump to its frame
+  stage.addEventListener('click', e => {
+    const el = e.target.closest && e.target.closest('.k-node, .cell');
+    if (!el) return;
+    const m = /\bpos-(\d+)\b/.exec(el.getAttribute('class') || '');
+    if (!m) return;
+    const i = +m[1];
+    player.go(i - cur.first + 1);
+  });
+})();
+</script>
+</body>
+</html>

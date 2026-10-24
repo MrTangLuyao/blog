@@ -1,0 +1,181 @@
+{
+  "version": 4,
+  "updated": "2026-10-24",
+  "title": {
+    "zh": "第 7 部分 · 图",
+    "en": "Part 7 · Graphs"
+  },
+  "entries": [
+    {
+      "kind": "post",
+      "slug": "dsa-graph-basics",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.1 图：定义、类型与术语",
+        "en": "7.1 Graph Basics"
+      },
+      "excerpt": {
+        "zh": "G = (V, E) · 有向/无向 · 带权/无权 · 简单图 · 完全图 n(n−1)/2 · DAG · 显式/隐式图 · 稠密/稀疏 · 度与入度/出度 · ∑deg = 2E · ∑in = ∑out = E · 连通分量 · 强连通/弱连通",
+        "en": "G = (V, E) · directed/undirected · weighted/unweighted · simple graph · complete graph n(n−1)/2 · DAG · explicit/implicit graphs · dense/sparse · degree, in/out-degree · Σdeg = 2E · Σin = Σout = E · connected components · strongly/weakly connected"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 9,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-graph-representation",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.2 邻接矩阵 vs 邻接表",
+        "en": "7.2 Adjacency Matrix vs Adjacency Lists"
+      },
+      "excerpt": {
+        "zh": "邻接矩阵 · 对称与对角线 · 带权矩阵 ∞/−1 · 邻接表 · 无向边存两次 · O(V²) vs O(V + E) · 查边 O(1) vs O(deg) · 稠密/稀疏 · C 表头插入建图 · 矩阵转邻接表",
+        "en": "Adjacency matrix · symmetry & diagonal · weighted matrix with ∞/−1 · adjacency lists · undirected edge stored twice · O(V²) vs O(V + E) · edge test O(1) vs O(deg) · dense vs sparse · building lists in C by head insertion · matrix-to-lists conversion"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-dfs",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.3 深度优先搜索（DFS）",
+        "en": "7.3 Depth-First Search"
+      },
+      "excerpt": {
+        "zh": "走到底再回溯 · DFS/DFSExplore 伪代码 · 调用栈追踪 · 邻接表 O(V + E) 与矩阵 O(V²) · 显式栈 · 可达性与连通分量 · 不求最短路",
+        "en": "Go deep, then backtrack · DFS/DFSExplore pseudocode · call-stack trace · O(V + E) lists vs O(V²) matrix · explicit stack · reachability and components · not shortest paths"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-bfs",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.4 广度优先搜索（BFS）",
+        "en": "7.4 Breadth-First Search"
+      },
+      "excerpt": {
+        "zh": "按层访问 · FIFO 队列 + mark 数组 · 入队即标记 · 课上例子 A→F 追踪 · 外层循环与连通分量 · O(V + E) / O(V²) · 无权图最短路 dist[] · 带权反例 10 vs 7",
+        "en": "Level-by-level traversal · FIFO queue + mark array · mark on enqueue · lecture trace A to F · outer loop and components · O(V + E) / O(V²) · unweighted shortest paths with dist[] · weighted counterexample 10 vs 7"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-dijkstra",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.5 Dijkstra 单源最短路",
+        "en": "7.5 Dijkstra's Algorithm"
+      },
+      "excerpt": {
+        "zh": "dist/from 数组 · 松弛 · 优先队列 · 贪心正确性 · 负权反例 · 不同 PQ 的复杂度",
+        "en": "dist/from arrays · relaxation · priority queue · greedy correctness · negative-edge counterexample · complexity per PQ"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-floyd-warshall",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.6 Warshall 传递闭包与 Floyd-Warshall 全源最短路",
+        "en": "7.6 Warshall & Floyd-Warshall"
+      },
+      "excerpt": {
+        "zh": "传递闭包 · 垫脚石 · Warshall 逐轮追踪 · 距离矩阵 · Floyd-Warshall 递推 · k 必须最外层 · 负权边与负环 · Θ(V³) / Θ(E^{3/2}) / Θ(E³) · 与重复 Dijkstra 比较",
+        "en": "Transitive closure · stepping stones · Warshall round-by-round trace · distance matrix · Floyd-Warshall recurrence · k must be the outermost loop · negative edges vs negative cycles · Θ(V³) / Θ(E^{3/2}) / Θ(E³) · vs repeated Dijkstra"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 9,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-mst-prim",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.7 最小生成树与 Prim 算法",
+        "en": "7.7 MST & Prim's Algorithm"
+      },
+      "excerpt": {
+        "zh": "生成树 V − 1 条边 · 最小生成树 · 最便宜跨越边 · 割性质 · Prim 与 Dijkstra 的唯一区别 · O((V + E) log V) · MST ≠ 最短路 · 最小生成森林",
+        "en": "Spanning tree with V − 1 edges · MST · cheapest crossing edge · cut property · Prim vs Dijkstra key · O((V + E) log V) · MST is not shortest paths · minimum spanning forest"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-topological-sort",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.8 拓扑排序",
+        "en": "7.8 Topological Sort"
+      },
+      "excerpt": {
+        "zh": "DAG 定义 · 源点删除（入度 + 队列）· DFS 完成顺序倒过来 · 检验合法顺序 · O(V + E) / O(V²) · 判环",
+        "en": "DAG definition · source removal (in-degree + queue) · reverse DFS finishing order · validating orders · O(V + E) / O(V²) · cycle detection"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-graph-modelling",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "7.9 图建模：判环、货币套利与隐式图",
+        "en": "7.9 Graph Modelling: Cycles, Arbitrage & Implicit Graphs"
+      },
+      "excerpt": {
+        "zh": "无向图判环（DFS 传 parent · BFS 版）· 货币套利：−log 变负权环 · Floyd-Warshall 看对角线 · 隐式图与倒水问题 · BFS/DFS/UCS/IW 最优性",
+        "en": "Undirected cycle detection (DFS with parent · BFS version) · currency arbitrage: −log turns it into a negative cycle · Floyd-Warshall diagonal check · implicit graphs & the water-jug puzzle · optimality of BFS/DFS/UCS/IW"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    }
+  ]
+}

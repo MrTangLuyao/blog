@@ -1,0 +1,164 @@
+/* ============================================================
+ * blog/blog_data/dsa/anim.css
+ * Shared style for every animation page in the 数据结构与算法 collection.
+ * Each animation is its own HTML page shown in an <iframe> inside a post;
+ * it links this file and /blog/blog_data/dsa/anim.js by absolute path, so a
+ * post can move between sub-collections without touching its animations.
+ *
+ * Palette follows lib/design/louie.css (surface #2a2a29, accent #d97757).
+ * ============================================================ */
+
+@import url('/lib/design/fonts.css');
+
+:root {
+  --surface: #2a2a29;
+  --surface-high: #333332;
+  --border: #3a3a39;
+  --text: #e8e8e8;
+  --muted: #a1a1a0;
+  --accent: #d97757;
+  --accent-dim: rgba(217, 119, 87, 0.18);
+  --blue: #38bdf8;
+  --green: #4ade80;
+  --yellow: #fbbf24;
+  --red: #f87171;
+  --purple: #c4a5f5;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: 'JetBrains Mono', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--surface); color: var(--text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+
+.title { font-size: 14px; font-weight: 600; letter-spacing: 0.2px; }
+
+/* ─── controls ─── */
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 13px; }
+.controls .label { color: var(--muted); font-size: 12px; }
+.controls .spacer { flex: 1 1 auto; }
+.controls .counter { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+
+button, .btn {
+  position: relative; overflow: hidden;       /* clips the ripple */
+  font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap;
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: rgba(255, 255, 255, 0.04); color: var(--text);
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+button:hover { background: var(--accent-dim); border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: not-allowed; background: rgba(255, 255, 255, 0.04); border-color: var(--border); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: #c66a4a; border-color: #c66a4a; }
+button.ghost { background: transparent; }
+button:focus-visible { outline: 2px solid #ffb49d; outline-offset: 2px; }
+
+.btn-group {
+  display: inline-flex; padding: 2px; gap: 0;
+  border: 1px solid var(--border); border-radius: 8px; background: rgba(255, 255, 255, 0.04);
+}
+.btn-group button { border: none; background: transparent; border-radius: 6px; padding: 4px 10px; font-size: 12px; }
+.btn-group button.active { background: var(--accent); color: #fff; }
+
+input[type="range"] { accent-color: var(--accent); width: 90px; }
+input[type="number"], input[type="text"] {
+  font: inherit; font-size: 13px; width: 70px; padding: 5px 8px;
+  border-radius: 6px; border: 1px solid var(--border); background: rgba(255, 255, 255, 0.04); color: var(--text);
+}
+
+/* ripple — same feel as the blog's .ripple-surface */
+.ripple {
+  position: absolute; border-radius: 50%; transform: scale(0);
+  animation: kit-ripple 600ms linear; pointer-events: none;
+  background: rgba(255, 255, 255, 0.18);
+}
+button.primary .ripple, .btn-group button.active .ripple { background: rgba(255, 255, 255, 0.32); }
+@keyframes kit-ripple { to { transform: scale(4); opacity: 0; } }
+
+/* ─── stage + caption ─── */
+.stage {
+  flex: 1 1 auto; min-height: 0; position: relative;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+/* a kit SVG fills the stage exactly and scales its viewBox to fit (a % height
+   alone would fall back to the SVG's intrinsic ratio and overflow) */
+.stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.note {
+  min-height: 40px; font-size: 13px; line-height: 1.6; color: var(--muted); text-align: center;
+  padding: 6px 8px; border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.note b, .note strong { color: var(--accent); font-weight: 700; }
+.note .ok { color: var(--green); }
+.note .bad { color: var(--red); }
+.note code { font-family: 'JBMono', 'JetBrains Mono', monospace; color: #ffb49d; }
+
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; font-size: 11px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+/* ─── array cells (AnimKit.cells) ─── */
+.cells { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 4px; padding: 20px 4px 24px; }
+.cell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 38px; height: 38px; padding: 0 6px; border-radius: 7px;
+  border: 1px solid var(--border); background: rgba(255, 255, 255, 0.04);
+  font-size: 14px; font-weight: 600; color: var(--text);
+  transition: background 0.25s, border-color 0.25s, color 0.25s, transform 0.25s, opacity 0.25s;
+}
+.cell.empty { color: transparent; border-style: dashed; }
+.cell.active  { background: var(--accent); border-color: var(--accent); color: #fff; transform: translateY(-3px); }
+.cell.compare { background: rgba(217, 119, 87, 0.30); border-color: var(--accent); }
+.cell.visited { background: rgba(56, 189, 248, 0.18); border-color: var(--blue); color: #d6f2ff; }
+.cell.done    { background: rgba(74, 222, 128, 0.18); border-color: rgba(74, 222, 128, 0.7); color: #d8ffe1; }
+.cell.found   { background: var(--green); border-color: var(--green); color: #0a0a0a; transform: scale(1.1); }
+.cell.bad     { background: rgba(248, 113, 113, 0.22); border-color: var(--red); color: #fecaca; }
+.cell.warn    { background: rgba(251, 191, 36, 0.20); border-color: var(--yellow); color: #fef3c7; }
+.cell.dim     { opacity: 0.25; }
+.cell .idx { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.cell .ptr { position: absolute; bottom: -19px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: var(--blue); white-space: nowrap; }
+
+/* ─── SVG trees and graphs (AnimKit.tree / btree / graph) ─── */
+.k-edge { stroke: rgba(255, 255, 255, 0.28); stroke-width: 2; fill: none; stroke-linecap: round; transition: stroke 0.3s, opacity 0.3s; }
+.k-edge.active  { stroke: var(--accent); stroke-width: 3; }
+.k-edge.visited { stroke: var(--blue); stroke-width: 2.5; }
+.k-edge.done, .k-edge.tree { stroke: var(--green); stroke-width: 3; }
+.k-edge.bad     { stroke: var(--red); stroke-width: 2.5; stroke-dasharray: 5 4; }
+.k-edge.dim     { opacity: 0.18; }
+.k-arrow { fill: rgba(255, 255, 255, 0.45); }
+
+.k-node circle, .k-node rect {
+  fill: #343433; stroke: #5a5a59; stroke-width: 2;
+  transition: fill 0.3s, stroke 0.3s, opacity 0.3s;
+}
+.k-node text { fill: var(--text); font-size: 14px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.k-node.active circle,  .k-node.active rect  { fill: var(--accent); stroke: var(--accent); }
+.k-node.active text { fill: #fff; }
+.k-node.compare circle, .k-node.compare rect { fill: rgba(217, 119, 87, 0.30); stroke: var(--accent); }
+.k-node.visited circle, .k-node.visited rect { fill: rgba(56, 189, 248, 0.22); stroke: var(--blue); }
+.k-node.done circle,    .k-node.done rect    { fill: rgba(74, 222, 128, 0.22); stroke: var(--green); }
+.k-node.found circle,   .k-node.found rect   { fill: var(--green); stroke: var(--green); }
+.k-node.found text { fill: #0a0a0a; }
+.k-node.bad circle,     .k-node.bad rect     { fill: rgba(248, 113, 113, 0.25); stroke: var(--red); }
+.k-node.warn circle,    .k-node.warn rect    { fill: rgba(251, 191, 36, 0.22); stroke: var(--yellow); }
+.k-node.dim { opacity: 0.25; }
+.k-node .k-sep { stroke: #5a5a59; stroke-width: 1.5; }
+
+.k-badge { fill: var(--muted); font-size: 11px; font-weight: 600; text-anchor: middle; }
+.k-badge.hot { fill: var(--yellow); }
+.k-weight { fill: #cfcfce; font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.k-weight.active { fill: var(--accent); }
+.k-weight.done { fill: var(--green); }
+
+@media (max-width: 420px) {
+  body { padding: 10px; gap: 8px; }
+  button { padding: 5px 9px; font-size: 12px; }
+  .note { font-size: 12px; }
+  input[type="range"] { width: 64px; }
+}

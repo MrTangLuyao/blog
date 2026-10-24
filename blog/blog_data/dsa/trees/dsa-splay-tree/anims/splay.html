@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>伸展树：把访问的结点转到根</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .stage .k-node { cursor: pointer; }
+  .stage .k-node:hover circle { stroke: var(--accent); }
+</style>
+</head>
+<body>
+<div class="title">伸展树：把访问的结点转到根</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>被访问的 x</span>
+  <span><i style="background: var(--yellow)"></i>父 p / 祖父 g</span>
+  <span><i style="background: var(--blue)"></i>查找路径</span>
+  <span><i style="background: var(--green)"></i>新接的指针</span>
+  <span><i style="background: transparent; border: 1px dashed var(--red)"></i>将被改掉的指针</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // <algo> bottom-up splaying with parent pointers (same steps as the article's C code)
+  function mk(k, parent) { return { key: k, left: null, right: null, parent: parent || null }; }
+  function clone(t, par) {
+    if (!t) return null;
+    const n = mk(t.key, par);
+    n.left = clone(t.left, n);
+    n.right = clone(t.right, n);
+    return n;
+  }
+  function find(root, k) { let t = root; while (t && t.key !== k) t = k < t.key ? t.left : t.right; return t; }
+  function rootOf(x) { while (x.parent) x = x.parent; return x; }
+  function height(t) { return t ? 1 + Math.max(height(t.left), height(t.right)) : 0; }
+  function depth(x) { let d = 0; while (x.parent) { x = x.parent; d++; } return d; }
+  function inorder(t, a) { if (t) { inorder(t.left, a); a.push(t.key); inorder(t.right, a); } return a; }
+  function edges(t, s) {
+    s = s || new Set();
+    if (t) for (const c of [t.left, t.right]) if (c) { s.add(t.key + '-' + c.key); edges(c, s); }
+    return s;
+  }
+  // rotate x over its parent p; returns a description of what moved
+  function rotateUp(x) {
+    const p = x.parent, g = p.parent;
+    const right = x === p.left;              // x is a left child -> right rotation at p
+    const mid = right ? x.right : x.left;
+    if (right) { p.left = mid; x.right = p; } else { p.right = mid; x.left = p; }
+    if (mid) mid.parent = p;
+    p.parent = x; x.parent = g;
+    if (g) { if (g.left === p) g.left = x; else g.right = x; }
+    return { top: p, up: x, mid, right };
+  }
+  // a plain BST insert (no splay) and a splay-tree insert (insert, then splay)
+  function bstInsert(root, k) {
+    let p = null, t = root;
+    while (t) { if (k === t.key) return root; p = t; t = k < t.key ? t.left : t.right; }
+    const n = mk(k, p);
+    if (!p) return n;
+    if (k < p.key) p.left = n; else p.right = n;
+    return root;
+  }
+  function splayQuiet(x) {
+    while (x.parent) {
+      const p = x.parent, g = p.parent;
+      if (!g) rotateUp(x);
+      else if ((x === p.left) === (p === g.left)) { rotateUp(p); rotateUp(x); }
+      else { rotateUp(x); rotateUp(x); }
+    }
+    return x;
+  }
+  function splayInsert(root, k) {
+    root = bstInsert(root, k);
+    return splayQuiet(find(root, k));
+  }
+  // </algo>
+
+  const side = (c, p) => (p.left === c ? '左' : '右');
+  function subDesc(m) { return (m.left || m.right) ? '（以 ' + m.key + ' 为根）' : '（' + m.key + '）'; }
+  function rotText(r) {
+    const d = r.right ? '右' : '左', o = r.right ? '左' : '右';
+    return '在 <b>' + r.top.key + '</b> 处' + d + '旋：' + r.up.key + ' 上来，' + r.top.key + ' 成为它的' + d + '孩子；' +
+      r.up.key + ' 原来的' + d + '子树' + (r.mid ? subDesc(r.mid) + '改挂为 ' + r.top.key + ' 的' + o + '子树。' : '为空，' + r.top.key + ' 的' + o + '子树变空。');
+  }
+
+  // frames for splaying key in a copy of tree
+  function buildSplay(tree, key, intro) {
+    const frames = [];
+    let root = clone(tree, null);
+    const x = find(root, key);
+    const h0 = height(root);
+    const order = inorder(root, []).join(',');
+    const snap = (hl, ed, badge, note) => frames.push({ tree: clone(rootOf(x), null), hl, ed, badge, note });
+
+    // search path
+    const path = [];
+    for (let t = root; t; t = key < t.key ? t.left : t.right) { path.push(t); if (t.key === key) break; }
+    const hl0 = {}, ed0 = {};
+    path.forEach((t, i) => { hl0[t.key] = 'visited'; if (i) ed0[path[i - 1].key + '-' + t.key] = 'visited'; });
+    hl0[key] = 'active';
+    const d0 = depth(x);
+    snap(hl0, ed0, { [key]: 'x' }, (intro ? intro + '<br>' : '') + '访问 <b>' + key + '</b>：' + path.map(t => t.key).join(' → ') +
+      '，深度 ' + d0 + '。' + (d0 ? '把它一步步转到根。' : '它已经是根，不用转。'));
+
+    const names = [];
+    let rot = 0;
+    while (x.parent) {
+      const p = x.parent, g = p.parent;
+      let name, plan;
+      if (!g) { name = 'zig'; plan = [x]; }
+      else if ((x === p.left) === (p === g.left)) { name = 'zig-zig'; plan = [p, x]; }
+      else { name = 'zig-zag'; plan = [x, x]; }
+      names.push(name);
+
+      // which edges this step removes: run it on a copy and diff
+      const before = edges(rootOf(x));
+      const copy = clone(rootOf(x), null);
+      const cx = find(copy, x.key);
+      if (name === 'zig') rotateUp(cx);
+      else if (name === 'zig-zig') { rotateUp(cx.parent); rotateUp(cx); }
+      else { rotateUp(cx); rotateUp(cx); }
+      const after = edges(rootOf(cx));
+      const bad = {};
+      before.forEach(e => { if (!after.has(e)) bad[e] = 'bad'; });
+
+      const hl = { [x.key]: 'active', [p.key]: 'warn' };
+      const badge = { [x.key]: 'x', [p.key]: 'p' };
+      let why;
+      if (!g) {
+        why = '父结点 ' + p.key + ' 是根 → <b>zig</b>（一步）：在 ' + p.key + ' 处' + (x === p.left ? '右' : '左') + '旋一次。';
+      } else {
+        hl[g.key] = 'warn'; badge[g.key] = 'g';
+        const s1 = side(x, p), s2 = side(p, g);
+        why = 'x = ' + x.key + '，p = ' + p.key + '，g = ' + g.key + '。' + x.key + ' 是 ' + p.key + ' 的' + s1 + '孩子，' +
+          p.key + ' 是 ' + g.key + ' 的' + s2 + '孩子，' + (name === 'zig-zig'
+            ? '同侧 → <b>zig-zig</b>（两步·外侧）：先在 g 处转，再在 p 处转。'
+            : '异侧 → <b>zig-zag</b>（两步·内侧）：x 连升两次，先在 p 处转，再在 g 处转。');
+      }
+      snap(hl, bad, badge, why);
+
+      plan.forEach((who, i) => {
+        const pre = edges(rootOf(x));
+        const r = rotateUp(who);
+        rot++;
+        const ed = {};
+        edges(rootOf(x)).forEach(e => { if (!pre.has(e)) ed[e] = 'done'; });
+        const last = i === plan.length - 1;
+        const hl2 = { [x.key]: 'active' };
+        if (!last && r.up !== x) hl2[r.up.key] = 'warn';
+        let note = rotText(r);
+        if (last && x.parent) note += name + ' 完成，' + key + ' 现在深度 ' + depth(x) + '。';
+        snap(hl2, ed, { [x.key]: 'x' }, note);
+      });
+    }
+    if (inorder(rootOf(x), []).join(',') !== order) throw new Error('in-order changed');
+    if (names.length) {
+      const h1 = height(rootOf(x));
+      snap({ [key]: 'found' }, {}, {}, '<span class="ok">' + key + ' 成为根</span>：' + names.join(' → ') + '，共 ' + rot +
+        ' 次旋转；树高 ' + h0 + ' → ' + h1 + '（叶子高 1）。中序序列不变。点任意结点继续伸展。');
+    }
+    return frames;
+  }
+
+  // scenarios: built by running the real algorithm
+  const EX = [50, 10, 60, 40, 20, 45, 25, 22, 30, 28, 35];
+  function exampleTree() { let r = null; EX.forEach(k => { r = bstInsert(r, k); }); return r; }
+  function chainTree() { let r = null; for (let k = 1; k <= 7; k++) r = splayInsert(r, k); return r; }
+  const SCENARIOS = [
+    { label: '例题：访问 30', tree: exampleTree, key: 30, intro: '按 ' + EX.join(', ') + ' 插入得到的普通 BST。' },
+    { label: '链：访问 1', tree: chainTree, key: 1, intro: '依次插入 1…7，每次插入后把新结点伸展到根，得到一条左链。' },
+  ];
+
+  let frames = [];
+  function render(f) {
+    stage.innerHTML = K.tree(f.tree, {
+      gapY: 52,
+      cls: n => f.hl[n.key] || '',
+      edgeCls: (a, b) => f.ed[a.key + '-' + b.key] || '',
+      badge: n => f.badge[n.key] || '',
+    });
+  }
+
+  const g = document.createElement('div');
+  g.className = 'btn-group';
+  const btns = SCENARIOS.map((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = s.label;
+    if (i === 0) b.classList.add('active');
+    b.addEventListener('click', () => {
+      btns.forEach(o => o.classList.remove('active'));
+      b.classList.add('active');
+      frames = buildSplay(s.tree(), s.key, s.intro);
+      player.load(frames);
+    });
+    g.appendChild(b);
+    return b;
+  });
+  controls.appendChild(g);
+  const hint = document.createElement('span');
+  hint.className = 'label';
+  hint.textContent = '点结点：伸展它';
+  controls.appendChild(hint);
+
+  frames = buildSplay(SCENARIOS[0].tree(), SCENARIOS[0].key, SCENARIOS[0].intro);
+  const player = AnimKit.player({ frames, render, interval: 1600 });
+
+  stage.addEventListener('click', e => {
+    const node = e.target.closest && e.target.closest('.k-node');
+    if (!node) return;
+    const key = Number(node.querySelector('text').textContent);
+    const cur = frames[player.index()];
+    if (!cur || !find(cur.tree, key)) return;
+    btns.forEach(o => o.classList.remove('active'));
+    frames = buildSplay(cur.tree, key, '');
+    player.load(frames);
+  });
+})();
+</script>
+</body>
+</html>

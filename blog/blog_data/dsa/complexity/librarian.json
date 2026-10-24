@@ -1,0 +1,219 @@
+{
+  "version": 4,
+  "updated": "2026-10-24",
+  "title": {
+    "zh": "第 1 部分 · 算法与复杂度",
+    "en": "Part 1 · Algorithms & Complexity"
+  },
+  "entries": [
+    {
+      "kind": "post",
+      "slug": "dsa-algorithm-basics",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.1 什么是算法：输入、输出、正确性与效率",
+        "en": "1.1 What Is an Algorithm"
+      },
+      "excerpt": {
+        "zh": "计算机算法五条要求 · 区间调度三条贪心规则 · 反例推翻 · 交换论证 · 三种正确 · 枚举/证明/反例 · 按任务/方法/解的类型分类",
+        "en": "Five properties of a computer algorithm · interval scheduling and three greedy rules · counterexamples · exchange argument · three kinds of correctness · enumeration/proof/counterexample · classifying algorithms by task, approach and solution type"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-fibonacci",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.2 斐波那契：同一个问题的三种算法",
+        "en": "1.2 Fibonacci Three Ways"
+      },
+      "excerpt": {
+        "zh": "直接递归 · 递归树与重复子问题 · 调用次数 2F(n+1)−1 · T(n)=T(n−1)+T(n−2)+3 · 指数级 O(2ⁿ) 但非 Θ(2ⁿ) · memoization · 时间–空间权衡 · 两变量 O(1) 空间 · long long 溢出",
+        "en": "naive recursion · recursion tree & repeated subproblems · 2F(n+1)−1 calls · T(n)=T(n−1)+T(n−2)+3 · exponential, O(2ⁿ) but not Θ(2ⁿ) · memoization · time–space trade-off · two variables, O(1) space · long long overflow"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 8,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-counting-operations",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.3 数操作次数：T(n) 与增长率",
+        "en": "1.3 Counting Operations & Growth Rates"
+      },
+      "excerpt": {
+        "zh": "不计时间数操作 · 基本操作与 T(n) · 主导操作 · 快递 / 循环赛 / 汉诺塔三个例子 · 增长率表（10⁹ 次/秒） · 复杂度阶梯 1 &lt; log n &lt; … &lt; 3ⁿ &lt; n! · 单层、嵌套、翻倍循环怎么数",
+        "en": "Count operations, not time · unit-cost operations and T(n) · dominant operation · courier / round-robin / Tower of Hanoi · growth-rate table at 10⁹ ops/s · class ladder 1 &lt; log n &lt; … &lt; 3ⁿ &lt; n! · counting single, nested and doubling loops"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-big-o",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.4 大 O：正式定义与证明",
+        "en": "1.4 Big-O: Definition & Proofs"
+      },
+      "excerpt": {
+        "zh": "正式定义 · c₀ 与 n₀ · 证明格式 · 去常数与低阶项 · 最紧上界 · 证明不属于",
+        "en": "Formal definition · c₀ and n₀ · Proof format · Dropping constants & lower-order terms · Tightest bound · Disproofs"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 7,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-omega-theta",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.5 Ω 与 Θ：下界与紧确界",
+        "en": "1.5 Big-Omega & Big-Theta"
+      },
+      "excerpt": {
+        "zh": "Ω 定义 · 最大下界 · 对偶 f∈Ω(g)⇔g∈O(f) · Θ 夹逼证明 · O 嵌套与 Θ 不相交 · 没有 Θ 的函数 · 判断题",
+        "en": "Big-Omega definition · Largest lower bound · Duality with Big-O · Θ sandwich proofs · Nested O vs disjoint Θ · Functions with no Θ · True/false drills"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 6,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-log-exp-rules",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.6 对数、指数与复杂度的加法和乘法",
+        "en": "1.6 Logs, Exponentials & Combining Bounds"
+      },
+      "excerpt": {
+        "zh": "换底公式 · 对数底数不影响类 · 3ⁿ ∉ O(2ⁿ) · 2³ⁿ 与 2ⁿ⁺ᵏ · 相加与相乘 · O(m + n) 与 O(mn) · 六个读代码片段",
+        "en": "Change of base · Log base doesn't matter · 3ⁿ ∉ O(2ⁿ) · 2³ⁿ vs 2ⁿ⁺ᵏ · Adding & multiplying bounds · O(m + n) vs O(mn) · Code-reading drill"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-best-worst-average",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.7 最好、最坏、平均情况：它们和 O/Ω/Θ 不是一回事",
+        "en": "1.7 Best, Worst & Average Cases"
+      },
+      "excerpt": {
+        "zh": "最好 / 最坏 / 平均情况 · 情况 ≠ O/Ω/Θ · 顺序查找 1 · (n+1)/2 · n · 二分查找是 O(log n)、Ω(1) 但不是 Θ(log n) · 在 X 后插入的最好情况：有序数组 Θ(log n)、有序链表 Θ(1) · 二分 vs 顺序：目标在 / 不在",
+        "en": "best / worst / average case · cases ≠ O/Ω/Θ · linear search 1 · (n+1)/2 · n · binary search is O(log n) and Ω(1) but not Θ(log n) · best case of insert-after-X: sorted array Θ(log n), sorted list Θ(1) · binary vs sequential search, target present / absent"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-recurrences",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.8 递推式与展开法（telescoping）",
+        "en": "1.8 Recurrences & Telescoping"
+      },
+      "excerpt": {
+        "zh": "从代码写递推式 · 基本情况 T(1) · 减一 T(n−1)+cn 逐行相加消项 → Θ(n²) · 减半 T(n/2)+c → Θ(log n) · 2T(n/2)+cn → Θ(n log n) · 令 2^i = n · 递归树：每层代价 × 层数 · 快速排序最好与最坏情况",
+        "en": "Writing recurrences from code · base case T(1) · decrease by one T(n−1)+cn, telescoping sum → Θ(n²) · halving T(n/2)+c → Θ(log n) · 2T(n/2)+cn → Θ(n log n) · set 2^i = n · recursion tree: cost per level × levels · quicksort best vs worst case"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-master-theorem",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.9 主定理（Master Theorem）",
+        "en": "1.9 The Master Theorem"
+      },
+      "excerpt": {
+        "zh": "T(n)=aT(n/b)+f(n) · 每层代价比 a/bᵈ · 三种情况 · 读出 a、b、d · d=0 陷阱 · 从代码写递推式 · 不适用的三类 · Big-O 版本",
+        "en": "T(n)=aT(n/b)+f(n) · per-level ratio a/b^d · three cases · reading off a, b, d · the d=0 trap · recurrences from code · when it fails · Big-O version"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 7,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-design-paradigms",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.10 算法设计思路：蛮力、减治、分治、贪心",
+        "en": "1.10 Algorithm Design Paradigms"
+      },
+      "excerpt": {
+        "zh": "蛮力 · 减治（减一 / 减半）· 分治 · 贪心 · 只解一半 vs 两半都解 · 拆分-求解-合并 · 解的类型 · 算法 ↔ 思路配对",
+        "en": "Brute force · decrease-and-conquer (by one / by half) · divide-and-conquer · greedy · keep one half vs solve both · split-solve-join · solution types · algorithm ↔ paradigm matching"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 9,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-closest-pair",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "1.11 最近点对：从蛮力到分治",
+        "en": "1.11 The Closest Pair Problem"
+      },
+      "excerpt": {
+        "zh": "欧氏距离 · 蛮力 n(n−1)/2 对 Θ(n²) · 一维排序扫描 · 一维分治 min(dL, dR, dM) · 二维分治 · 中间带 · 每点常数次比较 · T(n)=2T(n/2)+Θ(n) → Θ(n log n)",
+        "en": "Euclidean distance · brute force n(n−1)/2 pairs Θ(n²) · 1D sort and scan · 1D divide and conquer min(dL, dR, dM) · 2D divide and conquer · the strip · constant checks per point · T(n)=2T(n/2)+Θ(n) → Θ(n log n)"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    }
+  ]
+}

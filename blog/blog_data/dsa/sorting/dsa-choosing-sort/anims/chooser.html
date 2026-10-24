@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>按要求筛选排序算法</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; width: 100%; }
+  .row > .label { flex: 0 0 auto; }
+  .btn-group.presets { flex-wrap: wrap; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+  button.tog { font-size: 12px; padding: 4px 10px; }
+  button.tog.on { background: var(--accent-dim); border-color: var(--accent); color: #ffd9cc; }
+  button.tog.on::before { content: '✓ '; }
+  .stage { overflow-y: auto; }
+  .list { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 4px; margin: auto 0; }
+  .alg {
+    display: grid; grid-template-columns: 7.4em 1.2em minmax(0, 1fr); align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 7px; border: 1px solid var(--border); background: rgba(255, 255, 255, 0.03);
+    font-size: 13px; transition: opacity 0.25s, background 0.25s, border-color 0.25s;
+  }
+  .alg .name { font-weight: 600; white-space: nowrap; }
+  .alg .mark { font-weight: 700; text-align: center; }
+  .alg .why { color: var(--muted); font-size: 12px; }
+  .alg.ok { border-color: rgba(74, 222, 128, 0.7); background: rgba(74, 222, 128, 0.12); }
+  .alg.ok .mark, .alg.best .mark { color: var(--green); }
+  .alg.best { border-color: var(--green); background: rgba(74, 222, 128, 0.28); }
+  .alg.best .why { color: #d8ffe1; }
+  .alg.maybe { border-color: var(--yellow); background: rgba(251, 191, 36, 0.12); }
+  .alg.maybe .mark { color: var(--yellow); }
+  .alg.no { opacity: 0.5; }
+  .alg.no .mark { color: var(--red); }
+  .alg.no .why { color: #fca5a5; }
+  @media (max-width: 420px) {
+    .alg { font-size: 12px; padding: 3px 8px; grid-template-columns: 6.8em 1.1em minmax(0, 1fr); }
+    .alg .why { font-size: 11px; }
+    button.tog { padding: 4px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">按要求筛选：还剩哪些排序？</div>
+<div class="controls" id="controls">
+  <div class="row"><span class="label">场景</span><div class="btn-group presets" id="presets"></div></div>
+  <div class="row"><span class="label">要求</span><div class="toggles" id="toggles"></div></div>
+</div>
+<div class="legend">
+  <span><i style="background: var(--green)"></i>满足全部要求</span>
+  <span><i style="background: var(--yellow)"></i>取决于“原地”的定义</span>
+  <span><i style="background: rgba(248, 113, 113, 0.6)"></i>被排除（后面是原因）</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const esc = AnimKit.esc;
+  const $ = id => document.getElementById(id);
+
+  /* 要求（约束）。int 不是筛掉别人，而是让计数排序变得可用。 */
+  const REQS = [
+    { id: 'int', label: '键是小范围整数' },
+    { id: 'stable', label: '稳定' },
+    { id: 'inplace', label: '原地 O(1)' },
+    { id: 'worst', label: '最坏 O(n log n)' },
+    { id: 'sorted', label: '有序输入 Θ(n)' },
+  ];
+
+  /* 总表里的性质：每个要求给出 [ok | maybe | no, 原因] */
+  const MERGE = {
+    stable: ['ok'], inplace: ['no', '额外 O(n)'], worst: ['ok'], sorted: ['no', '有序也是 Θ(n log n)'],
+  };
+  const ALGS = [
+    { name: '选择排序', base: '总是 Θ(n²)',
+      stable: ['no', '不稳定：远距离交换'], inplace: ['ok'], worst: ['no', '最坏 Θ(n²)'], sorted: ['no', '有序也是 Θ(n²)'] },
+    { name: '插入排序', base: 'Θ(n) ～ Θ(n²)',
+      stable: ['ok'], inplace: ['ok'], worst: ['no', '最坏 Θ(n²)'], sorted: ['ok'] },
+    { name: '计数排序', base: 'Θ(n + K)', needsInt: true,
+      stable: ['ok'], inplace: ['no', '额外 O(K)'], worst: ['ok'], sorted: ['ok'] },
+    { name: '快速排序', base: '平均 Θ(n log n)',
+      stable: ['no', '不稳定：远距离交换'], inplace: ['maybe', '递归栈 O(log n)'], worst: ['no', '最坏 Θ(n²)'],
+      sorted: ['no', '有序输入正是最坏'] },
+    Object.assign({ name: '归并·自顶向下', base: 'Θ(n log n)' }, MERGE),
+    Object.assign({ name: '归并·自底向上', base: 'Θ(n log n)' }, MERGE),
+    { name: '自适应归并', base: 'Θ(n) ～ Θ(n log n)',
+      stable: ['ok'], inplace: ['no', '额外 O(n)'], worst: ['ok'], sorted: ['ok'] },
+    { name: '堆排序', base: 'Θ(n log n)',
+      stable: ['no', '不稳定：堆顶与末尾交换'], inplace: ['ok'], worst: ['ok'], sorted: ['no', '有序也是 Θ(n log n)'] },
+  ];
+
+  const PRESETS = [
+    { label: '内存很紧', on: ['inplace', 'worst'],
+      text: '额外空间 O(1)、最坏也要 O(n log n)：只剩<b>堆排序</b>。归并排序要 O(n) 额外空间，快速排序最坏 Θ(n²)。' },
+    { label: '按第二个键再排', on: ['stable', 'worst'],
+      text: '第二次排序必须<b>稳定</b>；n 大时还要最坏 O(n log n)，于是选<b>归并排序</b>。n 很小时插入排序也可以。' },
+    { label: '几乎有序', on: ['sorted'],
+      text: '有序输入上 Θ(n) 的只有<b>插入排序</b>和<b>自适应归并</b>；再加“最坏 O(n log n)”就只剩自适应归并。' },
+    { label: '10⁶ 个 1～9 的读数', on: ['int'],
+      text: '键是 1～9 的整数，K = 9：<b>计数排序</b>约 n + K ≈ 10⁶ 步；Θ(n log n) 的比较排序约 n log₂ n ≈ 2×10⁷ 次比较。' },
+    { label: '稳定+原地+最坏 n log n', on: ['stable', 'inplace', 'worst'],
+      text: '<span class="bad">交集为空</span>：归并稳定但要 O(n) 空间，堆排序原地但不稳定，插入排序稳定且原地但最坏 Θ(n²)。' },
+  ];
+
+  /* 按当前要求判定一个算法 */
+  function judge(a, on) {
+    if (a.needsInt && !on.int) return { st: 'no', why: '只能排小范围整数键' };
+    let maybe = null;
+    for (const r of ['stable', 'inplace', 'worst', 'sorted']) {
+      if (!on[r]) continue;
+      const [st, why] = a[r];
+      if (st === 'no') return { st: 'no', why };
+      if (st === 'maybe' && !maybe) maybe = why + '，看定义';
+    }
+    if (maybe) return { st: 'maybe', why: maybe };
+    if (a.needsInt) return { st: 'best', why: 'Θ(n + K)，K 小时线性' };
+    return { st: 'ok', why: a.base };
+  }
+
+  const on = {};
+  let preset = -1;
+
+  const presetBtns = PRESETS.map((p, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = p.label;
+    b.addEventListener('click', () => {
+      REQS.forEach(r => { on[r.id] = p.on.includes(r.id); });
+      preset = k;
+      draw();
+    });
+    $('presets').appendChild(b);
+    return b;
+  });
+  const togBtns = REQS.map(r => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tog';
+    b.textContent = r.label;
+    b.addEventListener('click', () => {
+      on[r.id] = !on[r.id];
+      preset = -1;
+      draw();
+    });
+    $('toggles').appendChild(b);
+    return b;
+  });
+
+  function summary(rows) {
+    const ok = rows.filter(r => r.st === 'ok' || r.st === 'best').map(r => r.name);
+    const mb = rows.filter(r => r.st === 'maybe').map(r => r.name);
+    if (!REQS.some(r => on[r.id])) return '不加要求时比较排序都能用；计数排序要求键是小范围整数。点一个场景，或自己勾选要求。';
+    if (!ok.length && !mb.length) return '<span class="bad">没有一种排序同时满足这些要求</span>，需要放宽其中一条。';
+    let s = ok.length ? '满足全部要求：<b>' + ok.map(esc).join('、') + '</b>' : '没有算法无条件满足';
+    if (mb.length) s += '；' + mb.map(esc).join('、') + '是否算原地取决于定义';
+    return s + '。';
+  }
+
+  function draw() {
+    const rows = ALGS.map(a => Object.assign({ name: a.name }, judge(a, on)));
+    const mark = { ok: '✓', best: '★', maybe: '?', no: '✗' };
+    $('stage').innerHTML = '<div class="list">' + rows.map(r =>
+      `<div class="alg ${r.st}"><span class="name">${esc(r.name)}</span><span class="mark">${mark[r.st]}</span><span class="why">${esc(r.why)}</span></div>`
+    ).join('') + '</div>';
+    presetBtns.forEach((b, k) => b.classList.toggle('active', k === preset));
+    togBtns.forEach((b, k) => {
+      b.classList.toggle('on', !!on[REQS[k].id]);
+      b.setAttribute('aria-pressed', on[REQS[k].id] ? 'true' : 'false');
+    });
+    $('note').innerHTML = preset >= 0 ? PRESETS[preset].text : summary(rows);
+  }
+
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>堆排序逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .hs { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hs-stats { flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 16px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hs-stats b { color: var(--accent); font-size: 14px; }
+  .hs-svg { flex: 1 1 auto; min-height: 0; position: relative; }
+  .hs-svg > svg { position: absolute; inset: 0; width: 100%; height: 100%; margin: auto; display: block; overflow: visible; }
+  .hs-arr { flex: 0 0 auto; }
+  .hs-arr .cells { flex-wrap: nowrap; padding: 18px 4px 22px; gap: 3px; }
+  .hs-arr .cell { min-width: 33px; height: 33px; padding: 0 4px; font-size: 13px; border-radius: 6px; }
+  .cell.sorted { background: rgba(255, 255, 255, 0.10); border-color: #555554; color: #a1a1a0; }
+  .k-node.sorted circle { fill: #2e2e2d; stroke: #4a4a49; stroke-dasharray: 3 3; }
+  .k-node.sorted text { fill: #8a8a89; }
+  .legend i.sorted { background: rgba(255, 255, 255, 0.18); border: 1px dashed #6a6a69; }
+  @media (max-width: 420px) {
+    .hs-arr .cells { gap: 2px; }
+    .hs-arr .cell { min-width: 27px; height: 29px; padding: 0 2px; font-size: 12px; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">堆排序：堆顶换到末尾，堆缩小一格，新堆顶下沉（数组从下标 1 开始）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>正在下沉的元素</span>
+  <span><i style="background: var(--yellow)"></i>较大的孩子</span>
+  <span><i style="background: var(--blue)"></i>刚交换</span>
+  <span><i class="sorted"></i>已排好，不在堆里</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // each item: [key, label]; the label marks equal keys with subscripts
+  const SCENARIOS = [
+    { name: '课上例子', items: [[27], [24], [26], [7, '7₁'], [12], [6], [19], [2], [7, '7₂'], [7, '7₃']] },
+    { name: '乱序输入', items: [[1], [0], [7], [3], [7], [4], [1], [8], [2], [4]] },
+    { name: '三个 7', items: [[7, '7₁'], [7, '7₂'], [7, '7₃']] },
+  ];
+
+  // <algo> heapsort exactly as the C code: 1-based max-heap, larger child (ties -> left), size shrinks each round
+  function build(sc) {
+    const n = sc.items.length;
+    const H = [null].concat(sc.items.map(p => ({ v: p[0], t: p.length > 1 ? p[1] : String(p[0]) })));
+    const original = H.slice(1).map(x => x.t);
+    const frames = [];
+    let size = n, phase = 'build', round = 0, rootSw = 0, siftSw = 0, cmp = 0;
+    const T = k => K.esc(H[k].t);
+    const at = k => '<code>H[' + k + ']</code> = ' + T(k);
+    const push = (extra, note) => frames.push(Object.assign({
+      A: H.slice(1).map(x => x.t), size, phase, round, rootSw, siftSw, cmp,
+      cur: -1, kids: [], big: -1, swapped: [], note,
+    }, extra));
+
+    function siftdown(lim, i, head) {
+      let first = true;
+      while (2 * i <= lim) {
+        let c = 2 * i;
+        const kids = [c];
+        let kidText;
+        if (c + 1 <= lim) {
+          kids.push(c + 1);
+          cmp++;
+          const l = c;
+          if (H[c + 1].v > H[c].v) c++;
+          kidText = '孩子 ' + at(l) + '、' + at(l + 1) + '，' +
+            (H[l].v === H[l + 1].v ? '两者相等，取左孩子 H[' + l + ']' : '较大的是 H[' + c + '] = ' + T(c));
+        } else {
+          kidText = '只有左孩子 ' + at(c);
+        }
+        cmp++;
+        const stop = H[i].v >= H[c].v;
+        const pre = first && head ? head : '';
+        first = false;
+        if (stop) {
+          push({ cur: i, kids, big: c },
+            pre + T(i) + ' 在下标 ' + i + '，' + kidText + '。' + T(i) + ' ≥ ' + T(c) + '，<span class="ok">停</span>。');
+          return;
+        }
+        push({ cur: i, kids, big: c },
+          pre + T(i) + ' 在下标 ' + i + '，' + kidText + '。' + T(c) + ' &gt; ' + T(i) + '，<b>交换</b>。');
+        const moving = H[i];
+        H[i] = H[c]; H[c] = moving;
+        siftSw++;
+        const leaf = 2 * c > lim;
+        push({ cur: c, swapped: [i, c] },
+          '交换后 ' + K.esc(moving.t) + ' 到了下标 ' + c +
+          (leaf ? '；2×' + c + ' = ' + (2 * c) + ' &gt; ' + lim + '，是叶子，<span class="ok">停</span>。' : '，继续和它的孩子比较。'));
+        i = c;
+      }
+    }
+
+    push({}, 'n = ' + n + '。<b>阶段 1 建堆</b>：从最后一个父结点 ⌊n/2⌋ = ' + Math.floor(n / 2) +
+      ' 开始，倒着到根，逐个 sift down。');
+    for (let i = Math.floor(n / 2); i >= 1; i--) {
+      siftdown(n, i, '建堆 i = ' + i + '：');
+    }
+    phase = 'sort';
+    push({}, '建堆完成，H[1] = ' + T(1) + ' 是最大值。<b>阶段 2 排序</b>：重复 n − 1 = ' + (n - 1) +
+      ' 轮，每轮把堆顶换到堆的末尾。');
+    for (let s = n; s > 1; s--) {
+      round++;
+      const a = T(1), b = T(s);
+      const top = H[1]; H[1] = H[s]; H[s] = top;
+      rootSw++;
+      size = s - 1;
+      let note = '第 ' + round + ' 轮：交换 H[1] = ' + a + ' 与 H[' + s + '] = ' + b + '；size ' + s + ' → ' + size +
+        '，' + a + ' 归位（灰色）。';
+      if (size === 1) note += '堆只剩 H[1] = ' + T(1) + '，它是最小值，不用下沉。';
+      push({ swapped: [1, s] }, note);
+      siftdown(size, 1, '第 ' + round + ' 轮下沉：');
+    }
+    phase = 'done';
+    size = 0;
+    let end = '完成：' + H.slice(1).map(x => K.esc(x.t)).join(' ') + '。根交换 <b>' + rootSw +
+      '</b> 次，下沉交换 <b>' + siftSw + '</b> 次，比较 <b>' + cmp + '</b> 次。';
+    const tagged = original.filter(t => /[₁₂₃]/.test(t));
+    if (tagged.length > 1) {
+      const after = H.slice(1).map(x => x.t).filter(t => /[₁₂₃]/.test(t));
+      const same = after.join() === tagged.join();
+      end += '相等的 7 原来是 ' + tagged.join(' ') + '，现在是 ' + after.join(' ') +
+        (same ? '。' : '：<span class="bad">先后次序变了，不稳定</span>。');
+    }
+    push({}, end);
+    return frames;
+  }
+  // </algo>
+
+  function treeOf(f) {
+    const n = f.A.length;
+    const mk = k => (k > n ? null : { key: f.A[k - 1], idx: k, left: mk(2 * k), right: mk(2 * k + 1) });
+    return mk(1);
+  }
+
+  function render(f) {
+    const n = f.A.length;
+    const inHeap = k => k <= f.size;
+    const state = k => {
+      if (!inHeap(k)) return 'sorted';
+      if (f.swapped.indexOf(k) >= 0) return 'visited';
+      if (k === f.cur) return 'active';
+      if (k === f.big) return 'warn';
+      if (f.kids.indexOf(k) >= 0) return 'compare';
+      return '';
+    };
+    const svg = K.tree(treeOf(f), {
+      r: 17, gapX: 40, gapY: 52, pad: 32,
+      cls: node => state(node.idx),
+      edgeCls: (p, c) => {
+        if (!inHeap(c.idx)) return 'dim';
+        if (p.idx === f.cur && c.idx === f.big) return 'active';
+        if (f.swapped.indexOf(p.idx) >= 0 && f.swapped.indexOf(c.idx) >= 0) return 'visited';
+        return '';
+      },
+      badge: node => String(node.idx),
+    });
+    const vb = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
+    const cap = vb ? ' style="max-width:' + Math.round(vb[1] * 1.5) + 'px;max-height:' + Math.round(vb[2] * 1.5) + 'px"' : '';
+    const idx = f.A.map((_, k) => k + 1);
+    const ptr = k => {
+      const p = [];
+      if (k + 1 === f.cur) p.push('i');
+      if (f.phase === 'sort' && k + 1 === f.size) p.push('size');
+      return p.join('·');
+    };
+    const arr = K.cells(f.A, { idx, ptr, cls: (v, k) => state(k + 1) });
+    const where = f.phase === 'build' ? '阶段 1：建堆' :
+      f.phase === 'sort' ? (f.round ? '第 <b>' + f.round + '</b> / ' + (n - 1) + ' 轮 · size = ' + f.size : '阶段 2：排序') : '完成';
+    const stats = '<div class="hs-stats"><span>' + where + '</span><span>根交换 <b>' + f.rootSw +
+      '</b></span><span>下沉交换 <b>' + f.siftSw + '</b></span><span>比较 <b>' + f.cmp + '</b></span></div>';
+    stage.innerHTML = '<div class="hs">' + stats +
+      '<div class="hs-svg">' + svg.replace('<svg ', '<svg' + cap + ' ') + '</div>' +
+      '<div class="hs-arr">' + arr + '</div></div>';
+  }
+
+  // scenario buttons go in before the player's own buttons
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const built = SCENARIOS.map(build);
+  let player = null;
+  SCENARIOS.forEach((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.name;
+    if (k === 0) b.className = 'active';
+    b.addEventListener('click', () => {
+      group.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+      player.load(built[k]);
+    });
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  player = window.AnimKit.player({ frames: built[0], render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+/* Post body — dsa-heap-construction / zh */
+
+(window.__BLOG_POSTS = window.__BLOG_POSTS || {})['dsa-heap-construction:zh'] = `
+<p class="lead">建堆（heap construction）是把 n 个顺序任意的元素整理成一个堆。<strong>逐个插入</strong>每次做一次上浮（sift up），最坏 Θ(n log n)；<strong>自底向上</strong>（bottom-up heapify）从最后一个父结点往前逐个下沉（sift down），只要 Θ(n)。本课程默认最大堆，数组从下标 1 开始，H[0] 不用。</p>
+
+<h2>方法一：逐个插入</h2>
+<p>课上的例子从 5, 3, 6, 8 开始。堆里先只有 5。插入 3：放在下标 2，父结点 5 比它大，不动。插入 6：放在下标 3，父结点 5 &lt; 6，交换，得到 [6, 3, 5]。插入 8：放在下标 4，父结点是下标 2 的 3，交换；再和下标 1 的 6 比，又交换，8 成为根，得到 [8, 6, 5, 3]。每一步都是 6.2 讲的插入：放到末尾，再上浮。</p>
+<p>实现时不用另开数组：k 从 2 走到 n，H[1..k−1] 已是堆，H[k] 正好在堆末尾的下一格，对它上浮即可。</p>
+<p>代价看每个新元素上浮几层。根（第 0 层）不用动；第 1 层的 2 个结点最多上浮 1 层；第 2 层的 4 个最多 2 层；第 i 层有 2<sup>i</sup> 个结点，每个最多上浮 i 层。<strong>最坏情况是每个新元素都比已有的元素大</strong>，例如升序输入，每个都一路换到根：</p>
+<ul>
+<li>下界：最底层大约有 n/2 个结点，每个要上浮约 log₂ n 层，单这一层就是 (n/2)·log₂ n 次交换，Ω(n log n)。</li>
+<li>上界：n 次插入，每次不超过 log₂ n 次交换，O(n log n)。</li>
+</ul>
+<p>上下界同阶，所以<strong>最坏 Θ(n log n)</strong>。<strong>最好 Θ(n)</strong>：每个新元素都不大于它的父结点（例如降序输入），每次插入只比较 1 次、不交换。</p>
+
+<h2>方法二：自底向上</h2>
+<p>输入数组本身已经是一棵完全二叉树，缺的只是堆条件。叶子没有孩子，<strong>单个结点自己就是一个堆</strong>，所以下标 ⌊n/2⌋+1 到 n 的叶子不用处理（最后一个父结点为什么在 ⌊n/2⌋，见 6.1）。剩下的父结点<strong>从 i = ⌊n/2⌋ 倒着处理到 1，每个做一次 sift down</strong>：和较大的孩子比，比它小就交换，一直沉到不小于两个孩子、或成为叶子为止。</p>
+<p>倒序是正确性的关键。处理 i 时，它的孩子 2i、2i+1 下标更大，要么已经处理过，要么本来就是叶子，所以 i 的左右子树都已是堆，只剩根 i 可能放错。一次 sift down 正好把它放到位，以 i 为根的子树就成了堆。处理完 i = 1，整棵树就是堆。</p>
+<p>课上的例子是 [1, 0, 7, 3, 7, 4, 1, 8, 2, 4]，n = 10，父结点是下标 1–5：</p>
+<figure class="fig">
+<svg viewBox="0 0 620 226" width="620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="左：输入数组按层放成完全二叉树，父结点为下标 1 到 5；右：自底向上建堆后的最大堆">
+<text x="155" y="16" fill="#a1a1a0" font-size="13" text-anchor="middle">建堆前：H = 1 0 7 3 7 4 1 8 2 4</text>
+<g stroke="rgba(255,255,255,0.35)" stroke-width="2"><line x1="155" y1="48" x2="85" y2="100"/><line x1="155" y1="48" x2="225" y2="100"/><line x1="85" y1="100" x2="45" y2="152"/><line x1="85" y1="100" x2="125" y2="152"/><line x1="225" y1="100" x2="190" y2="152"/><line x1="225" y1="100" x2="260" y2="152"/><line x1="45" y1="152" x2="22" y2="204"/><line x1="45" y1="152" x2="68" y2="204"/><line x1="125" y1="152" x2="110" y2="204"/></g>
+<circle cx="155" cy="48" r="15" fill="#343433" stroke="#d97757" stroke-width="2"/><circle cx="85" cy="100" r="15" fill="#343433" stroke="#d97757" stroke-width="2"/><circle cx="225" cy="100" r="15" fill="#343433" stroke="#d97757" stroke-width="2"/><circle cx="45" cy="152" r="15" fill="#343433" stroke="#d97757" stroke-width="2"/><circle cx="125" cy="152" r="15" fill="#343433" stroke="#d97757" stroke-width="2"/><circle cx="190" cy="152" r="15" fill="#343433" stroke="#5a5a59" stroke-width="2"/><circle cx="260" cy="152" r="15" fill="#343433" stroke="#5a5a59" stroke-width="2"/><circle cx="22" cy="204" r="15" fill="#343433" stroke="#5a5a59" stroke-width="2"/><circle cx="68" cy="204" r="15" fill="#343433" stroke="#5a5a59" stroke-width="2"/><circle cx="110" cy="204" r="15" fill="#343433" stroke="#5a5a59" stroke-width="2"/>
+<g fill="#e8e8e8" font-size="14" font-weight="700" text-anchor="middle"><text x="155" y="53">1</text><text x="85" y="105">0</text><text x="225" y="105">7</text><text x="45" y="157">3</text><text x="125" y="157">7</text><text x="190" y="157">4</text><text x="260" y="157">1</text><text x="22" y="209">8</text><text x="68" y="209">2</text><text x="110" y="209">4</text></g>
+<g fill="#a1a1a0" font-size="11"><text x="171" y="36">1</text><text x="101" y="88">2</text><text x="241" y="88">3</text><text x="61" y="140">4</text><text x="141" y="140">5</text><text x="206" y="140">6</text><text x="276" y="140">7</text><text x="38" y="192">8</text><text x="84" y="192">9</text><text x="126" y="192">10</text></g>
+<text x="475" y="16" fill="#a1a1a0" font-size="13" text-anchor="middle">建堆后：H = 8 7 7 3 4 4 1 0 2 1</text>
+<g stroke="rgba(255,255,255,0.35)" stroke-width="2"><line x1="475" y1="48" x2="405" y2="100"/><line x1="475" y1="48" x2="545" y2="100"/><line x1="405" y1="100" x2="365" y2="152"/><line x1="405" y1="100" x2="445" y2="152"/><line x1="545" y1="100" x2="510" y2="152"/><line x1="545" y1="100" x2="580" y2="152"/><line x1="365" y1="152" x2="342" y2="204"/><line x1="365" y1="152" x2="388" y2="204"/><line x1="445" y1="152" x2="430" y2="204"/></g>
+<circle cx="475" cy="48" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="405" cy="100" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="545" cy="100" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="365" cy="152" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="445" cy="152" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="510" cy="152" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="580" cy="152" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="342" cy="204" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="388" cy="204" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/><circle cx="430" cy="204" r="15" fill="#343433" stroke="#4ade80" stroke-width="2"/>
+<g fill="#e8e8e8" font-size="14" font-weight="700" text-anchor="middle"><text x="475" y="53">8</text><text x="405" y="105">7</text><text x="545" y="105">7</text><text x="365" y="157">3</text><text x="445" y="157">4</text><text x="510" y="157">4</text><text x="580" y="157">1</text><text x="342" y="209">0</text><text x="388" y="209">2</text><text x="430" y="209">1</text></g>
+<g fill="#a1a1a0" font-size="11"><text x="491" y="36">1</text><text x="421" y="88">2</text><text x="561" y="88">3</text><text x="381" y="140">4</text><text x="461" y="140">5</text><text x="526" y="140">6</text><text x="596" y="140">7</text><text x="358" y="192">8</text><text x="404" y="192">9</text><text x="446" y="192">10</text></g>
+</svg>
+<figcaption>小字是数组下标。左边橙色描边的是父结点（下标 1–5），其余是叶子；右边是处理完全部父结点后的最大堆。</figcaption>
+</figure>
+<table>
+<thead><tr><th>i</th><th>H[i]</th><th>孩子</th><th>sift down 的过程</th><th>处理后的 H[1..10]</th></tr></thead>
+<tbody>
+<tr><td>5</td><td>7</td><td>4</td><td>7 ≥ 4，不动</td><td>1 0 7 3 7 4 1 8 2 4</td></tr>
+<tr><td>4</td><td>3</td><td>8, 2</td><td>和 8 交换；到下标 8（叶子）</td><td>1 0 7 8 7 4 1 3 2 4</td></tr>
+<tr><td>3</td><td>7</td><td>4, 1</td><td>7 ≥ 4，不动</td><td>1 0 7 8 7 4 1 3 2 4</td></tr>
+<tr><td>2</td><td>0</td><td>8, 7</td><td>和 8 交换；到下标 4，孩子 3, 2，和 3 交换；到下标 8（叶子）</td><td>1 8 7 3 7 4 1 0 2 4</td></tr>
+<tr><td>1</td><td>1</td><td>8, 7</td><td>和 8 交换；到下标 2，孩子 3, 7，和 7 交换；到下标 5，孩子 4，和 4 交换；到下标 10（叶子）</td><td>8 7 7 3 4 4 1 0 2 1</td></tr>
+</tbody>
+</table>
+<p>一共 6 次交换。i = 2 和 i = 1 都换了不止一次：<strong>sift down 要一直做到停下为止</strong>，根上的 1 一路沉到了下标 10。</p>
+<iframe class="anim-frame" src="blog/blog_data/dsa-heap-construction/anims/build-heap.html" loading="lazy" style="height: 520px;" title="建堆：自底向上与逐个插入的逐步对比"></iframe>
+<p class="anim-caption">选好输入和方法后按“下一步”或“播放”：橙色是正在移动的元素，黄色是要和它交换的结点，绿色部分已是堆。最后一帧对比两种方法的交换次数。</p>
+
+<h2>C 代码</h2>
+<p>两种方法写在一起，sift down 和 sift up 的细节见 6.2。</p>
+<pre><code>#include &lt;stdio.h&gt;
+
+/* max-heap stored in H[1..n]; H[0] is unused */
+void swap(int *a, int *b) { int t = *a; *a = *b; *b = t; }
+
+/* sift down H[i] inside the heap H[1..n] */
+void siftdown(int H[], int n, int i) {
+    while (2 * i &lt;= n) {                     /* H[i] has a left child */
+        int c = 2 * i;
+        if (c + 1 &lt;= n &amp;&amp; H[c + 1] &gt; H[c])   /* right child exists and is larger */
+            c = c + 1;
+        if (H[i] &gt;= H[c])                    /* not smaller than the larger child */
+            break;
+        swap(&amp;H[i], &amp;H[c]);
+        i = c;
+    }
+}
+
+/* method 2: bottom-up, Theta(n) */
+void build_heap(int H[], int n) {
+    for (int i = n / 2; i &gt;= 1; i--)         /* last parent first; leaves skipped */
+        siftdown(H, n, i);
+}
+
+/* method 1: insert H[2], H[3], ... one by one, worst Theta(n log n) */
+void build_by_insertion(int H[], int n) {
+    for (int k = 2; k &lt;= n; k++) {           /* H[1..k-1] is already a heap */
+        int i = k;                           /* sift up the new element */
+        while (i &gt; 1 &amp;&amp; H[i / 2] &lt; H[i]) {
+            swap(&amp;H[i / 2], &amp;H[i]);
+            i = i / 2;
+        }
+    }
+}
+
+void print_heap(const int H[], int n) {
+    for (int i = 1; i &lt;= n; i++)
+        printf("%d ", H[i]);
+    printf("\\n");
+}
+
+int main(void) {
+    int A[] = {0, 1, 0, 7, 3, 7, 4, 1, 8, 2, 4};   /* A[0] unused */
+    int B[] = {0, 1, 0, 7, 3, 7, 4, 1, 8, 2, 4};
+    int n = 10;
+    build_heap(A, n);
+    print_heap(A, n);                        /* 8 7 7 3 4 4 1 0 2 1 */
+    build_by_insertion(B, n);
+    print_heap(B, n);                        /* 8 7 4 7 4 1 1 0 2 3 */
+    return 0;
+}</code></pre>
+<p>同一个输入，方法一得到 8 7 4 7 4 1 1 0 2 3，交换 8 次。<strong>两种方法建出的堆可能不同</strong>，两个都合法；题目指定了方法，就要给出那种方法的结果。最小堆只需把 <code>siftdown</code> 里的两处比较反过来：<code>H[c + 1] &lt; H[c]</code> 和 <code>H[i] &lt;= H[c]</code>。</p>
+<div class="callout warn" data-label="易错">
+<p>把循环写成 <code>for (int i = 1; i &lt;= n / 2; i++)</code>，从根往下处理，结果不一定是堆。[1, 2, 3, 4, 5, 6, 7] 这样做会得到 3 5 7 4 2 6 1，根 3 小于孩子 7。处理根时它的右子树 3, 6, 7 还不是堆，根只能在 2 和 3 里挑出 3；真正的最大值 7 埋在下面，之后再也没有机会升到根。</p>
+</div>
+
+<h2>为什么自底向上只要 Θ(n)</h2>
+<p>先粗估：约 n/2 个父结点，每个最多沉 log n 层，得 O(n log n)。这个界成立，但太松。看 n = 15 的满二叉树，输入取升序 1, 2, …, 15，两种方法正好都碰上各自的最坏情况：</p>
+<table>
+<thead><tr><th>层（根为 0）</th><th>结点数</th><th>自底向上：每个最多下沉</th><th>逐个插入：每个最多上浮</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>1</td><td>3</td><td>0</td></tr>
+<tr><td>1</td><td>2</td><td>2</td><td>1</td></tr>
+<tr><td>2</td><td>4</td><td>1</td><td>2</td></tr>
+<tr><td>3</td><td>8</td><td>0</td><td>3</td></tr>
+<tr><td>合计</td><td>15</td><td>1×3 + 2×2 + 4×1 = 11</td><td>2×1 + 4×2 + 8×3 = 34</td></tr>
+</tbody>
+</table>
+<p>差别全在底层：占一半的叶子，自底向上一步不走，逐个插入却要走得最远。</p>
+<p>一般地，根为第 0 层，最深一层是第 L = ⌊log₂ n⌋ 层。第 i 层最多 2<sup>i</sup> 个结点，每个最多下沉 L − i 层，交换总数最多是</p>
+<p>S = ∑<sub>i=0</sub><sup>L</sup> 2<sup>i</sup>(L − i) = L·∑<sub>i=0</sub><sup>L</sup> 2<sup>i</sup> − ∑<sub>i=0</sub><sup>L</sup> i·2<sup>i</sup></p>
+<ul>
+<li>第一项用公式表的等比求和（r = 2）：∑<sub>i=0</sub><sup>L</sup> 2<sup>i</sup> = (1 − 2<sup>L+1</sup>)/(1 − 2) = 2<sup>L+1</sup> − 1。</li>
+<li>第二项记作 M = 1·2 + 2·2² + … + L·2<sup>L</sup>。乘 2 得 2M = 1·2² + … + (L−1)·2<sup>L</sup> + L·2<sup>L+1</sup>，错开一位对齐后相减：M − 2M = 2 + 2² + … + 2<sup>L</sup> − L·2<sup>L+1</sup> = 2<sup>L+1</sup> − 2 − L·2<sup>L+1</sup>，所以 M = (L − 1)·2<sup>L+1</sup> + 2。</li>
+<li>合起来：S = L(2<sup>L+1</sup> − 1) − (L − 1)·2<sup>L+1</sup> − 2 = <strong>2<sup>L+1</sup> − L − 2</strong>。代入 L = 3 得 11，和上表一致。</li>
+</ul>
+<p>课上把 2<sup>L</sup> 直接记作 n、L 记作 log n，写成 <strong>S = 2(n − 1) − log n</strong>。严格说 2<sup>L</sup> ≤ n，所以 S &lt; 2n，是 O(n)；每个父结点至少比较一次，又是 Ω(n)。所以<strong>自底向上建堆是 Θ(n)，最好、最坏都是</strong>。逐个插入在满二叉树上的最坏交换数恰好是 M ≈ n log n（L = 3 时 M = 34）。</p>
+<table>
+<thead><tr><th>n（升序输入）</th><th>自底向上的交换数</th><th>逐个插入的交换数</th></tr></thead>
+<tbody>
+<tr><td>15</td><td>11</td><td>34</td></tr>
+<tr><td>1023</td><td>1013</td><td>8194</td></tr>
+<tr><td>1048575</td><td>1048555</td><td>18874370</td></tr>
+</tbody>
+</table>
+
+<h2>考试怎么考</h2>
+<ul>
+<li><strong>手算建堆</strong>：给一个数组，用 bottom-up 建最大堆或最小堆，写出过程，最终答案同时给数组和树（2015 年期末第 4 题 (a)）。按 i = ⌊n/2⌋, …, 1 的顺序，每个父结点写一行；最小堆和较小的孩子交换。</li>
+<li><strong>为什么 bottom-up 更好</strong>：写出两边的最坏复杂度 Θ(n) 与 Θ(n log n)，并说明原因在底层那约 n/2 个结点上。</li>
+<li><strong>复杂度选择题</strong>：bottom-up 建堆的最紧上界是 O(n)。O(n log n) 虽然成立，问“closest upper bound”时不得分。</li>
+<li><strong>推导</strong>：公式表给了等比求和，没给 ∑ i·2<sup>i</sup>；错位相减要会做，至少记住 S &lt; 2n。</li>
+<li><strong>下标</strong>：课上从 1 开始，最后一个父结点是 ⌊n/2⌋。往年参考答案常从 0 开始：孩子是 2i+1、2i+2，最后一个父结点是 ⌊n/2⌋ − 1。答题时先写明假设。</li>
+</ul>
+<table>
+<thead><tr><th>建堆方法</th><th>做法</th><th>最好</th><th>最坏</th></tr></thead>
+<tbody>
+<tr><td>逐个插入</td><td>依次放到末尾，sift up</td><td>Θ(n)，如降序输入</td><td>Θ(n log n)，如升序输入</td></tr>
+<tr><td>自底向上</td><td>i = ⌊n/2⌋ … 1，逐个 sift down</td><td>Θ(n)</td><td>Θ(n)</td></tr>
+</tbody>
+</table>
+<div class="callout warn" data-label="易错">
+<ul>
+<li>处理顺序写反（从根往下），或者从叶子开始处理。</li>
+<li>每个父结点只交换一层就停，没有沉到底。</li>
+<li>自底向上里误用 sift up。</li>
+<li>两个孩子相等时选哪个都行，结果不同但都是合法的堆；2015 年的参考答案两种都列了。</li>
+<li>题目要 bottom-up 却用逐个插入：2015 年那题这样做只给部分分。</li>
+</ul>
+</div>
+
+<h2>练习</h2>
+<details class="qa">
+  <summary class="ripple-surface">1. 用 bottom-up 方法把 [100, 12, 79, 11, 13, 77, 11, 87, 25] 建成最小堆（根最小），写出过程和最终的数组与树；再说明为什么 bottom-up 比逐个插入好。（2015 年期末题）</summary>
+  <div class="qa__body">
+<p>n = 9，最后一个父结点是 ⌊9/2⌋ = 4。若按 0 起始的下标写，每个下标都小 1，过程和结果完全一样。最小堆：和<strong>较小</strong>的孩子交换。</p>
+<pre><code class="lang-text">i = 4：11，孩子 87、25，11 最小，不动           100 12 79 11 13 77 11 87 25
+i = 3：79，孩子 77、11，和 11 交换              100 12 11 11 13 77 79 87 25
+i = 2：12，孩子 11、13，和 11 交换；
+       到下标 4，孩子 87、25，不动              100 11 11 12 13 77 79 87 25
+i = 1：100，孩子 11、11 相等，取左边，交换；
+       到下标 2，孩子 12、13，和 12 交换；
+       到下标 4，孩子 87、25，和 25 交换        11 12 11 25 13 77 79 87 100
+             11
+          /      \\
+        12        11
+       /  \\      /  \\
+     25    13  77    79
+    /  \\
+  87   100</code></pre>
+<p>共 5 次交换。若根那一步取右边的 11，100 换到下标 3，再和 77 交换后成为叶子，得到 11 11 77 12 13 100 79 87 25，同样是合法的最小堆。</p>
+<p>为什么更好：bottom-up 最坏也只要 Θ(n)，交换总数小于 2n；逐个插入最坏 Θ(n log n)，最底层约 n/2 个元素每个都可能上浮约 log n 层。</p>
+  </div>
+</details>
+<details class="qa">
+  <summary class="ripple-surface">2. 对课上的输入 [1, 0, 7, 3, 7, 4, 1, 8, 2, 4] 改用逐个插入建最大堆，写出每次插入后的数组和总交换次数，并与自底向上的结果比较。</summary>
+  <div class="qa__body">
+<pre><code class="lang-text">插入 0：父 1 ≥ 0，不动                1 0
+插入 7：和 1 交换，到根               7 0 1
+插入 3：和 0 交换；父 7 ≥ 3，停       7 3 1 0
+插入 7：和 3 交换；父 7 ≥ 7，停       7 7 1 0 3
+插入 4：和 1 交换；父 7 ≥ 4，停       7 7 4 0 3 1
+插入 1：父 4 ≥ 1，不动                7 7 4 0 3 1 1
+插入 8：依次和 0、7、7 交换，到根     8 7 4 7 3 1 1 0
+插入 2：父 7 ≥ 2，不动                8 7 4 7 3 1 1 0 2
+插入 4：和 3 交换；父 7 ≥ 4，停       8 7 4 7 4 1 1 0 2 3</code></pre>
+<p>共 <strong>8</strong> 次交换，结果 8 7 4 7 4 1 1 0 2 3。自底向上只换 6 次，得到 8 7 7 3 4 4 1 0 2 1。两个都是合法的最大堆，但数组不同。</p>
+  </div>
+</details>
+<details class="qa">
+  <summary class="ripple-surface">3. 往年参考答案常把堆存在 A[0..n−1]。把 siftdown 和 build_heap 改写成这种下标的最大堆版本；n = 9 时第一个被 sift down 的是哪个下标？</summary>
+  <div class="qa__body">
+<pre><code>void siftdown0(int A[], int n, int i) {     /* children 2i+1, 2i+2 */
+    while (2 * i + 1 &lt; n) {                 /* A[i] has a left child */
+        int c = 2 * i + 1;
+        if (c + 1 &lt; n &amp;&amp; A[c + 1] &gt; A[c])
+            c = c + 1;
+        if (A[i] &gt;= A[c])
+            break;
+        swap(&amp;A[i], &amp;A[c]);
+        i = c;
+    }
+}
+
+void build_heap0(int A[], int n) {
+    for (int i = n / 2 - 1; i &gt;= 0; i--)    /* last parent is n/2 - 1 */
+        siftdown0(A, n, i);
+}</code></pre>
+<p>最后一个元素在下标 n − 1，它的父结点是 ⌊(n − 2)/2⌋ = ⌊n/2⌋ − 1。n = 9 时第一个处理的是<strong>下标 3</strong>（练习 1 的数组里是 11），下标 4–8 是叶子。注意循环条件是 <code>i &gt;= 0</code>，根在下标 0，不能漏。</p>
+  </div>
+</details>
+<details class="qa">
+  <summary class="ripple-surface">4. 多选，哪些正确？(A) 对一个已经是最大堆的数组做自底向上建堆，仍需 Θ(n) 时间；(B) 逐个插入建堆，输入为降序时是 Θ(n)；(C) 自底向上建堆从 i = 1 往后处理到 ⌊n/2⌋ 也能得到堆；(D) “自底向上建堆是 O(n log n)”这句话成立；(E) 自底向上建堆不处理下标 ⌊n/2⌋+1 到 n 的元素；(F) 对同一输入，两种方法得到的数组一定相同。</summary>
+  <div class="qa__body">
+<p><strong>A、B、D、E 正确。</strong></p>
+<p>A：每个父结点至少比较一次，约 n/2 次比较，没有更快的情况。B：每个新元素都不大于父结点，只比较 1 次、不交换。D：上界成立，只是不紧，问最紧上界要答 O(n)。E：它们是叶子，本身就是堆。</p>
+<p>C 错：[1, 2, 3, 4, 5, 6, 7] 正序处理得到 3 5 7 4 2 6 1，不是堆。F 错：课上的输入用两种方法分别得到 8 7 7 3 4 4 1 0 2 1 和 8 7 4 7 4 1 1 0 2 3。</p>
+  </div>
+</details>
+`;

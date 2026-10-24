@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B+ 树范围查询</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .bn rect.box { fill: #343433; stroke: #5a5a59; stroke-width: 2; transition: fill 0.3s, stroke 0.3s; }
+  .bn.cur rect.box { fill: rgba(217, 119, 87, 0.14); stroke: var(--accent); stroke-width: 3; }
+  .bn.seen rect.box { stroke: var(--blue); }
+  .bn text { fill: var(--text); font-size: 14px; font-weight: 700; text-anchor: middle; dominant-baseline: central; transition: opacity 0.3s; }
+  .bn text.route { fill: var(--yellow); }
+  .bn text.skip { opacity: 0.3; }
+  .bn .sep { stroke: #5a5a59; stroke-width: 1.5; }
+  .kc { fill: transparent; stroke: none; transition: fill 0.3s, stroke 0.3s; }
+  .kc.cmp { fill: rgba(217, 119, 87, 0.30); stroke: var(--accent); stroke-width: 1.5; }
+  .kc.hit { fill: rgba(74, 222, 128, 0.28); stroke: var(--green); stroke-width: 1.5; }
+  .kc.stop { fill: rgba(248, 113, 113, 0.25); stroke: var(--red); stroke-width: 1.5; }
+  .nil { fill: var(--muted); font-size: 12px; font-weight: 600; dominant-baseline: central; }
+  .legend b { color: var(--text); }
+  input.range-in { width: 52px; }
+  .custom { display: inline-flex; align-items: center; gap: 6px; }
+  @media (max-width: 480px) {
+    .custom, .legend .lg { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">范围查询：B+ 树沿叶子走，BST 逐个找后继</div>
+<div class="controls" id="controls"></div>
+<div class="legend" id="stats"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const statsEl = document.getElementById('stats');
+  const controls = document.getElementById('controls');
+
+  // <algo>
+  /* ---- B+ 树（3 阶：内部结点最多 3 个孩子，叶子最多 2 个键） ---- */
+  const LEAVES = [[9, 14], [17, 28], [32, 42], [50, 53], [64, 71]]
+    .map((k, i) => ({ id: 'L' + (i + 1), leaf: true, keys: k, next: null }));
+  LEAVES.forEach((l, i) => { l.next = LEAVES[i + 1] || null; });
+  const NA = { id: 'A', keys: [17], ch: [LEAVES[0], LEAVES[1]] };
+  const NB = { id: 'B', keys: [50, 64], ch: [LEAVES[2], LEAVES[3], LEAVES[4]] };
+  const ROOT = { id: 'R', keys: [32], ch: [NA, NB] };
+
+  function routeNote(t, lo, i) {
+    const k = t.keys, n = k.length;
+    let s;
+    if (i === 0) s = lo + ' &lt; ' + k[0] + '，走' + (n === 1 ? '左' : '最左边的') + '孩子';
+    else if (i === n) s = lo + ' ≥ ' + k[n - 1] + '，走' + (n === 1 ? '右' : '最右边的') + '孩子';
+    else s = k[i - 1] + ' ≤ ' + lo + ' &lt; ' + k[i] + '，走中间的孩子';
+    if (k.includes(lo)) s += '（路标是右子树里最小的键，相等时往右）';
+    return s + '。';
+  }
+
+  function bpFrames(lo, hi) {
+    const F = [];
+    const st = { node: {}, key: {}, edge: {}, link: {}, out: [], hops: 0 };
+    const push = note => F.push({
+      kind: 'bp', node: Object.assign({}, st.node), key: Object.assign({}, st.key),
+      edge: Object.assign({}, st.edge), link: Object.assign({}, st.link),
+      out: st.out.slice(), hops: st.hops, note,
+    });
+    const settle = () => {
+      Object.keys(st.edge).forEach(e => { if (st.edge[e] === 'active') st.edge[e] = 'visited'; });
+      Object.keys(st.link).forEach(e => { if (st.link[e] === 'active') st.link[e] = 'done'; });
+      Object.keys(st.node).forEach(n => { if (st.node[n] === 'cur') st.node[n] = 'seen'; });
+      Object.keys(st.key).forEach(k => { if (st.key[k] === 'cmp') delete st.key[k]; });
+    };
+    push('B+ 树查询 [' + lo + ', ' + hi + ']：先按查找 <b>' + lo + '</b> 的方式从根走到叶子。黄色的键只是路标，数据都在叶子里。');
+
+    let t = ROOT;
+    while (!t.leaf) {
+      let i = 0;
+      while (i < t.keys.length && lo >= t.keys[i]) i++;
+      st.node[t.id] = 'cur';
+      for (let j = 0; j <= Math.min(i, t.keys.length - 1); j++) st.key[t.id + ':' + j] = 'cmp';
+      st.edge[t.id + '-' + t.ch[i].id] = 'active';
+      st.hops++;
+      push(routeNote(t, lo, i));
+      settle();
+      t = t.ch[i];
+    }
+    st.node[t.id] = 'cur';
+    push('到达叶子 [' + t.keys.join(' ') + ']。从这里起只在叶子层往右扫描，不再回到上层。');
+
+    let leaf = t, done = false;
+    while (leaf && !done) {
+      for (let j = 0; j < leaf.keys.length; j++) {
+        const k = leaf.keys[j], id = leaf.id + ':' + j;
+        if (k > hi) {
+          st.key[id] = 'stop';
+          push('<span class="bad">' + k + ' &gt; ' + hi + '</span>：后面的键只会更大，查询结束。' + summary(st));
+          done = true;
+          break;
+        }
+        if (k >= lo) {
+          st.key[id] = 'hit';
+          st.out.push(k);
+          push('<span class="ok">' + k + ' 在 [' + lo + ', ' + hi + '] 内</span>，输出。');
+        } else {
+          st.key[id] = 'skip';
+          push(k + ' &lt; ' + lo + '，不在范围内，跳过。');
+        }
+      }
+      if (done) break;
+      settle();
+      if (!leaf.next) {
+        push('最后一片叶子的 next 是 NULL，查询结束。' + summary(st));
+        break;
+      }
+      st.link[leaf.id] = 'active';
+      st.hops++;
+      leaf = leaf.next;
+      st.node[leaf.id] = 'cur';
+      push('这片叶子扫完，沿 <b>next</b> 指针到右边的叶子 [' + leaf.keys.join(' ') + ']，一步 O(1)。');
+    }
+    return F;
+  }
+  function summary(st) {
+    return '共输出 <b>' + st.out.length + '</b> 个键，跟随指针 <b>' + st.hops + '</b> 次。';
+  }
+  function bpHops(lo, hi) {
+    const f = bpFrames(lo, hi);
+    return f[f.length - 1].hops;
+  }
+
+  /* ---- 同样 10 个键的 BST：课上的树 32,14,53,9,28,42,64,50 再插入 17、71 ---- */
+  function ins(t, k, p) {
+    if (!t) return { key: k, left: null, right: null, parent: p };
+    if (k < t.key) t.left = ins(t.left, k, t);
+    else t.right = ins(t.right, k, t);
+    return t;
+  }
+  let BST = null;
+  [32, 14, 53, 9, 28, 42, 64, 50, 17, 71].forEach(k => { BST = ins(BST, k, null); });
+  const ek = (x, y) => (x.parent === y ? y.key + '-' + x.key : x.key + '-' + y.key);
+
+  function bstFrames(lo, hi) {
+    const F = [];
+    const st = { node: {}, edge: {}, out: [], hops: 0 };
+    const outSet = new Set();
+    const push = note => F.push({
+      kind: 'bst', node: Object.assign({}, st.node), edge: Object.assign({}, st.edge),
+      out: st.out.slice(), hops: st.hops, note,
+    });
+    const settle = () => {
+      Object.keys(st.edge).forEach(e => { if (st.edge[e] === 'active') st.edge[e] = 'visited'; });
+      Object.keys(st.node).forEach(n => { if (st.node[n] === 'active') st.node[n] = outSet.has(+n) ? 'done' : 'visited'; });
+    };
+    const step = (from, to) => { settle(); st.edge[ek(from, to)] = 'active'; st.node[to.key] = 'active'; st.hops++; };
+    // 走到后继之后：在范围内就输出，否则结束
+    const decide = (n, prefix) => {
+      if (n.key > hi) {
+        st.node[n.key] = 'bad';
+        push(prefix + '<span class="bad">' + n.key + ' &gt; ' + hi + '</span>，查询结束。' + summaryBst(st, lo, hi));
+        return false;
+      }
+      outSet.add(n.key);
+      st.out.push(n.key);
+      push(prefix + '<span class="ok">' + n.key + ' 在范围内</span>，输出。');
+      return true;
+    };
+
+    push('同样 10 个键存成 BST（结点带 parent 指针）。查询 [' + lo + ', ' + hi + ']：先找第一个 ≥ ' + lo + ' 的键，再一个个找后继。');
+    let cur = BST, prev = null, cand = null;
+    while (cur) {
+      if (prev) step(prev, cur);
+      else { st.node[cur.key] = 'active'; }
+      let note, nxt;
+      if (cur.key >= lo) { cand = cur; nxt = cur.left; note = cur.key + ' ≥ ' + lo + '，记为候选，再往左找更小的'; }
+      else { nxt = cur.right; note = cur.key + ' &lt; ' + lo + '，往右'; }
+      if (!nxt) note += '，但那边是空的';
+      push(note + '。');
+      prev = cur;
+      cur = nxt;
+    }
+    if (!cand) {
+      settle();
+      push('没有 ≥ ' + lo + ' 的键，结果为空。' + summaryBst(st, lo, hi));
+      return F;
+    }
+    settle();
+    st.node[cand.key] = 'active';
+    if (!decide(cand, '最后记下的候选 <b>' + cand.key + '</b> 就是第一个 ≥ ' + lo + ' 的键：')) return F;
+
+    let n = cand;
+    for (;;) {
+      if (n.right) {
+        let x = n.right;
+        step(n, x);
+        let pre = n.key + ' 有右子树，后继是其中最小的键：先到右孩子 ' + x.key;
+        while (x.left) {
+          push(pre + '，它还有左孩子，继续往左。');
+          step(x, x.left);
+          x = x.left;
+          pre = '往左走到 ' + x.key;
+        }
+        if (!decide(x, pre + '，它没有左孩子，就是 ' + n.key + ' 的后继：')) return F;
+        n = x;
+      } else {
+        let x = n, first = true;
+        while (x.parent && x === x.parent.right) {
+          step(x, x.parent);
+          push((first ? n.key + ' 没有右孩子，往上走。' : '') + x.key + ' 是 ' + x.parent.key + ' 的右孩子，' + x.parent.key + ' 更小，继续往上。');
+          x = x.parent;
+          first = false;
+        }
+        if (!x.parent) {
+          settle();
+          push((first ? n.key + ' 没有右孩子，' : '') + '已经回到根，' + n.key + ' 没有后继，查询结束。' + summaryBst(st, lo, hi));
+          return F;
+        }
+        step(x, x.parent);
+        const p = x.parent;
+        if (!decide(p, (first ? n.key + ' 没有右孩子，往上走。' : '') + x.key + ' 是 ' + p.key + ' 的左孩子，所以 ' + p.key + ' 是 ' + n.key + ' 的后继：')) return F;
+        n = p;
+      }
+    }
+  }
+  function summaryBst(st, lo, hi) {
+    return 'BST 共走 <b>' + st.hops + '</b> 条边；B+ 树做同一查询只跟 <b>' + bpHops(lo, hi) + '</b> 次指针。';
+  }
+  // </algo>
+
+  /* ---- B+ 树的绘制（固定布局） ---- */
+  const KW = 30, BH = 30, GXL = 28, GY = 74, PAD = 16, NILW = 42;
+  const box = new Map();
+  (function () {
+    let cursor = PAD;
+    (function layout(n, d) {
+      const w = n.keys.length * KW;
+      let cx;
+      if (n.leaf) { cx = cursor + w / 2; cursor += w + GXL; }
+      else {
+        n.ch.forEach(c => layout(c, d + 1));
+        cx = (box.get(n.ch[0]).cx + box.get(n.ch[n.ch.length - 1]).cx) / 2;
+      }
+      box.set(n, { cx, y: PAD + d * GY, w, left: cx - w / 2 });
+    })(ROOT, 0);
+  })();
+  const ALL = [];
+  (function walk(n) { ALL.push(n); (n.ch || []).forEach(walk); })(ROOT);
+  const lastLeaf = LEAVES[LEAVES.length - 1];
+  const VW = box.get(lastLeaf).left + box.get(lastLeaf).w + NILW + PAD;
+  const VH = PAD * 2 + 2 * GY + BH;
+
+  function arrowDefs() {
+    return '<defs>' + [['', 'rgba(255,255,255,0.45)'], ['-active', 'var(--accent)'], ['-done', 'var(--green)']].map(([k, c]) =>
+      '<marker id="bp-arr' + k + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+      '<path d="M0,0 L10,5 L0,10 z" style="fill:' + c + '"/></marker>').join('') + '</defs>';
+  }
+
+  function renderBp(f) {
+    let edges = '', links = '', nodes = '';
+    ALL.forEach(n => {
+      const b = box.get(n);
+      if (!n.leaf) n.ch.forEach((c, i) => {
+        const cb = box.get(c);
+        edges += '<line class="k-edge ' + (f.edge[n.id + '-' + c.id] || '') + '" x1="' + (b.left + i * KW) + '" y1="' + (b.y + BH) + '" x2="' + cb.cx + '" y2="' + cb.y + '"/>';
+      });
+      if (n.leaf) {
+        const y = b.y + BH / 2, x1 = b.left + b.w + 3;
+        if (n.next) {
+          const c = f.link[n.id] || '';
+          const x2 = box.get(n.next).left - 3;
+          links += '<line class="k-edge ' + c + '" x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y + '" marker-end="url(#bp-arr' + (c ? '-' + c : '') + ')"/>';
+        } else {
+          links += '<line class="k-edge" x1="' + x1 + '" y1="' + y + '" x2="' + (x1 + 14) + '" y2="' + y + '" marker-end="url(#bp-arr)"/>' +
+            '<text class="nil" x="' + (x1 + 17) + '" y="' + y + '">NULL</text>';
+        }
+      }
+      let g = '<g class="bn ' + (f.node[n.id] || '') + '"><rect class="box" x="' + b.left + '" y="' + b.y + '" width="' + b.w + '" height="' + BH + '" rx="6"/>';
+      n.keys.forEach((k, j) => {
+        const c = f.key[n.id + ':' + j] || '';
+        if (c && c !== 'skip') g += '<rect class="kc ' + c + '" x="' + (b.left + j * KW + 3) + '" y="' + (b.y + 3) + '" width="' + (KW - 6) + '" height="' + (BH - 6) + '" rx="4"/>';
+        if (j > 0) g += '<line class="sep" x1="' + (b.left + j * KW) + '" y1="' + (b.y + 4) + '" x2="' + (b.left + j * KW) + '" y2="' + (b.y + BH - 4) + '"/>';
+        g += '<text class="' + (n.leaf ? '' : 'route') + (c === 'skip' ? ' skip' : '') + '" x="' + (b.left + j * KW + KW / 2) + '" y="' + (b.y + BH / 2) + '">' + k + '</text>';
+      });
+      nodes += g + '</g>';
+    });
+    return '<svg viewBox="0 0 ' + VW + ' ' + VH + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
+      arrowDefs() + edges + links + nodes + '</svg>';
+  }
+
+  const key = (c, t) => '<span class="lg"><i style="background: var(--' + c + ')"></i>' + t + '</span>';
+  function render(f) {
+    const out = '<span>输出：' + (f.out.join(' ') || '—') + '</span>';
+    if (f.kind === 'bp') {
+      stage.innerHTML = renderBp(f);
+      statsEl.innerHTML = key('accent', '当前') + key('blue', '走过') + key('green', '输出 / next') + key('red', '越界') +
+        '<span>指针 <b>' + f.hops + '</b> 次</span>' + out;
+    } else {
+      stage.innerHTML = K.tree(BST, {
+        r: 16, gapX: 40, gapY: 48, pad: 22,
+        cls: n => f.node[n.key] || '',
+        edgeCls: (a, b) => f.edge[a.key + '-' + b.key] || '',
+      });
+      statsEl.innerHTML = key('accent', '当前') + key('blue', '走过') + key('green', '输出') + key('red', '越界') +
+        '<span>走过的边 <b>' + f.hops + '</b> 条</span>' + out;
+    }
+  }
+
+  /* ---- 控件 ---- */
+  let mode = 'bp', lo = 17, hi = 50, player = null;
+  const PRESETS = [[17, 50], [40, 70], [60, 100]];
+
+  function group(items, onPick) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach((it, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      if (i === 0) b.classList.add('active');
+      b.addEventListener('click', () => {
+        g.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        onPick(it);
+      });
+      g.appendChild(b);
+    });
+    controls.appendChild(g);
+    return g;
+  }
+  function frames() { return mode === 'bp' ? bpFrames(lo, hi) : bstFrames(lo, hi); }
+  function reload() {
+    loIn.value = lo; hiIn.value = hi;
+    player.load(frames());
+  }
+
+  group([{ label: 'B+ 树', v: 'bp' }, { label: 'BST', v: 'bst' }], it => { mode = it.v; reload(); });
+  const presetGroup = group(PRESETS.map(p => ({ label: '[' + p[0] + ', ' + p[1] + ']', v: p })), it => { lo = it.v[0]; hi = it.v[1]; reload(); });
+
+  const mkIn = (v, label) => {
+    const el = document.createElement('input');
+    el.type = 'number'; el.value = v; el.className = 'range-in'; el.setAttribute('aria-label', label);
+    return el;
+  };
+  const loIn = mkIn(lo, '下界'), hiIn = mkIn(hi, '上界');
+  const lab = document.createElement('span');
+  lab.className = 'label';
+  lab.textContent = '自定：';
+  const go = document.createElement('button');
+  go.type = 'button';
+  go.textContent = '查询';
+  go.addEventListener('click', () => {
+    let a = Math.round(+loIn.value), b = Math.round(+hiIn.value);
+    if (!isFinite(a) || !isFinite(b)) return;
+    a = Math.max(-999, Math.min(999, a)); b = Math.max(-999, Math.min(999, b));
+    if (a > b) { const t = a; a = b; b = t; }
+    lo = a; hi = b;
+    presetGroup.querySelectorAll('button').forEach(x => {
+      x.classList.toggle('active', x.textContent === '[' + lo + ', ' + hi + ']');
+    });
+    reload();
+  });
+  const custom = document.createElement('span');
+  custom.className = 'custom';
+  [lab, loIn, hiIn, go].forEach(el => custom.appendChild(el));
+  controls.appendChild(custom);
+
+  player = window.AnimKit.player({ frames: frames(), render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快速排序分区逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .board { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--accent); }
+  .stats code { color: #ffb49d; font-family: 'JBMono', 'JetBrains Mono', monospace; }
+  .pivots { font-size: 12px; color: var(--muted); min-height: 18px; text-align: center; }
+  .pivots b { color: var(--yellow); }
+  .board .cells { flex-wrap: nowrap; }
+  @media (max-width: 460px) {
+    .board .cells { gap: 2px; }
+    .board .cell { min-width: 28px; height: 32px; padding: 0 2px; font-size: 12px; }
+    .stats { font-size: 12px; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">快速排序：分区与递归</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--yellow)"></i>pivot</span>
+  <span><i style="background: var(--blue)"></i>已确认 &lt; pivot</span>
+  <span><i style="background: rgba(217, 119, 87, 0.45)"></i>已确认 ≥ pivot</span>
+  <span><i style="background: var(--accent)"></i>正在比较 / 刚交换</span>
+  <span><i style="background: rgba(74, 222, 128, 0.7)"></i>已在最终位置</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  // Each item: v = key used in comparisons, t = label shown (subscripts mark equal keys).
+  const SCENARIOS = [
+    { name: '课上例子', items: [[5], [8], [7], [1], [3], [4], [0], [6], [9], [2]] },
+    { name: '2016 真题数组', items: [[13], [4], [5], [43], [22], [2], [3], [1]] },
+    { name: '有相等元素', items: [[4, '4₁'], [1], [4, '4₂'], [6], [4, '4₃'], [2]] },
+  ];
+
+  // <algo> the C code of the article: pivot = A[lo]; i stops at >= pivot, j stops at < pivot;
+  // swap and step both while i < j; finally swap A[lo] with A[j]; recurse on lo..p-1 and p+1..hi.
+  function build(sc) {
+    const A = sc.items.map(p => ({ v: p[0], t: p.length > 1 ? p[1] : String(p[0]) }));
+    const n = A.length;
+    const frames = [];
+    const done = new Array(n).fill(false);
+    const pivots = [];
+    const singles = [];
+    const T = k => K.esc(A[k].t);
+    const range = (a, b) => '[' + A.slice(a, b + 1).map(x => K.esc(x.t)).join(' ') + ']';
+    const snap = (o) => Object.assign({
+      A: A.map(x => x.t), done: done.slice(), pivots: pivots.slice(),
+      lo: -1, hi: -1, i: null, j: null, piv: -1, look: [], hot: [], part: false,
+    }, o);
+
+    frames.push(snap({ note: '调用 <code>quicksort(A, 0, ' + (n - 1) + ')</code>。每次分区都取当前子数组的第一个元素作 pivot。' }));
+
+    function partition(lo, hi) {
+      const pivot = A[lo];
+      const P = K.esc(pivot.t);
+      let i = lo + 1, j = hi;
+      const st = (o) => snap(Object.assign({ lo, hi, i, j, piv: lo, part: true }, o));
+      frames.push(st({ note: '<code>quicksort(A, ' + lo + ', ' + hi + ')</code>：pivot = A[' + lo + '] = <b>' + P + '</b>，i = ' + i + '，j = ' + j + '。' }));
+      while (i <= j) {
+        while (i <= j && A[i].v < pivot.v) {
+          const k = i;
+          i++;
+          frames.push(st({ look: [k], note: 'A[' + k + '] = ' + T(k) + ' &lt; ' + P + '，留在左边，i 右移到 ' + i +
+            (i > j ? '，<b>已越过 j = ' + j + '</b>' : '') + '。' }));
+        }
+        if (i <= j) frames.push(st({ look: [i], note: 'A[' + i + '] = ' + T(i) + ' ≥ ' + P +
+          (A[i].v === pivot.v ? '（相等也停：等于 pivot 的归右边）' : '') + '，<b>i 停在 ' + i + '</b>。' }));
+        while (i <= j && A[j].v >= pivot.v) {
+          const k = j;
+          j--;
+          frames.push(st({ look: [k], note: 'A[' + k + '] = ' + T(k) + ' ≥ ' + P + (A[k].v === pivot.v ? '（相等）' : '') + '，留在右边，j 左移到 ' + j +
+            (i > j ? '，<b>已越过 i = ' + i + '</b>' : '') + '。' }));
+        }
+        if (i <= j) frames.push(st({ look: [j], note: 'A[' + j + '] = ' + T(j) + ' &lt; ' + P + '，<b>j 停在 ' + j + '</b>。' }));
+        if (i < j) {
+          const a = T(i), b = T(j);
+          const t = A[i]; A[i] = A[j]; A[j] = t;
+          frames.push(st({ hot: [i, j], note: 'i = ' + i + ' &lt; j = ' + j + '：<b>交换</b> ' + a + ' ↔ ' + b + '，然后 i 和 j 各走一步。' }));
+          i++;
+          j--;
+        }
+      }
+      const moved = T(j);
+      const t = A[lo]; A[lo] = A[j]; A[j] = t;
+      done[j] = true;
+      pivots.push(pivot.t);
+      let note = 'i = ' + i + ' &gt; j = ' + j + '，扫描结束。';
+      if (j === lo) note += 'j 回到了 pivot 自己，没有比 ' + P + ' 小的元素，pivot 原地不动（和自己交换）。';
+      else note += '<b>pivot ' + P + ' ↔ A[' + j + '] = ' + moved + '</b>，' + P + ' 落在下标 ' + j + '。';
+      note += (j > lo ? '左边 ' + range(lo, j - 1) : '左边为空') + '，' + (j < hi ? '右边 ' + range(j + 1, hi) : '右边为空') + '。';
+      frames.push(snap({ lo, hi, i, j, piv: j, hot: j === lo ? [j] : [lo, j], part: true, note }));
+      return j;
+    }
+
+    function quicksort(lo, hi) {
+      if (lo < hi) {
+        const p = partition(lo, hi);
+        quicksort(lo, p - 1);
+        quicksort(p + 1, hi);
+      } else if (lo === hi) {
+        done[lo] = true;
+        singles.push(A[lo].t);
+        frames.push(snap({ lo, hi, note: '<code>quicksort(A, ' + lo + ', ' + hi + ')</code>：只有一个元素 ' + T(lo) + '，<code>lo &lt; hi</code> 不成立，直接返回。' }));
+      }
+    }
+
+    quicksort(0, n - 1);
+    frames.push(snap({
+      note: '<span class="ok">排序完成</span>：' + A.map(x => K.esc(x.t)).join(' ') + '。做过分区的 pivot 依次是 <b>' +
+        pivots.map(K.esc).join(', ') + '</b>' + (singles.length ? '；' + singles.map(K.esc).join(', ') + ' 是单元素子数组，没有分区。' : '。'),
+    }));
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    const n = f.A.length;
+    const cls = (v, k) => {
+      if (f.hot.indexOf(k) >= 0) return 'active';
+      if (f.look.indexOf(k) >= 0) return 'active';
+      if (f.done[k]) return 'done';
+      if (f.lo >= 0 && (k < f.lo || k > f.hi)) return 'dim';
+      if (f.part && k === f.piv) return 'warn';
+      if (f.part && f.i !== null && k > f.lo && k < f.i) return 'visited';
+      if (f.part && f.j !== null && k > f.j && k <= f.hi) return 'compare';
+      return '';
+    };
+    const ptr = k => {
+      if (!f.part) return '';
+      const p = [];
+      if (k === f.i) p.push('i');
+      if (k === f.j) p.push('j');
+      return p.join('·');
+    };
+    let where = '<span>' + (f.lo >= 0 ? '<code>quicksort(A, ' + f.lo + ', ' + f.hi + ')</code>' : '开始 / 结束') + '</span>';
+    if (f.part) {
+      where += '<span>i = <b>' + f.i + '</b>' + (f.i > n - 1 ? '（在数组外）' : '') + '</span><span>j = <b>' + f.j + '</b></span>';
+    }
+    const stats = '<div class="stats">' + where + '</div>';
+    const piv = '<div class="pivots">pivot 序列：' + (f.pivots.length ? '<b>' + f.pivots.map(K.esc).join(', ') + '</b>' : '（还没有）') + '</div>';
+    stage.innerHTML = '<div class="board">' + stats + K.cells(f.A, { cls, idx: true, ptr }) + piv + '</div>';
+  }
+
+  let current = 0;
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = SCENARIOS.map((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.name;
+    if (k === current) b.className = 'active';
+    b.addEventListener('click', () => {
+      current = k;
+      btns.forEach((x, m) => x.classList.toggle('active', m === k));
+      player.load(build(SCENARIOS[k]));
+    });
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(group);
+
+  const player = AnimKit.player({ frames: build(SCENARIOS[current]), render, interval: 1100 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Top-k 数据流筛选</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .tk { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .tk-cap { font-size: 11px; color: var(--muted); text-align: center; }
+  .tk-row .cells { padding: 3px 2px 18px; gap: 3px; flex-wrap: nowrap; }
+  .tk-row.heap .cells { padding: 17px 2px 4px; }
+  .tk-row .cell { min-width: 28px; height: 32px; padding: 0 4px; font-size: 13px; }
+  .tk-tree { flex: 1 1 auto; min-height: 70px; position: relative; }
+  .tk-tree > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .tk-stat { font-size: 12px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+  .tk-stat b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="title">最小的 k 个：大小为 k 的最大堆</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前 / 移动</span>
+  <span><i style="background: rgba(217, 119, 87, 0.45)"></i>比较对象</span>
+  <span><i style="background: var(--blue)"></i>堆中候选</span>
+  <span><i style="background: #5a5a59"></i>已丢弃</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const SCENARIOS = [
+    { label: '例子', a: [8, 15, 3, 22, 10, 17, 1, 12, 5, 30], k: 4 },
+    { label: '降序：最坏', a: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1], k: 4 },
+    { label: '升序：最好', a: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], k: 4 },
+  ];
+
+  // <algo> run the real algorithm; the heap stores indices into the stream a[]
+  function build(sc) {
+    const a = sc.a, n = a.length, k = sc.k;
+    const H = [null];                 // H[1..size] = stream indices, max-heap by a[]
+    let size = 0, cur = -1, cmp = 0, rep = 0, swaps = 0, buildSwaps = 0, explained = false;
+    const frames = [];
+    const val = i => a[H[i]];
+    const snap = (mark, note) => {
+      frames.push({ a, k, H: H.slice(0, size + 1), size, cur, cmp, rep, swaps, mark: mark || {}, note });
+    };
+
+    // sift down slot i; one frame per swap, plus one frame when it stops above a child
+    function siftDown(i, who) {
+      let moved = false;
+      while (2 * i <= size) {
+        let c = 2 * i;
+        if (c + 1 <= size && val(c + 1) > val(c)) c++;
+        const child = 2 * i + 1 <= size ? '较大的孩子 ' : '唯一的孩子 ';
+        const head = moved ? '' : who;
+        if (val(i) >= val(c)) {
+          snap({ [i]: 'active', [c]: 'compare' }, head + val(i) + ' ≥ ' + child + val(c) + '，<b>停止</b>。');
+          return;
+        }
+        const big = val(c), small = val(i);
+        [H[i], H[c]] = [H[c], H[i]];
+        swaps++;
+        if (cur < 0) buildSwaps++;
+        let note = head + small + ' &lt; ' + child + big + '，<b>交换</b>';
+        if (!explained && child[0] === '较') { note += '（两个孩子中只和较大的换）'; explained = true; }
+        note += '。';
+        if (2 * c > size) note += small + ' 到达叶子，下沉结束。';
+        snap({ [c]: 'active', [i]: 'compare' }, note);
+        moved = true;
+        i = c;
+      }
+    }
+
+    snap({}, '从 ' + n + ' 个数里找<b>最小的 k = ' + k + ' 个</b>。维护一个大小为 k 的<b>最大堆</b>：' +
+      '根是当前候选里最大的，相当于“门槛”。');
+
+    for (let j = 0; j < k; j++) { H.push(j); size++; }
+    snap({}, '前 k = ' + k + ' 个直接放进 H[1..' + k + ']，此时还不满足堆序。');
+    for (let i = Math.floor(k / 2); i >= 1; i--) {
+      snap({ [i]: 'active' }, i === Math.floor(k / 2)
+        ? '自底向上建堆（O(k)）：先下沉最后一个父节点 H[' + i + '] = ' + val(i) + '。'
+        : '再下沉 H[' + i + '] = ' + val(i) + '。');
+      siftDown(i, '');
+    }
+    snap({ 1: 'compare' }, '建堆完成。根 <b>' + val(1) + '</b> 是 ' + k + ' 个候选中最大的。');
+
+    for (let j = k; j < n; j++) {
+      cur = j; cmp++;
+      const x = a[j], root = val(1);
+      if (x < root) {
+        snap({ 1: 'compare' }, '新元素 <b>' + x + '</b> 与根 ' + root + ' 比较：' + x + ' &lt; ' + root + '，它比最大的候选还小。');
+        H[1] = j; rep++;
+        snap({ 1: 'active' }, '<b>' + root + ' 被淘汰</b>（不可能是最小的 ' + k + ' 个之一），' + x + ' 放到根。');
+        siftDown(1, '下沉 ' + x + '：');
+      } else {
+        snap({ 1: 'compare' }, '新元素 <b>' + x + '</b> 与根 ' + root + ' 比较：' + x + ' ≥ ' + root +
+          '，<b>直接丢弃</b>，堆不动，O(1)。');
+      }
+    }
+    cur = n;
+    const kept = H.slice(1, size + 1).map(i => a[i]).sort((p, q) => p - q);
+    const want = a.slice().sort((p, q) => p - q).slice(0, k);
+    if (kept.join() !== want.join()) throw new Error('top-k mismatch');
+    snap({ 1: 'compare' }, '结束：堆中 {' + kept.join(', ') + '} 就是最小的 ' + k + ' 个，根 <b>' + val(1) + '</b> 是第 ' + k +
+      ' 小（结果本身不排序）。<br>后 ' + (n - k) + ' 个元素各与根比较 1 次，其中 ' + rep + ' 个替换了根；下沉交换共 ' + swaps +
+      ' 次（含建堆 ' + buildSwaps + ' 次）。');
+    return frames;
+  }
+
+  // <render>
+  function heapTree(f) {
+    if (f.size === 0) return null;
+    const mk = i => (i > f.size ? null : { key: f.a[f.H[i]], slot: i, left: mk(2 * i), right: mk(2 * i + 1) });
+    return mk(1);
+  }
+
+  function render(f) {
+    const inHeap = new Set(f.H.slice(1));
+    const stream = K.cells(f.a, {
+      cls: (v, i) => (i === f.cur ? 'active' : inHeap.has(i) ? 'visited' : i < f.cur ? 'dim' : ''),
+      ptr: i => (i === f.cur ? 'x' : ''),
+    });
+    const tree = K.tree(heapTree(f), {
+      r: 20, gapX: 50, gapY: 60, pad: 36,
+      emptyText: '（堆为空）',
+      cls: n => f.mark[n.slot] || 'visited',
+      badge: n => 'H[' + n.slot + ']',
+    });
+    const slots = [];
+    const lab = [];
+    for (let i = 1; i <= f.k; i++) { slots.push(i <= f.size ? f.a[f.H[i]] : null); lab.push(i); }
+    const arr = K.cells(slots, { idx: lab, cls: (v, i) => f.mark[i + 1] || (v == null ? '' : 'visited') });
+    stage.innerHTML =
+      '<div class="tk">' +
+      '<div class="tk-cap">输入（从左到右依次到达）</div>' +
+      '<div class="tk-row">' + stream + '</div>' +
+      '<div class="tk-tree">' + tree + '</div>' +
+      '<div class="tk-row heap">' + arr + '</div>' +
+      '<div class="tk-stat">与根比较 <b>' + f.cmp + '</b> 次 · 替换 <b>' + f.rep + '</b> 次 · 下沉交换 <b>' + f.swaps + '</b> 次</div>' +
+      '</div>';
+  }
+
+  // scenario buttons go in before the player's own controls
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = SCENARIOS.map((sc, idx) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    if (idx === 0) b.className = 'active';
+    group.appendChild(b);
+    return b;
+  });
+  controls.appendChild(group);
+
+  const p = AnimKit.player({ frames: build(SCENARIOS[0]), render, interval: 1300 });
+  btns.forEach((b, idx) => b.addEventListener('click', () => {
+    btns.forEach(x => x.classList.toggle('active', x === b));
+    p.load(build(SCENARIOS[idx]));
+  }));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>动态数组扩容与均摊代价</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .slot { fill: transparent; stroke: #5a5a59; stroke-width: 1.2; stroke-dasharray: 3 3; }
+  .full { fill: rgba(255, 255, 255, 0.08); stroke: #6a6a69; stroke-width: 1.2; }
+  .new  { fill: var(--accent); stroke: var(--accent); stroke-width: 1.2; }
+  .copy { fill: rgba(56, 189, 248, 0.25); stroke: var(--blue); stroke-width: 1.2; }
+  .old  { fill: rgba(255, 255, 255, 0.05); stroke: #5a5a59; stroke-width: 1.2; opacity: 0.6; }
+  .v    { fill: var(--text); font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .v.on { fill: #fff; }
+  .lab  { fill: var(--text); font-size: 12px; font-weight: 600; }
+  .sub  { fill: var(--muted); font-size: 10px; }
+  .grid { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
+  .base { stroke: rgba(255, 255, 255, 0.3); stroke-width: 1; }
+  .tick { fill: var(--muted); font-size: 10px; }
+  .bw   { fill: var(--accent); }
+  .bc   { fill: var(--blue); }
+  .past { opacity: 0.55; }
+  .avg  { fill: none; stroke: var(--yellow); stroke-width: 2; stroke-linejoin: round; }
+  .dot  { fill: var(--yellow); }
+  .avgt { fill: var(--yellow); font-size: 11px; font-weight: 700; text-anchor: end; }
+  .legend .dash { border: 1px dashed #5a5a59; background: transparent; }
+</style>
+</head>
+<body>
+<div class="title">动态数组：从容量 1 开始逐个 append 1, 2, …, 20</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>写入新元素（代价 1）</span>
+  <span><i style="background: var(--blue)"></i>扩容时复制的旧元素</span>
+  <span><i style="background: var(--yellow)"></i>前 k 次的平均代价</span>
+  <span><i class="dash"></i>空位</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // <algo>
+  const N = 20;
+  const POLICIES = {
+    plus1: { name: '+1', grow: c => c + 1 },
+    double: { name: '×2', grow: c => c * 2 },
+    triple: { name: '×3', grow: c => c * 3 },
+  };
+  const fmtAvg = (t, k) => {
+    const v = t / k, exact = Math.abs(v * 100 - Math.round(v * 100)) < 1e-9;
+    return `${t} / ${k} ${exact ? '=' : '≈'} ${exact ? +v.toFixed(2) : v.toFixed(2)}`;
+  };
+
+  // Append 1..N to a dynamic array that starts with capacity 1, recording a frame
+  // per step. Cost model: writing one element costs 1, copying one element costs 1.
+  function buildFrames(key) {
+    const grow = POLICIES[key].grow;
+    let cap = 1, total = 0, resizes = 0, maxCost = 0, maxAvg = 0;
+    const A = [];
+    const costs = [];                       // one { copy, write } per append so far
+    const frames = [];
+    const snap = extra => Object.assign({
+      key, cap, A: A.slice(), total,
+      costs: costs.map(c => ({ copy: c.copy, write: c.write })),
+    }, extra);
+
+    frames.push(snap({ k: 0, phase: 'start', copied: 0,
+      note: `初始容量 cap = 1，n = 0，策略 <b>${POLICIES[key].name}</b>。每次 append 写入一个元素算代价 1；扩容时每复制一个旧元素再算 1。` }));
+
+    for (let k = 1; k <= N; k++) {
+      const n = A.length;
+      let copy = 0;
+      if (n === cap) {                      // full: allocate a bigger array and copy
+        const old = A.slice(), oldCap = cap;
+        cap = grow(cap);
+        copy = n;
+        resizes++;
+        costs.push({ copy, write: 0 });
+        frames.push(snap({ k, phase: 'copy', old, oldCap, copied: n,
+          note: `append(<b>${k}</b>)：数组已满（n = cap = ${n}），申请容量 ${cap} 的新数组，把 ${n} 个旧元素逐个复制过去，代价 ${n}。` }));
+        costs.pop();
+      }
+      A.push(k);
+      total += copy + 1;
+      costs.push({ copy, write: 1 });
+      maxCost = Math.max(maxCost, copy + 1);
+      maxAvg = Math.max(maxAvg, total / k);
+      let note = copy
+        ? `释放旧数组，把 ${k} 写进 A[${n}]。这次 append 共花 ${copy} + 1 = <b>${copy + 1}</b>；前 ${k} 次累计 ${total}，平均 ${fmtAvg(total, k)}。`
+        : `append(<b>${k}</b>)：n = ${n} &lt; cap = ${cap}，直接写进 A[${n}]，代价 1。前 ${k} 次累计 ${total}，平均 ${fmtAvg(total, k)}。`;
+      if (k === N) {
+        const copies = total - N;
+        note += `<br><b>结束</b>：扩容 ${resizes} 次，共复制 ${copies} 个元素，单次最贵 ${maxCost}。`;
+        if (key === 'plus1') note += `每次 append 都要整体搬家，平均是 (n + 1)/2，<span class="bad">n 越大越贵</span>。`;
+        else if (key === 'double') note += `前缀平均最高只有 ${maxAvg.toFixed(2)}，<span class="ok">始终小于 3</span>。`;
+        else note += `平均更低，但容量 ${cap} 里还空着 ${cap - N} 格。`;
+      }
+      frames.push(snap({ k, phase: 'write', copied: copy, note }));
+    }
+    return frames;
+  }
+  // </algo>
+
+  const FRAMES = {}, MAXCAP = {};
+  Object.keys(POLICIES).forEach(key => {
+    FRAMES[key] = buildFrames(key);
+    MAXCAP[key] = FRAMES[key][FRAMES[key].length - 1].cap;
+  });
+
+  /* ─── drawing ─── */
+  const W = 640, H = 262;
+  const LX = 60, RX = 634;                  // horizontal span of cells and bars
+  const ROW_H = 24, OLD_Y = 6, MAIN_Y = 40;
+  const BASE = 236, TOP = 96, YMAX = N;     // chart: cost 0..N
+  const unit = (BASE - TOP) / YMAX;
+
+  function row(y, label, sub, cap, vals, clsAt, cw, showVal) {
+    let s = `<text class="lab" x="0" y="${y + 11}">${label}</text><text class="sub" x="0" y="${y + 24}">${sub}</text>`;
+    for (let i = 0; i < cap; i++) {
+      const x = LX + i * cw;
+      const has = i < vals.length;
+      const c = has ? clsAt(i) : 'slot';
+      s += `<rect class="${c}" x="${(x + 1).toFixed(2)}" y="${y}" width="${Math.max(1, cw - 2).toFixed(2)}" height="${ROW_H}" rx="3"/>`;
+      if (has && showVal) s += `<text class="v${c === 'new' ? ' on' : ''}" x="${(x + cw / 2).toFixed(2)}" y="${y + ROW_H / 2}">${vals[i]}</text>`;
+    }
+    return s;
+  }
+
+  function render(f) {
+    const cw = (RX - LX) / MAXCAP[f.key];
+    const scale = Math.min((stage.clientWidth || W) / W, (stage.clientHeight || H) / H);
+    const showVal = cw * scale >= 15;
+    let s = '';
+
+    // arrays
+    if (f.phase === 'copy') {
+      s += row(OLD_Y, '旧数组', `cap ${f.oldCap}`, f.oldCap, f.old, () => 'old', cw, showVal);
+      s += row(MAIN_Y, '新数组', `cap ${f.cap}`, f.cap, f.A, () => 'copy', cw, showVal);
+    } else {
+      const last = f.A.length - 1;
+      s += row(MAIN_Y, '数组', `n ${f.A.length}/${f.cap}`, f.cap, f.A,
+        i => (f.phase === 'write' && i === last ? 'new' : i < f.copied ? 'copy' : 'full'), cw, showVal);
+    }
+
+    // chart grid
+    const sw = (RX - LX) / N, bw = sw * 0.62;
+    s += `<text class="sub" x="${LX}" y="${TOP - 10}">每次 append 的代价</text>`;
+    for (let v = 0; v <= YMAX; v += 5) {
+      const y = BASE - v * unit;
+      s += `<line class="${v ? 'grid' : 'base'}" x1="${LX}" y1="${y}" x2="${RX}" y2="${y}"/>`;
+      s += `<text class="tick" x="${LX - 6}" y="${y + 3}" text-anchor="end">${v}</text>`;
+    }
+    [1, 5, 10, 15, 20].forEach(k => {
+      s += `<text class="tick" x="${(LX + (k - 0.5) * sw).toFixed(2)}" y="${BASE + 14}" text-anchor="middle">${k}</text>`;
+    });
+
+    // bars
+    f.costs.forEach((c, j) => {
+      const k = j + 1;
+      const x = LX + j * sw + (sw - bw) / 2;
+      const past = k < f.k ? ' past' : '';
+      if (c.write) s += `<rect class="bw${past}" x="${x.toFixed(2)}" y="${(BASE - unit).toFixed(2)}" width="${bw.toFixed(2)}" height="${unit.toFixed(2)}"/>`;
+      if (c.copy) {
+        const y0 = BASE - (c.write ? unit : 0);
+        s += `<rect class="bc${past}" x="${x.toFixed(2)}" y="${(y0 - c.copy * unit).toFixed(2)}" width="${bw.toFixed(2)}" height="${(c.copy * unit).toFixed(2)}"/>`;
+      }
+    });
+
+    // running average over completed appends
+    let sum = 0;
+    const pts = [];
+    f.costs.forEach((c, j) => {
+      if (!c.write) return;
+      sum += c.copy + c.write;
+      pts.push([LX + (j + 0.5) * sw, BASE - (sum / (j + 1)) * unit, sum / (j + 1)]);
+    });
+    if (pts.length) {
+      s += `<polyline class="avg" points="${pts.map(p => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ')}"/>`;
+      const p = pts[pts.length - 1];
+      s += `<circle class="dot" cx="${p[0].toFixed(2)}" cy="${p[1].toFixed(2)}" r="3.5"/>`;
+      s += `<text class="avgt" x="${RX}" y="${TOP - 10}">前 ${pts.length} 次平均 ${p[2].toFixed(2)}</text>`;
+    }
+
+    stage.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+  }
+
+  /* ─── policy switch (added before the player's own buttons) ─── */
+  const lab = document.createElement('span');
+  lab.className = 'label';
+  lab.textContent = '扩容策略';
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = {};
+  Object.keys(POLICIES).forEach(key => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = POLICIES[key].name;
+    if (key === 'double') b.classList.add('active');
+    b.addEventListener('click', () => {
+      Object.values(buttons).forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      player.load(FRAMES[key]);
+    });
+    buttons[key] = b;
+    group.appendChild(b);
+  });
+  controls.appendChild(lab);
+  controls.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: FRAMES.double, render, interval: 900 });
+})();
+</script>
+</body>
+</html>

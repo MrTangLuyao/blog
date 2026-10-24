@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BST 插入与退化</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">BST 插入：同样 9 个键，不同顺序</div>
+<div class="controls" id="controls"></div>
+<div class="legend" id="stats"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const statsEl = document.getElementById('stats');
+  const controls = document.getElementById('controls');
+
+  const SORTED = [9, 14, 17, 28, 32, 42, 50, 53, 64];
+  const SCENARIOS = [
+    { label: '课上顺序', keys: [32, 14, 53, 9, 28, 42, 64, 50, 17] },
+    { label: '升序', keys: SORTED.slice() },
+    { label: '降序', keys: SORTED.slice().reverse() },
+    { label: '两条长链', keys: [32, 28, 42, 17, 50, 14, 53, 9, 64] },
+    { label: '随机', random: true },
+  ];
+
+  // <algo>
+  const H = t => (t ? 1 + Math.max(H(t.left), H(t.right)) : 0);   // 本课约定：空树 0，叶子 1
+  function clone(t) { return t ? { key: t.key, left: clone(t.left), right: clone(t.right) } : null; }
+  function isChain(t) { return !t || (!(t.left && t.right) && isChain(t.left) && isChain(t.right)); }
+  function shuffle(a) {
+    const b = a.slice();
+    for (let i = b.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [b[i], b[j]] = [b[j], b[i]];
+    }
+    return b;
+  }
+
+  function build(keys) {
+    const frames = [];
+    let root = null, total = 0, count = 0;
+    const snap = (hl, edges, note, cmp) =>
+      frames.push({ tree: clone(root), hl, edges, note, st: { n: count, h: H(root), cmp, total } });
+    snap({}, {}, '空树。依次插入 <b>' + keys.join(', ') + '</b>。', null);
+
+    for (const k of keys) {
+      const path = [], steps = [], dirs = [];
+      let cur = root, dir = '';
+      while (cur) {
+        path.push(cur);
+        if (k < cur.key) { steps.push(k + ' &lt; ' + cur.key + ' 往左'); dir = 'L'; cur = cur.left; }
+        else { steps.push(k + ' &gt; ' + cur.key + ' 往右'); dir = 'R'; cur = cur.right; }
+        dirs.push(dir);
+      }
+      // 一路同方向且路径较长时，把逐步比较合成一句
+      const oneWay = path.length >= 3 && dirs.every(d => d === dir);
+      const how = oneWay
+        ? k + ' 比 ' + path.map(p => p.key).join('、') + ' 都' + (dir === 'L' ? '小' : '大') + '，一路往' + (dir === 'L' ? '左' : '右')
+        : steps.join('，');
+      const n = { key: k, left: null, right: null };
+      const last = path[path.length - 1];
+      if (!last) root = n;
+      else if (dir === 'L') last.left = n;
+      else last.right = n;
+      count++;
+      total += path.length;
+
+      const hl = {}, edges = {};
+      path.forEach((p, i) => {
+        hl[p.key] = 'visited';
+        const nx = path[i + 1] || n;
+        edges[p.key + '-' + nx.key] = nx === n ? 'active' : 'visited';
+      });
+      hl[k] = 'active';
+      const note = last
+        ? '插入 <b>' + k + '</b>：' + how + '。' + last.key + ' 的' + (dir === 'L' ? '左' : '右') +
+          '边是空位，挂上。比较 <b>' + path.length + '</b> 次。'
+        : '插入 <b>' + k + '</b>：树是空的，它就是根，比较 0 次。';
+      snap(hl, edges, note, path.length);
+    }
+
+    // 最后一帧：最深结点（同深度取较大的键）的查找路径 = 最坏情况
+    let deep = null, deepD = -1;
+    (function walk(t, d) {
+      if (!t) return;
+      if (d > deepD || (d === deepD && t.key > deep.key)) { deep = t; deepD = d; }
+      walk(t.left, d + 1); walk(t.right, d + 1);
+    })(root, 0);
+    const hl = {}, edges = {};
+    let cur = root, prev = null;
+    while (cur) {
+      hl[cur.key] = 'done';
+      if (prev) edges[prev.key + '-' + cur.key] = 'done';
+      if (cur === deep) break;
+      prev = cur;
+      cur = deep.key < cur.key ? cur.left : cur.right;
+    }
+    const h = H(root), n = keys.length, minH = Math.ceil(Math.log2(n + 1));
+    if (deepD + 1 !== h) throw new Error('deepest node depth does not match height');
+    let msg = '全部插入完成，树高 <b>' + h + '</b>。最深的 <b>' + deep.key + '</b> 要比较 ' + h +
+      ' 次才找到，这就是这棵树上查找的最坏情况。';
+    if (h === n) {
+      msg += '每个结点只有一个孩子：<span class="bad">退化成链表</span>，查找 O(n)。';
+    } else if (h === minH) {
+      msg += '<span class="ok">' + n + ' 个结点能达到的最小高度</span> ⌈log₂ ' + (n + 1) + '⌉ = ' + minH + '。';
+    } else {
+      const hl2 = H(root.left), hr2 = H(root.right);
+      if (Math.abs(hl2 - hr2) <= 1 && isChain(root.left) && isChain(root.right)) {
+        msg += '根的左右子树高 ' + hl2 + ' 和 ' + hr2 + '，看根是平衡的，但两边都是链，树高约 n/2：<span class="bad">仍是 O(n)</span>。';
+      } else {
+        msg += '介于最小高度 ' + minH + ' 和最大高度 ' + n + ' 之间。';
+      }
+    }
+    frames.push({ tree: clone(root), hl, edges, note: msg, st: { n: count, h, cmp: null, total } });
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    stage.innerHTML = K.tree(f.tree, {
+      r: 16, gapX: 42, gapY: 40, pad: 24,
+      cls: nd => f.hl[nd.key] || '',
+      edgeCls: (a, b) => f.edges[a.key + '-' + b.key] || '',
+    });
+    statsEl.innerHTML =
+      '<span><i style="background: var(--blue)"></i>查找路径</span>' +
+      '<span><i style="background: var(--accent)"></i>新结点</span>' +
+      '<span><i style="background: var(--green)"></i>最深路径</span>' +
+      '<span>结点 ' + f.st.n + '</span><span>高度 ' + f.st.h + '</span>' +
+      (f.st.cmp != null ? '<span>本次比较 ' + f.st.cmp + '</span>' : '') +
+      '<span>累计比较 ' + f.st.total + '</span>';
+  }
+
+  let player = null;
+  const g = document.createElement('div');
+  g.className = 'btn-group';
+  SCENARIOS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = s.label;
+    b.title = s.random ? '每次点击重新打乱 9 个键' : '插入 ' + s.keys.join(', ');
+    if (i === 0) b.classList.add('active');
+    b.addEventListener('click', () => {
+      g.querySelectorAll('button').forEach(o => o.classList.remove('active'));
+      b.classList.add('active');
+      player.load(build(s.random ? shuffle(SORTED) : s.keys));
+    });
+    g.appendChild(b);
+  });
+  controls.appendChild(g);
+
+  player = AnimKit.player({ frames: build(SCENARIOS[0].keys), render, interval: 1400 });
+})();
+</script>
+</body>
+</html>

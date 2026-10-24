@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>检查 AVL 条件</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">检查 AVL 条件：逐个结点算高度与 BF</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--blue)"></i>查找路径</span>
+  <span><i style="background: var(--accent)"></i>当前 / 新结点</span>
+  <span><i style="background: var(--green)"></i>BF 在 −1…+1</span>
+  <span><i style="background: var(--red)"></i>（第一个）失衡结点</span>
+  <span><i style="background: var(--yellow)"></i>更上面的 ±2</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const TREE_A = [50, 30, 70, 20, 40, 80, 35];
+  const SCENARIOS = [
+    { label: '两条链', mode: 'check', keys: [4, 3, 5, 2, 6, 1, 7] },
+    { label: '树 A', mode: 'check', keys: TREE_A },
+    { label: '插入 10', mode: 'insert', keys: TREE_A, add: 10 },
+    { label: '插入 90', mode: 'insert', keys: TREE_A, add: 90 },
+    { label: '插入 37', mode: 'insert', keys: TREE_A, add: 37 },
+  ];
+
+  // <algo>
+  const mk = k => ({ key: k, left: null, right: null, h: 1, bf: 0, shown: true });
+  const H = t => (t ? t.h : 0);
+  const fix = t => { t.h = 1 + Math.max(H(t.left), H(t.right)); t.bf = H(t.left) - H(t.right); };
+  const sgn = b => (b > 0 ? '+' + b : b < 0 ? '−' + (-b) : '0');
+  function clone(t) { return t ? { key: t.key, h: t.h, bf: t.bf, shown: t.shown, left: clone(t.left), right: clone(t.right) } : null; }
+  function bstInsert(t, k) {
+    if (!t) return mk(k);
+    if (k < t.key) t.left = bstInsert(t.left, k); else t.right = bstInsert(t.right, k);
+    return t;
+  }
+  function postorder(t, out) { if (t) { postorder(t.left, out); postorder(t.right, out); out.push(t); } return out; }
+  function build(keys) {
+    let t = null;
+    keys.forEach(k => { t = bstInsert(t, k); });
+    postorder(t, []).forEach(fix);            // children before parents
+    return t;
+  }
+  function rotate(top, dir) {               // dir 'R': left child moves up; 'L': right child moves up
+    const up = dir === 'R' ? top.left : top.right;
+    if (dir === 'R') { top.left = up.right; up.right = top; } else { top.right = up.left; up.left = top; }
+    fix(top); fix(up);
+    return up;
+  }
+  function rebalance(t) {
+    fix(t);
+    if (t.bf === 2) { if (t.left.bf < 0) t.left = rotate(t.left, 'L'); return rotate(t, 'R'); }
+    if (t.bf === -2) { if (t.right.bf > 0) t.right = rotate(t.right, 'R'); return rotate(t, 'L'); }
+    return t;
+  }
+  function avlInsert(t, k) {
+    if (!t) return mk(k);
+    if (k < t.key) t.left = avlInsert(t.left, k); else t.right = avlInsert(t.right, k);
+    return rebalance(t);
+  }
+
+  // mode "check": post-order pass that computes h and BF of every node
+  function checkFrames(keys) {
+    const frames = [];
+    const root = build(keys);
+    const order = postorder(root, []);
+    order.forEach(n => { n.shown = false; });
+    const cls = {};
+    const snap = note => frames.push({ tree: clone(root), cls: Object.assign({}, cls), edges: {}, note });
+    snap('后序（post-order）检查：先算完左右子树，才能算自己。约定空子树高度 0、叶子高度 1，BF = h(左) − h(右)。');
+    const bad = [];
+    order.forEach(n => {
+      n.shown = true;
+      const hl = H(n.left), hr = H(n.right);
+      const ok = Math.abs(n.bf) <= 1;
+      if (!ok) bad.push(n);
+      cls[n.key] = 'active';
+      let note = '结点 <b>' + n.key + '</b>：h(左) = ' + hl + '，h(右) = ' + hr + '，高度 = 1 + ' + Math.max(hl, hr) + ' = ' + n.h +
+        '，BF = ' + hl + ' − ' + hr + ' = <b>' + sgn(n.bf) + '</b>';
+      note += ok ? '，<span class="ok">合格</span>。' : '，<span class="bad">违反 AVL 条件</span>。';
+      if (n === root && ok && bad.length) note += '根本身合格，但下面已有结点失衡。';
+      snap(note);
+      cls[n.key] = ok ? 'done' : 'bad';
+    });
+    snap(bad.length
+      ? '根的 BF 是 ' + sgn(root.bf) + '，但 ' + bad.map(b => b.key + '（' + sgn(b.bf) + '）').join('、') +
+        '不合格 → <span class="bad">不是 AVL 树</span>。只看根会漏掉它们。'
+      : '每个结点的 BF 都在 −1…+1 之内 → <span class="ok">满足 AVL 条件</span>。它不是完全二叉树，但这不要求。');
+    return frames;
+  }
+
+  // mode "insert": BST insert into an AVL tree, then walk back up the path
+  function insertFrames(keys, k) {
+    const frames = [];
+    const root = build(keys);
+    const cls = {}, edges = {};
+    const snap = note => frames.push({ tree: clone(root), cls: Object.assign({}, cls), edges: Object.assign({}, edges), note });
+    snap('树 A 满足 AVL 条件。插入 <b>' + k + '</b>：先像 BST 一样往下找空位。');
+
+    const path = [];
+    let cur = root, dir = '';
+    while (cur) {
+      path.push(cur);
+      cls[cur.key] = 'compare';
+      const goLeft = k < cur.key;
+      snap(k + (goLeft ? ' &lt; ' : ' &gt; ') + cur.key + '，往' + (goLeft ? '左' : '右') + '。');
+      cls[cur.key] = 'visited';
+      dir = goLeft ? 'L' : 'R';
+      const next = goLeft ? cur.left : cur.right;
+      if (next) edges[cur.key + '-' + next.key] = 'visited';
+      cur = next;
+    }
+    const parent = path[path.length - 1];
+    const leaf = mk(k);
+    if (dir === 'L') parent.left = leaf; else parent.right = leaf;
+    edges[parent.key + '-' + k] = 'visited';
+    cls[k] = 'active';
+    snap('空位：挂为 ' + parent.key + ' 的' + (dir === 'L' ? '左' : '右') + '孩子，高度 1、BF 0。只有路径上的结点高度可能变，从 ' +
+      parent.key + ' 开始往回更新。');
+
+    let first = null, firstOldH = 0;
+    for (let i = path.length - 1; i >= 0; i--) {
+      const n = path[i];
+      const oldH = n.h;
+      fix(n);
+      const bfTxt = 'BF = ' + H(n.left) + ' − ' + H(n.right) + ' = <b>' + sgn(n.bf) + '</b>';
+      let note = '<b>' + n.key + '</b>：高度 ' + oldH + ' → ' + n.h + '，' + bfTxt;
+      if (Math.abs(n.bf) === 2) {
+        if (!first) {
+          first = n;
+          firstOldH = oldH;
+          cls[n.key] = 'bad';
+          note += '。<span class="bad">第一个失衡结点</span>，就在这里旋转（见 3.6）。';
+          if (i > 0) note += '若暂不旋转，继续往上看。';
+        } else {
+          cls[n.key] = 'warn';
+          note += '。也是 ±2，但只修最低的 ' + first.key + '。';
+        }
+        snap(note);
+        continue;
+      }
+      cls[n.key] = 'done';
+      if (n.h === oldH) {
+        note += '。<span class="ok">高度没变</span>';
+        note += i > 0
+          ? '，上面 ' + path.slice(0, i).map(p => p.key).reverse().join('、') + ' 的高度和 BF 都不会变，检查到此为止。'
+          : '。';
+        snap(note);
+        if (!first) break;
+      } else {
+        snap(note + '，合格，继续往上。');
+      }
+    }
+
+    if (!first) {
+      frames[frames.length - 1].note += '插入后仍是 AVL 树，不用旋转。';
+      return frames;
+    }
+    // what the real algorithm ends with: rebalance on the way back (rotation at the lowest ±2 node)
+    const before = build(keys);
+    const fixed = avlInsert(before, k);
+    const all = postorder(fixed, []);
+    if (all.some(n => Math.abs(n.bf) > 1)) throw new Error('rebalance failed');
+    const fc = {};
+    all.forEach(n => { fc[n.key] = 'done'; });
+    fc[k] = 'active';
+    // after one (single or double) rotation the whole tree is as tall as before the insert
+    if (fixed.h !== build(keys).h) throw new Error('tree height changed');
+    const ups = path.slice(0, path.indexOf(first)).reverse().map(p => {
+      const q = all.find(n => n.key === p.key);
+      return p.key + ' 回到 ' + sgn(q.bf);
+    });
+    frames.push({
+      tree: clone(fixed), cls: fc, edges: {},
+      note: '真正插入时，递归返回到 ' + first.key + ' 就旋转（过程见 3.6），这棵子树高度回到插入前的 ' + firstOldH +
+        (ups.length ? '，上面的 BF 自动恢复：' + ups.join('，') + '。' : '。') + '全树 BF 都在 −1…+1。',
+    });
+    return frames;
+  }
+  // </algo>
+
+  function framesFor(s) {
+    return s.mode === 'check' ? checkFrames(s.keys) : insertFrames(s.keys, s.add);
+  }
+
+  let badgeMode = 'bf';
+  function render(f) {
+    stage.innerHTML = K.tree(f.tree, {
+      cls: nd => f.cls[nd.key] || '',
+      edgeCls: (a, b) => f.edges[a.key + '-' + b.key] || '',
+      badge: nd => (!nd.shown ? '' : badgeMode === 'bf' ? sgn(nd.bf) : 'h=' + nd.h),
+    });
+  }
+
+  function group(items, onPick) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach((it, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      if (it.title) b.title = it.title;
+      if (i === 0) b.classList.add('active');
+      b.addEventListener('click', () => {
+        g.querySelectorAll('button').forEach(o => o.classList.remove('active'));
+        b.classList.add('active');
+        onPick(it);
+      });
+      g.appendChild(b);
+    });
+    controls.appendChild(g);
+  }
+
+  let player = null;
+  group(SCENARIOS, s => player.load(framesFor(s)));
+  group([{ label: 'BF', m: 'bf', title: '结点上方显示平衡因子' }, { label: '高度', m: 'h', title: '结点上方显示高度' }],
+    it => { badgeMode = it.m; player.go(player.index()); });
+
+  player = AnimKit.player({ frames: framesFor(SCENARIOS[0]), render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

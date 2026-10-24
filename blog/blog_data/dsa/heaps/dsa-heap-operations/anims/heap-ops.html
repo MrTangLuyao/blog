@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>堆的插入与删除</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .hp { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 0; }
+  .hp-svg { flex: 1 1 auto; min-height: 0; position: relative; }
+  .hp-svg > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .hp-arr { flex: 0 0 auto; }
+  .hp-arr .cells { padding: 17px 4px 21px; gap: 3px; }
+  .hp-arr .cell { min-width: 30px; height: 30px; padding: 0 4px; font-size: 13px; border-radius: 6px; }
+  .btn-group { flex-wrap: wrap; }
+  .own { display: inline-flex; align-items: center; gap: 6px; }
+  .own input[type="number"] { width: 64px; }
+  @media (max-width: 420px) {
+    #controls .label, #controls input[type="range"] { display: none; }
+    .hp-arr .cell { min-width: 27px; height: 27px; padding: 0 3px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">最大堆：插入（上浮）与删除最大值（下沉）</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>正在移动的元素</span>
+  <span><i style="background: rgba(217, 119, 87, 0.30); border: 1px solid var(--accent)"></i>与它比较的结点</span>
+  <span><i style="background: rgba(74, 222, 128, 0.22); border: 1px solid var(--green)"></i>落定</span>
+  <span><i style="background: rgba(255, 255, 255, 0.10); opacity: 0.5"></i>已移出堆、仍在数组里</span>
+  <span>结点上方小字 = 下标</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+  const MAXN = 15;
+
+  // <algo> max-heap in H[1..n], H[0] unused; slots after n keep removed keys
+  const list = (H, n) => H.slice(1, n + 1).join(', ');
+
+  function opInsert(H0, n0, key) {
+    const H = H0.slice();
+    let n = n0;
+    const frames = [];
+    const snap = o => frames.push(Object.assign({ H: H.slice(), n, cls: {}, ptr: {}, edges: [] }, o));
+    let cmp = 0, sw = 0;
+    snap({ note: `当前堆 n = ${n}。插入 <b>${key}</b>：先放到下一个空位（下标 n+1 = ${n + 1}），再上浮（sift up）。` });
+    n++;
+    H[n] = key;
+    let i = n;
+    if (n === 1) {
+      snap({ cls: { 1: 'active' }, note: `空堆：${key} 放在下标 1，成为根。` });
+    } else {
+      const p = i >> 1;
+      snap({ cls: { [i]: 'active' }, ptr: { [i]: 'i' },
+        note: `${key} 放到下标 <b>${i}</b>，是 ${H[p]}（下标 ${p}）的${i % 2 ? '右' : '左'}孩子。形状仍是完全二叉树，但堆条件可能被破坏。` });
+    }
+    while (i > 1) {
+      const p = i >> 1;
+      cmp++;
+      if (H[p] < H[i]) {
+        snap({ cls: { [i]: 'active', [p]: 'compare' }, ptr: { [i]: 'i', [p]: 'i/2' }, edges: [[p, i]],
+          note: `比较 ${H[i]} 与父结点 H[⌊${i}/2⌋] = H[${p}] = ${H[p]}：${H[i]} &gt; ${H[p]}，<b>交换</b>。` });
+        const t = H[p]; H[p] = H[i]; H[i] = t;
+        sw++;
+        i = p;
+        snap({ cls: { [i]: 'active' }, ptr: { [i]: 'i' },
+          note: `交换后 ${key} 在下标 ${i}。` + (i === 1 ? '已经是根，没有父结点，停止。' : '继续和新的父结点比较。') });
+      } else {
+        snap({ cls: { [i]: 'active', [p]: 'compare' }, ptr: { [i]: 'i', [p]: 'i/2' }, edges: [[p, i]],
+          note: `比较 ${H[i]} 与父结点 H[⌊${i}/2⌋] = H[${p}] = ${H[p]}：${H[p]} ≥ ${H[i]}，<span class="ok">停止</span>。兄弟结点不参与比较。` });
+        break;
+      }
+    }
+    snap({ cls: { [i]: 'done' },
+      note: `插入完成：${cmp} 次比较，${sw} 次交换。H[1..${n}] = ${list(H, n)}` });
+    return { frames, H, n, cmp, sw };
+  }
+
+  function opDeleteMax(H0, n0) {
+    const H = H0.slice();
+    let n = n0;
+    const frames = [];
+    const snap = o => frames.push(Object.assign({ H: H.slice(), n, cls: {}, ptr: {}, edges: [] }, o));
+    let cmp = 0, sw = 0;
+    const max = H[1];
+    snap({ cls: { 1: 'active' }, note: `删除最大值：最大值永远在根 H[1] = <b>${max}</b>。` });
+    if (n > 1) {
+      snap({ cls: { 1: 'active', [n]: 'compare' }, ptr: { 1: 'root', [n]: 'n' },
+        note: `第 1 步：根 ${max} 与最后一个元素 H[${n}] = ${H[n]} 交换，这样被拿走的位置是最后一格，形状保持完全。` });
+      const t = H[1]; H[1] = H[n]; H[n] = t;
+      snap({ cls: { 1: 'active', [n]: 'active' }, ptr: { 1: 'root', [n]: 'n' },
+        note: `交换后 ${H[1]} 在根，${max} 在下标 ${n}。` });
+    }
+    n--;
+    snap({ cls: n >= 1 ? { 1: 'active' } : {},
+      note: `第 2 步：n 减 1（${n + 1} → ${n}）。${max} 仍留在 H[${n + 1}]，但已不属于堆（变灰）。` +
+        (n >= 1 ? '第 3 步：下沉（sift down）根上的 ' + H[1] + '。' : '堆空了。') });
+    let i = 1;
+    if (n >= 1 && 2 * i > n) {
+      snap({ cls: { 1: 'active' }, note: `根没有孩子（2 &gt; n = ${n}），不用下沉。` });
+    }
+    while (n >= 1 && 2 * i <= n) {
+      const l = 2 * i, r = 2 * i + 1;
+      let c = l, desc;
+      const ptr = { [i]: 'i', [l]: '2i' };
+      const edges = [[i, l]];
+      const cls = { [i]: 'active', [l]: 'compare' };
+      if (r <= n) {
+        cmp++;
+        if (H[r] > H[l]) c = r;
+        ptr[r] = '2i+1';
+        edges.push([i, r]);
+        cls[r] = 'compare';
+        desc = `${H[i]} 的孩子是 ${H[l]}（下标 ${l}）和 ${H[r]}（下标 ${r}），较大的是 ${H[c]}`;
+      } else {
+        desc = `${H[i]} 只有左孩子 ${H[l]}（下标 ${l}）`;
+      }
+      cmp++;
+      if (H[i] >= H[c]) {
+        snap({ cls, ptr, edges, note: `${desc}；${H[i]} ≥ ${H[c]}，<span class="ok">停止</span>。` });
+        break;
+      }
+      snap({ cls, ptr, edges, note: `${desc}；${H[i]} &lt; ${H[c]}，和<b>较大的孩子</b>交换。` });
+      const x = H[i];
+      const t = H[i]; H[i] = H[c]; H[c] = t;
+      sw++;
+      i = c;
+      snap({ cls: { [i]: 'active' }, ptr: { [i]: 'i' },
+        note: `交换后 ${x} 在下标 ${i}。` + (2 * i > n ? `2×${i} = ${2 * i} &gt; n = ${n}，没有孩子，停止。` : '继续和它的孩子比较。') });
+    }
+    snap({ cls: n >= 1 ? { [i]: 'done' } : {},
+      note: `删除完成，返回 ${max}：${cmp} 次比较，${sw} 次交换。` + (n >= 1 ? `H[1..${n}] = ${list(H, n)}` : '') });
+    return { frames, H, n, cmp, sw, max };
+  }
+  // </algo>
+
+  // ── drawing ──
+  function render(f) {
+    const len = f.H.length - 1;
+    const mkNode = i => (i > len ? null : { key: f.H[i], idx: i, left: mkNode(2 * i), right: mkNode(2 * i + 1) });
+    const root = len >= 1 ? mkNode(1) : null;
+    const hot = new Set(f.edges.map(e => e[0] + '-' + e[1]));
+    const svg = K.tree(root, {
+      gapX: 44, gapY: 56, pad: 28,
+      emptyText: '（空堆）',
+      cls: nd => (nd.idx > f.n ? 'dim' : f.cls[nd.idx] || ''),
+      edgeCls: (p, c) => (c.idx > f.n ? 'dim' : hot.has(p.idx + '-' + c.idx) ? 'active' : ''),
+      badge: nd => String(nd.idx),
+    });
+    const values = [''];
+    for (let k = 1; k <= len; k++) values.push(f.H[k]);
+    const ptr = Object.assign({}, f.ptr);
+    if (f.n >= 1 && !(f.n in ptr)) ptr[f.n] = 'n';
+    const arr = K.cells(values, {
+      idx: true,
+      ptr,
+      cls: (v, k) => (k === 0 ? '' : k > f.n ? 'dim' : f.cls[k] || ''),
+    });
+    stage.innerHTML = `<div class="hp"><div class="hp-svg">${svg}</div><div class="hp-arr">${arr}</div></div>`;
+  }
+
+  // ── scenarios: each starts where the lecture example left off ──
+  const START = [null, 27, 24, 26, 7, 12, 6, 19, 2, 7, 7];
+  const s1 = opInsert(START, 10, 25);
+  const s2 = opInsert(s1.H, s1.n, 32);
+  const s3 = opDeleteMax(START, 10);
+  const s4 = opDeleteMax(s3.H, s3.n);
+  const PRESETS = [
+    { label: '插入 25', run: s1 },
+    { label: '再插入 32', run: s2 },
+    { label: '删除最大 27', run: s3 },
+    { label: '再删除 26', run: s4 },
+  ];
+
+  let state = { H: s1.H, n: s1.n };
+  let player = null;
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const presetBtns = PRESETS.map((p, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = p.label;
+    b.addEventListener('click', () => {
+      presetBtns.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      state = { H: p.run.H, n: p.run.n };
+      player.load(p.run.frames);
+    });
+    if (k === 0) b.classList.add('active');
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(group);
+
+  // own key: continues from the heap the current scenario ends with
+  const own = document.createElement('span');
+  own.className = 'own';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.max = '99';
+  input.value = '30';
+  input.setAttribute('aria-label', '要插入的键');
+  const insBtn = document.createElement('button');
+  insBtn.type = 'button';
+  insBtn.textContent = '插入';
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.textContent = '删最大';
+  own.appendChild(input);
+  own.appendChild(insBtn);
+  own.appendChild(delBtn);
+  pick.appendChild(own);
+
+  function message(text) {
+    player.load([{ H: state.H.slice(), n: state.n, cls: {}, ptr: {}, edges: [], note: text }]);
+  }
+  insBtn.addEventListener('click', () => {
+    const v = Number(input.value);
+    if (input.value.trim() === '' || !Number.isInteger(v) || v < 0 || v > 99) { message('请输入 0 到 99 的整数。'); return; }
+    if (state.n >= MAXN) { message(`演示最多 ${MAXN} 个元素，先删除几个再插入。`); return; }
+    presetBtns.forEach(x => x.classList.remove('active'));
+    const r = opInsert(state.H, state.n, v);
+    state = { H: r.H, n: r.n };
+    player.load(r.frames);
+  });
+  delBtn.addEventListener('click', () => {
+    if (state.n < 1) { message('堆已经空了。'); return; }
+    presetBtns.forEach(x => x.classList.remove('active'));
+    const r = opDeleteMax(state.H, state.n);
+    state = { H: r.H, n: r.n };
+    player.load(r.frames);
+  });
+
+  player = AnimKit.player({ frames: s1.frames, render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

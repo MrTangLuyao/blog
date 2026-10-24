@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自顶向下归并排序</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .ghost { fill: none; stroke: rgba(255, 255, 255, 0.13); stroke-width: 1.5; stroke-dasharray: 4 4; }
+  .k-edge.ghost-edge { stroke: rgba(255, 255, 255, 0.10); stroke-dasharray: 3 5; }
+  .k-node.dim text { fill: var(--muted); }
+  @media (max-width: 420px) {
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">自顶向下归并排序：先拆到单个元素，再逐层合并</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: rgba(56,189,248,0.5)"></i>等两半排好</span>
+  <span><i style="background: var(--accent)"></i>刚合并</span>
+  <span><i style="background: rgba(74,222,128,0.5)"></i>已有序</span>
+  <span><i style="background: rgba(255,255,255,0.15)"></i>已并入上层</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  const SCEN = [
+    { label: '课上例子', keys: [6, 3, 8, 6, 7, 1, 4, 2] },
+    { label: '奇数个', keys: [8, 3, 5, 1, 9, 2, 7] },
+    { label: '已排好', keys: [1, 2, 3, 4, 5, 6, 7, 8] },
+  ];
+
+  // <algo>
+  const SUB = ['', '₁', '₂', '₃', '₄'];
+  function tagged(keys) {
+    const total = {}, seen = {};
+    keys.forEach(k => { total[k] = (total[k] || 0) + 1; });
+    return keys.map(k => { seen[k] = (seen[k] || 0) + 1; return { k, t: total[k] > 1 ? seen[k] : 0 }; });
+  }
+  const name = x => x.k + SUB[x.t];
+  const list = a => a.map(name).join(' ');
+  // shape of the recursion tree; the left half gets ceil(n/2), as in the article's C code
+  function shape(lo, hi, depth, all) {
+    const nd = { lo, hi, depth, kids: [] };
+    all.push(nd);
+    if (hi - lo >= 2) {
+      const mid = lo + Math.ceil((hi - lo) / 2);
+      nd.kids = [shape(lo, mid, depth + 1, all), shape(mid, hi, depth + 1, all)];
+    }
+    return nd;
+  }
+  // merge with ties taken from the left; counts key comparisons
+  function merge(L, R) {
+    const out = [], ties = [];
+    let i = 0, j = 0, cmp = 0;
+    while (i < L.length || j < R.length) {
+      if (j >= R.length) out.push(L[i++]);
+      else if (i >= L.length) out.push(R[j++]);
+      else {
+        cmp++;
+        if (L[i].k === R[j].k) ties.push([L[i], R[j]]);
+        out.push(L[i].k <= R[j].k ? L[i++] : R[j++]);
+      }
+    }
+    return { out, cmp, ties };
+  }
+  // top-down merge sort on the tree node nd; hooks see every split and every merge
+  function mergeSort(nd, arr, hooks) {
+    if (arr.length < 2) return arr;
+    const mid = Math.ceil(arr.length / 2);
+    const L = arr.slice(0, mid), R = arr.slice(mid);
+    hooks.split(nd, arr, L, R);
+    const sl = mergeSort(nd.kids[0], L, hooks);
+    const sr = mergeSort(nd.kids[1], R, hooks);
+    const m = merge(sl, sr);
+    hooks.merge(nd, sl, sr, m);
+    return m.out;
+  }
+  // </algo>
+
+  function build(keys) {
+    const items = tagged(keys), n = items.length;
+    const nodes = [];
+    const root = shape(0, n, 0, nodes);
+    const maxDepth = Math.max(...nodes.map(nd => nd.depth));
+    nodes.forEach(nd => { nd.vals = null; nd.st = ''; });
+    root.vals = items.slice();
+    const frames = [];
+    let merges = 0, cmp = 0, writes = 0;
+    const snap = note => frames.push({
+      n, maxDepth, nodes,
+      state: nodes.map(nd => ({ vals: nd.vals ? nd.vals.slice() : null, st: nd.st })),
+      note: note + '<br>合并 ' + merges + ' / ' + (n - 1) + ' 次 · 比较 ' + cmp + ' 次',
+    });
+    snap('输入 [' + list(items) + ']，n = ' + n + '。长度 ≥ 2 就从中间拆开，左半取 ⌈n/2⌉ 个。');
+    mergeSort(root, items, {
+      split(nd, arr, L, R) {
+        nd.st = 'visited';
+        const [a, b] = nd.kids;
+        a.vals = L.slice(); b.vals = R.slice();
+        a.st = L.length < 2 ? 'done' : '';
+        b.st = R.length < 2 ? 'done' : '';
+        let s = '拆分 [' + list(arr) + '] → [' + list(L) + '] 和 [' + list(R) + ']';
+        if (L.length < 2 && R.length < 2) s += '：单个元素本身有序（递归出口）';
+        else if (L.length >= 2) s += '，先递归处理左半';
+        snap(s);
+      },
+      merge(nd, sl, sr, m) {
+        merges++; cmp += m.cmp; writes += m.out.length;
+        nd.vals = m.out.slice();
+        nd.st = 'active';
+        nd.kids.forEach(c => { c.st = 'dim'; });
+        let s = '第 ' + merges + ' 次合并：[' + list(sl) + '] + [' + list(sr) + '] → <b>[' + list(m.out) + ']</b>，比较 ' + m.cmp + ' 次';
+        if (m.ties.length) s += '；' + m.ties.map(p => name(p[0]) + ' 与 ' + name(p[1]) + ' 相等，取左边的 ' + name(p[0])).join('；');
+        snap(s);
+        nd.st = 'done';
+      },
+    });
+    let end = '完成：' + merges + ' 次合并（n − 1），共比较 ' + cmp + ' 次，合并写入 ' + writes + ' 个元素。';
+    if (keys.every((k, i) => i === 0 || keys[i - 1] <= k)) end += ' 已排好的输入比较少一些，拆分和合并一次不少，仍是 Θ(n log n)。';
+    snap(end);
+    return frames;
+  }
+
+  const CW = 30, CH = 28, CG = 2, VG = 34, PAD = 10;
+  function render(f) {
+    const { n, maxDepth, nodes, state } = f;
+    // the gap before slot s grows with the level of the split that put a boundary there
+    const gapAt = new Array(n).fill(0);
+    nodes.forEach(nd => { if (nd.kids.length) gapAt[nd.kids[1].lo] = 6 + (maxDepth - 1 - nd.depth) * 6; });
+    const xs = [];
+    let cur = PAD;
+    for (let s = 0; s < n; s++) { cur += gapAt[s]; xs.push(cur); cur += CW; }
+    const W = cur + PAD, H = PAD * 2 + maxDepth * (CH + VG) + CH;
+    const box = nd => {
+      const len = nd.hi - nd.lo, w = len * CW + (len - 1) * CG;
+      const cx = (xs[nd.lo] + xs[nd.hi - 1] + CW) / 2;
+      return { x: cx - w / 2, y: PAD + nd.depth * (CH + VG), w, cx };
+    };
+    let edges = '', body = '';
+    nodes.forEach((nd, k) => {
+      const b = box(nd);
+      nd.kids.forEach(c => {
+        const cb = box(c), cs = state[nodes.indexOf(c)];
+        const cls = !cs.vals ? 'ghost-edge' : cs.st === 'dim' ? 'dim' : '';
+        edges += '<line class="k-edge ' + cls + '" x1="' + b.cx + '" y1="' + (b.y + CH) + '" x2="' + cb.cx + '" y2="' + cb.y + '"/>';
+      });
+      const s = state[k];
+      if (!s.vals) {
+        body += '<rect class="ghost" x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + CH + '" rx="6"/>';
+        return;
+      }
+      body += '<g class="k-node ' + s.st + '">';
+      s.vals.forEach((v, c) => {
+        const x = b.x + c * (CW + CG);
+        body += '<rect x="' + x + '" y="' + b.y + '" width="' + CW + '" height="' + CH + '" rx="5"/>' +
+          '<text x="' + (x + CW / 2) + '" y="' + (b.y + CH / 2) + '">' + K.esc(name(v)) + '</text>';
+      });
+      body += '</g>';
+    });
+    stage.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' + edges + body + '</svg>';
+  }
+
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = SCEN.map((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    if (k === 0) b.className = 'active';
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: build(SCEN[0].keys), render, interval: 1700 });
+  btns.forEach((b, k) => b.addEventListener('click', () => {
+    btns.forEach((o, j) => o.classList.toggle('active', j === k));
+    player.load(build(SCEN[k].keys));
+  }));
+})();
+</script>
+</body>
+</html>

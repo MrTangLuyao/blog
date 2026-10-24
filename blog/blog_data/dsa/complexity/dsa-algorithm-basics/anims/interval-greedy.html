@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>区间调度：三条贪心规则</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">区间调度：三条贪心规则</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: #343433; border: 1px solid #5a5a59"></i>候选</span>
+  <span><i style="background: var(--accent)"></i>本步选中</span>
+  <span><i style="background: var(--green)"></i>已选</span>
+  <span><i style="background: var(--red)"></i>与选中重叠，删除</span>
+  <span><i style="background: transparent; border: 1px dashed var(--blue)"></i>一个最优解</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const mk = arr => arr.map(([s, f], i) => ({ name: String.fromCharCode(65 + i), s, f }));
+  const INSTANCES = [
+    { label: '反例 1', jobs: mk([[0, 10], [1, 2], [3, 4], [5, 6]]) },
+    { label: '反例 2', jobs: mk([[0, 5], [4, 7], [6, 11]]) },
+    { label: '综合', jobs: mk([[1, 8], [3, 5], [6, 7], [9, 17], [10, 14], [13, 16], [15, 20]]) },
+  ];
+  const RULES = [
+    { id: 'start', label: '最早开始', keyName: '开始时刻', key: j => j.s },
+    { id: 'short', label: '最短', keyName: '长度', key: j => j.f - j.s },
+    { id: 'finish', label: '最早结束', keyName: '结束时刻', key: j => j.f },
+  ];
+
+  // <algo>
+  // [s, f]: two jobs conflict only if they share some time; f of one == s of the other is fine
+  const overlap = (a, b) => a.s < b.f && b.s < a.f;
+
+  // brute force over all 2^n subsets: the true optimum, independent of any rule
+  function optimum(jobs) {
+    const n = jobs.length;
+    let best = [];
+    for (let m = 0; m < (1 << n); m++) {
+      const sel = jobs.filter((_, i) => (m >> i) & 1);
+      let ok = true;
+      for (let i = 0; i < sel.length && ok; i++)
+        for (let j = i + 1; j < sel.length; j++) if (overlap(sel[i], sel[j])) { ok = false; break; }
+      if (ok && sel.length > best.length) best = sel;
+    }
+    return best;
+  }
+
+  function build(inst, rule) {
+    const jobs = inst.jobs;
+    const best = optimum(jobs);
+    const frames = [];
+    const st = {};
+    jobs.forEach(j => { st[j.name] = ''; });
+    const chosen = [];
+    const snap = (note, showOpt) => frames.push({ jobs, st: Object.assign({}, st), count: chosen.length, opt: best.length, showOpt: !!showOpt, best, rule, note });
+
+    snap('共 ' + jobs.length + ' 个区间。规则<b>“' + rule.label + '优先”</b>：每次从剩余区间里挑' + rule.keyName +
+      '最小的，选它，再删掉所有与它重叠的区间，直到没有剩余。');
+
+    let rem = jobs.slice();
+    let step = 0;
+    while (rem.length) {
+      step++;
+      const order = rem.slice().sort((a, b) => rule.key(a) - rule.key(b) || a.name.localeCompare(b.name));
+      const x = order[0];
+      const list = rem.map(j => j.name + '=' + rule.key(j)).join('，');
+      const ties = order.filter(j => rule.key(j) === rule.key(x));
+      st[x.name] = 'active';
+      snap('第 ' + step + ' 次挑选。剩余区间的' + rule.keyName + '：' + list + '。' +
+        (ties.length > 1
+          ? '最小值 ' + rule.key(x) + ' 由 ' + ties.map(j => j.name).join('、') + ' 并列，按字母顺序选 <b>' + x.name + '</b>'
+          : '最小的是 ' + x.name + '（' + rule.key(x) + '），选 <b>' + x.name + '</b>') +
+        ' [' + x.s + ',' + x.f + ']。');
+
+      const hit = rem.filter(j => j !== x && overlap(j, x));
+      chosen.push(x);
+      st[x.name] = 'done';
+      hit.forEach(j => { st[j.name] = 'bad'; });
+      const left = rem.length - 1 - hit.length;
+      snap((hit.length
+        ? '删掉与 ' + x.name + ' 重叠的 <b>' + hit.map(j => j.name).join('、') + '</b>。'
+        : '没有区间与 ' + x.name + ' 重叠，不用删。') +
+        '已选 ' + chosen.length + ' 个，还剩 ' + left + ' 个候选。');
+
+      hit.forEach(j => { st[j.name] = 'dim'; });
+      rem = rem.filter(j => j !== x && !hit.includes(j));
+    }
+
+    if (rule.id === 'finish' && chosen.length !== best.length) throw new Error('earliest finish not optimal on ' + inst.label);
+    const names = a => a.map(j => j.name).join('、');
+    let verdict;
+    if (chosen.length < best.length) {
+      verdict = '<span class="bad">少了 ' + (best.length - chosen.length) + ' 个：这一个实例就推翻了“' + rule.label + '优先”。</span>';
+    } else if (rule.id === 'finish') {
+      verdict = '<span class="ok">达到最优。</span>最早结束优先在任何实例上都选得最多。';
+    } else {
+      const other = INSTANCES.find(I => I !== inst && run(I.jobs, rule).length < optimum(I.jobs).length);
+      verdict = '<span class="ok">这个实例上碰巧最优</span>' + (other ? '，换到“' + other.label + '”就会出错。' : '。');
+    }
+    snap('结束：选了 <b>' + chosen.length + '</b> 个（' + names(chosen) + '）。最优是 ' + best.length + ' 个（蓝色虚线框：' +
+      names(best) + '）。' + verdict, true);
+    return frames;
+  }
+
+  // the bare greedy loop, used for the cross-reference in the final caption
+  function run(jobs, rule) {
+    let rem = jobs.slice();
+    const out = [];
+    while (rem.length) {
+      const x = rem.slice().sort((a, b) => rule.key(a) - rule.key(b) || a.name.localeCompare(b.name))[0];
+      out.push(x);
+      rem = rem.filter(j => j !== x && !overlap(j, x));
+    }
+    return out;
+  }
+  // </algo>
+
+  const W = 380, X0 = 32, X1 = 366, TOP = 34, RH = 28, BH = 18;
+  function render(f) {
+    const jobs = f.jobs;
+    const T = Math.max(...jobs.map(j => j.f));
+    const X = t => X0 + (X1 - X0) * t / T;
+    const axisY = TOP + jobs.length * RH + 4;
+    const H = axisY + 24;
+    const tick = T > 12 ? 2 : 1;
+    let svg = '';
+    for (let t = 0; t <= T; t++) {
+      svg += '<line x1="' + X(t) + '" y1="' + (TOP - 6) + '" x2="' + X(t) + '" y2="' + axisY + '" style="stroke: rgba(255,255,255,0.06)"/>';
+      if (t % tick === 0) svg += '<text class="k-badge" x="' + X(t) + '" y="' + (axisY + 16) + '">' + t + '</text>';
+    }
+    svg += '<line class="k-edge" x1="' + X0 + '" y1="' + axisY + '" x2="' + X1 + '" y2="' + axisY + '"/>';
+    svg += '<text x="4" y="16" style="fill: var(--text); font-size: 13px; font-weight: 700">已选 ' + f.count + ' 个 · 最优 ' + f.opt + ' 个</text>';
+    svg += '<text x="' + W + '" y="16" style="fill: var(--muted); font-size: 12px; text-anchor: end">规则：' + K.esc(f.rule.label) + '优先</text>';
+
+    jobs.forEach((j, i) => {
+      const y = TOP + i * RH;
+      const a = X(j.s), b = X(j.f), w = b - a;
+      const c = f.st[j.name];
+      const label = '[' + j.s + ',' + j.f + ']' + (f.rule.id === 'short' ? ' 长' + (j.f - j.s) : '');
+      const lw = [...label].reduce((s, ch) => s + (/[一-鿿]/.test(ch) ? 12 : 7.4), 0) + 6;
+      let lx, anchor;
+      if (X1 - b >= lw) { lx = b + 6; anchor = 'start'; }
+      else if (a - X0 >= lw) { lx = a - 6; anchor = 'end'; }
+      else { lx = (a + b) / 2; anchor = 'middle'; }
+      svg += '<g class="k-node ' + (c || '') + '">' +
+        '<text x="14" y="' + (y + BH / 2) + '">' + j.name + '</text>' +
+        '<rect x="' + a + '" y="' + y + '" width="' + w + '" height="' + BH + '" rx="4"/>' +
+        '<text x="' + lx + '" y="' + (y + BH / 2) + '" style="text-anchor: ' + anchor + '; font-size: 12px; font-weight: 500; fill: ' +
+        (anchor === 'middle' ? 'var(--text)' : 'var(--muted)') + '">' + label + '</text></g>';
+      if (f.showOpt && f.best.includes(j)) {
+        svg += '<rect x="' + (a - 3) + '" y="' + (y - 3) + '" width="' + (w + 6) + '" height="' + (BH + 6) + '" rx="6" style="fill: none; stroke: var(--blue); stroke-width: 1.5; stroke-dasharray: 4 3"/>';
+      }
+    });
+    stage.innerHTML = '<svg viewBox="0 0 ' + (W + 4) + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' + svg + '</svg>';
+  }
+
+  function group(title, items, onPick) {
+    const lab = document.createElement('span');
+    lab.className = 'label';
+    lab.textContent = title;
+    controls.appendChild(lab);
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach((it, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      if (i === 0) b.classList.add('active');
+      b.addEventListener('click', () => {
+        g.querySelectorAll('button').forEach(o => o.classList.remove('active'));
+        b.classList.add('active');
+        onPick(it);
+      });
+      g.appendChild(b);
+    });
+    controls.appendChild(g);
+  }
+
+  let inst = INSTANCES[0], rule = RULES[0], player = null;
+  group('实例', INSTANCES, it => { inst = it; player.load(build(inst, rule)); });
+  group('规则', RULES, it => { rule = it; player.load(build(inst, rule)); });
+  player = AnimKit.player({ frames: build(inst, rule), render, interval: 1400 });
+})();
+</script>
+</body>
+</html>

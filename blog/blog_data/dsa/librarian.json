@@ -1,0 +1,134 @@
+{
+  "version": 4,
+  "updated": "2026-10-24",
+  "title": {
+    "zh": "数据结构与算法",
+    "en": "Data Structures & Algorithms"
+  },
+  "entries": [
+    {
+      "kind": "post",
+      "slug": "dsa-exam-guide",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "考试说明与复习路线",
+        "en": "Exam Guide & Study Route"
+      },
+      "excerpt": {
+        "zh": "考试安排 · 题型 · 不考内容 · 公式表 · 复习路线",
+        "en": "Exam format · Scope · Equation sheet · Study route"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 4,
+      "lang": "zh",
+      "pinned": true
+    },
+    {
+      "kind": "collection",
+      "slug": "complexity",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 1 部分 · 算法与复杂度",
+        "en": "Part 1 · Algorithms & Complexity"
+      },
+      "excerpt": {
+        "zh": "什么是算法：输入、输出、正确性与效率 · 斐波那契：同一个问题的三种算法 · 数操作次数：T(n) 与增长率 · 大 O：正式定义与证明 · Ω 与 Θ：下界与紧确界 · 对数、指数与复杂度的加法和乘法 · 最好、最坏、平均情况：它们和 O/Ω/Θ 不是一回事 · 递推式与展开法（telescoping） · 主定理（Master Theorem） · 算法设计思路：蛮力、减治、分治、贪心 · 最近点对：从蛮力到分治",
+        "en": "What Is an Algorithm · Fibonacci Three Ways · Counting Operations & Growth Rates · Big-O: Definition & Proofs · Big-Omega & Big-Theta · Logs, Exponentials & Combining Bounds · Best, Worst & Average Cases · Recurrences & Telescoping · The Master Theorem · Algorithm Design Paradigms · The Closest Pair Problem"
+      }
+    },
+    {
+      "kind": "collection",
+      "slug": "linear",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 2 部分 · 数组、链表与基础 ADT",
+        "en": "Part 2 · Arrays, Lists & Basic ADTs"
+      },
+      "excerpt": {
+        "zh": "抽象数据类型与字典 · 内存、指针与数组 · 用数组做字典：线性查找与二分查找 · 链表：节点、头插、插入与删除 · 数组 vs 链表：对比表与陷阱题 · 动态数组与均摊分析 · 栈、队列与循环数组",
+        "en": "ADTs & the Dictionary · Memory, Pointers & Arrays · Arrays as Dictionaries & Binary Search · Linked Lists in C · Arrays vs Linked Lists · Dynamic Arrays & Amortised Analysis · Stacks, Queues & Circular Arrays"
+      }
+    },
+    {
+      "kind": "collection",
+      "slug": "trees",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 3 部分 · 树",
+        "en": "Part 3 · Trees"
+      },
+      "excerpt": {
+        "zh": "二叉树基础：术语、完全二叉树与本课约定 · 树的三种遍历：前序、中序、后序 · 二叉搜索树：查找、插入与退化 · BST 删除：三种情况与前驱后继 · 平衡与 AVL 条件 · AVL 旋转：LL、RR、LR、RL · 2-3 树：插入与分裂 · B 树与 B+ 树 · 伸展树（Splay Tree） · 四叉树与 k-d 树 · 字典树：Trie、Radix 树与 Patricia 树",
+        "en": "Binary Tree Basics · Tree Traversals · Binary Search Trees · BST Deletion · Balance & the AVL Condition · AVL Rotations · 2-3 Trees · B-Trees & B+ Trees · Splay Trees · Quadtrees & k-d Trees · Tries, Radix Trees & Patricia Tries"
+      }
+    },
+    {
+      "kind": "collection",
+      "slug": "hashing",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 4 部分 · 哈希表",
+        "en": "Part 4 · Hash Tables"
+      },
+      "excerpt": {
+        "zh": "哈希表与整数哈希函数 · 字符串哈希 · 冲突处理一：拉链法 · 冲突处理二：线性探测与双重哈希 · 装载因子与三种冲突方案对比",
+        "en": "Hash Tables & Integer Hash Functions · Hashing Strings · Separate Chaining · Linear Probing & Double Hashing · Load Factor & Comparing Strategies"
+      }
+    },
+    {
+      "kind": "collection",
+      "slug": "sorting",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 5 部分 · 排序",
+        "en": "Part 5 · Sorting"
+      },
+      "excerpt": {
+        "zh": "排序：定义与三个性质 · 选择排序 · 插入排序 · 计数排序（Distribution Counting） · 快速排序：pivot 与分区 · 快速排序：复杂度、pivot 选择与性质 · 归并排序：合并与自顶向下 · 自底向上与自适应归并排序 · 怎么选排序算法",
+        "en": "Sorting: Definition & Properties · Selection Sort · Insertion Sort · Distribution Counting · Quicksort: Pivot & Partition · Quicksort: Analysis & Properties · Merge Sort (Top-Down) · Bottom-Up & Adaptive Merge Sort · Choosing a Sorting Algorithm"
+      }
+    },
+    {
+      "kind": "collection",
+      "slug": "heaps",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 6 部分 · 堆与优先队列",
+        "en": "Part 6 · Heaps & Priority Queues"
+      },
+      "excerpt": {
+        "zh": "堆：定义与数组表示 · 堆的插入与删除：上浮与下沉 · 建堆：逐个插入 vs 自底向上 · 堆排序 · 优先队列与 Top-k 问题",
+        "en": "Heaps: Definition & Array Layout · Heap Insert & Delete-Max · Building a Heap · Heapsort · Priority Queues & Top-k"
+      }
+    },
+    {
+      "kind": "collection",
+      "slug": "graphs",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 7 部分 · 图",
+        "en": "Part 7 · Graphs"
+      },
+      "excerpt": {
+        "zh": "图：定义、类型与术语 · 邻接矩阵 vs 邻接表 · 深度优先搜索（DFS） · 广度优先搜索（BFS） · Dijkstra 单源最短路 · Warshall 传递闭包与 Floyd-Warshall 全源最短路 · 最小生成树与 Prim 算法 · 拓扑排序 · 图建模：判环、货币套利与隐式图",
+        "en": "Graph Basics · Adjacency Matrix vs Adjacency Lists · Depth-First Search · Breadth-First Search · Dijkstra's Algorithm · Warshall & Floyd-Warshall · MST & Prim's Algorithm · Topological Sort · Graph Modelling: Cycles, Arbitrage & Implicit Graphs"
+      }
+    },
+    {
+      "kind": "collection",
+      "slug": "review",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "第 8 部分 · 综合复习与真题",
+        "en": "Part 8 · Review & Past Papers"
+      },
+      "excerpt": {
+        "zh": "客座讲座：订单簿该用什么数据结构 · 复杂度总表（一）：字典、队列与优先队列 · 复杂度总表（二）：排序与图算法 · 高频陷阱题 · C 代码题：常考写法 · 算法设计题怎么答",
+        "en": "Guest Lecture: Building an Order Book · Cheat Sheet I: Dictionaries, Queues & PQs · Cheat Sheet II: Sorting & Graph Algorithms · Common Exam Traps · C Patterns for Coding Questions · Answering Algorithm-Design Questions"
+      }
+    }
+  ]
+}

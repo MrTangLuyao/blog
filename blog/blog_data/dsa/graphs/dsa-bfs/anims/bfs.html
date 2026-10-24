@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BFS 逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .bf { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .bf-graph { flex: 1 1 auto; min-height: 0; position: relative; }
+  .bf-graph > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .bf-info { flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 18px; }
+  .bf-row { display: flex; align-items: center; gap: 6px; }
+  .bf-row .lab { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .bf-info .cells { padding: 16px 2px 18px; gap: 3px; }
+  .bf-info .cell { min-width: 30px; height: 30px; font-size: 13px; }
+  .bf-order { flex: 0 0 auto; text-align: center; font-size: 12px; color: var(--muted); min-height: 18px; }
+  .bf-order b { color: var(--text); font-weight: 700; margin: 0 2px; }
+  .bf-order b.dup { color: var(--red); }
+  .k-badge { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+  .k-node.lv0 circle { fill: rgba(217, 119, 87, 0.30); stroke: var(--accent); }
+  .k-node.lv1 circle { fill: rgba(56, 189, 248, 0.22); stroke: var(--blue); }
+  .k-node.lv2 circle { fill: rgba(74, 222, 128, 0.22); stroke: var(--green); }
+  @media (max-width: 480px) {
+    .bf-info .cells { padding: 15px 1px 17px; }
+    .bf-info .cell { min-width: 24px; height: 26px; font-size: 12px; padding: 0 4px; }
+  }
+  .lv0t { color: var(--accent); } .lv1t { color: var(--blue); } .lv2t { color: var(--green); }
+</style>
+</head>
+<body>
+<div class="title">BFS 逐步演示（从 A 出发）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前出队</span>
+  <span><i style="background: var(--blue)"></i>在队列中</span>
+  <span><i style="background: var(--green)"></i>已访问</span>
+  <span><i style="background: var(--yellow)"></i>检查中</span>
+  <span><i style="background: var(--red)"></i>重复</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+
+  const NODES = [
+    { id: 'A', x: 30, y: 90 },
+    { id: 'B', x: 170, y: 20 }, { id: 'C', x: 170, y: 90 }, { id: 'D', x: 170, y: 160 },
+    { id: 'E', x: 310, y: 55 }, { id: 'F', x: 310, y: 160 },
+  ];
+  const EDGES = [['A', 'B'], ['A', 'C'], ['A', 'D'], ['B', 'C'], ['B', 'E'], ['C', 'E'], ['D', 'F']];
+  const IDS = NODES.map(n => n.id).sort();
+  const V = IDS.length;
+  const START = 'A';
+
+  // adjacency lists in alphabetical order
+  const adj = {};
+  IDS.forEach(v => { adj[v] = []; });
+  EDGES.forEach(([u, v]) => { adj[u].push(v); adj[v].push(u); });
+  IDS.forEach(v => adj[v].sort());
+
+  function recorder(mode) {
+    const frames = [];
+    return {
+      frames,
+      snap(st, extra) {
+        frames.push(Object.assign({
+          mode,
+          mark: Object.assign({}, st.mark),
+          dist: Object.assign({}, st.dist || {}),
+          parent: Object.assign({}, st.parent || {}),
+          visits: Object.assign({}, st.visits || {}),
+          queue: st.queue.slice(),
+          head: st.head,
+          order: st.order.slice(),
+          cur: null, check: null, added: -1, again: false, final: false,
+        }, extra));
+      },
+    };
+  }
+
+  // Course version: mark a vertex when it is ENQUEUED.
+  function buildCorrect() {
+    const st = { mark: {}, dist: {}, parent: {}, queue: [], head: 0, order: [] };
+    IDS.forEach(v => { st.mark[v] = 0; st.dist[v] = null; st.parent[v] = null; });
+    const r = recorder('ok');
+    r.snap(st, { note: '开始：mark 全为 0，队列为空。邻居按字母序检查。' });
+    st.mark[START] = 1; st.dist[START] = 0; st.queue.push(START);
+    r.snap(st, { added: 0, note: `起点 ${START} 入队，<b>同时标记</b> mark[${START}] = 1，dist[${START}] = 0。` });
+    while (st.head < st.queue.length) {
+      const u = st.queue[st.head++];
+      st.order.push(u);
+      r.snap(st, { cur: u, note: `出队 <b>${u}</b> 并访问它。依次检查邻居 ${adj[u].join('、')}。` });
+      adj[u].forEach(w => {
+        if (!st.mark[w]) {
+          st.mark[w] = 1;
+          st.dist[w] = st.dist[u] + 1;
+          st.parent[w] = u;
+          st.queue.push(w);
+          r.snap(st, {
+            cur: u, check: { u, w, kind: 'add' }, added: st.queue.length - 1,
+            note: `${w} 未标记 → 标记 mark[${w}] = 1，dist[${w}] = dist[${u}] + 1 = ${st.dist[w]}，${w} 入队。`,
+          });
+        } else if (st.queue.indexOf(w) >= st.head) {
+          r.snap(st, {
+            cur: u, check: { u, w, kind: 'waiting' },
+            note: `${w} 还在队列里、尚未访问，但入队时已经标记 → <b>不再入队</b>。这就是“入队即标记”的作用。`,
+          });
+        } else {
+          r.snap(st, { cur: u, check: { u, w, kind: 'seen' }, note: `${w} 已访问过（已标记）→ 跳过。` });
+        }
+      });
+    }
+    const levels = [];
+    IDS.forEach(v => { (levels[st.dist[v]] = levels[st.dist[v]] || []).push(v); });
+    const lvText = levels.map((vs, d) => `<span class="lv${d}t">第 ${d} 层 ${vs.join(' ')}</span>`).join('，');
+    r.snap(st, {
+      final: true,
+      note: `<span class="ok">队列空，结束。</span>BFS 顺序 ${st.order.join(' ')}。按层着色：${lvText}。` +
+        '绿色边是每个顶点被发现时经过的边，沿它们从 A 走到任一顶点都是最少边数。',
+    });
+    return r.frames;
+  }
+
+  // Buggy version: mark a vertex only when it is DEQUEUED.
+  function buildWrong() {
+    const st = { mark: {}, visits: {}, queue: [], head: 0, order: [] };
+    IDS.forEach(v => { st.mark[v] = 0; st.visits[v] = 0; });
+    const r = recorder('bad');
+    let overflowNoted = false;
+    r.snap(st, { note: '错误版本：出队时才标记。开始：mark 全为 0，队列为空。' });
+    st.queue.push(START);
+    r.snap(st, { added: 0, note: `起点 ${START} 入队，这一版<b>入队时不标记</b>，mark[${START}] 仍是 0。` });
+    while (st.head < st.queue.length) {
+      const u = st.queue[st.head++];
+      const again = st.mark[u] === 1;
+      st.mark[u] = 1;
+      st.visits[u]++;
+      st.order.push(u);
+      r.snap(st, {
+        cur: u, again,
+        note: again
+          ? `<span class="bad">出队 ${u}：它之前已经访问过，现在又被访问（第 ${st.visits[u]} 次）。</span>`
+          : `出队 <b>${u}</b>，这时才标记 mark[${u}] = 1 并访问。检查邻居 ${adj[u].join('、')}。`,
+      });
+      adj[u].forEach(w => {
+        if (!st.mark[w]) {
+          const dup = st.queue.indexOf(w, st.head) !== -1;
+          st.queue.push(w);
+          let note = dup
+            ? `<span class="bad">mark[${w}] 还是 0 → 入队。可 ${w} 已经在队列里了：重复入队！</span>`
+            : `mark[${w}] = 0 → ${w} 入队（仍不标记）。`;
+          if (st.queue.length > V && !overflowNoted) {
+            overflowNoted = true;
+            note += `<span class="bad">这是第 ${st.queue.length} 个元素，V = ${V} 格的数组已经越界。</span>`;
+          }
+          r.snap(st, { cur: u, check: { u, w, kind: dup ? 'dup' : 'add' }, added: st.queue.length - 1, again, note });
+        } else {
+          r.snap(st, { cur: u, check: { u, w, kind: 'seen' }, again, note: `mark[${w}] = 1 → 跳过。` });
+        }
+      });
+    }
+    const many = IDS.filter(v => st.visits[v] > 1).map(v => `${v} 被访问 ${st.visits[v]} 次`).join('，');
+    r.snap(st, {
+      final: true,
+      note: `<span class="bad">结束。输出 ${st.order.join(' ')}：${many}；队列一共写入 ${st.queue.length} 个元素，超过 V = ${V}。</span>` +
+        '把标记移到入队时即可修正。',
+    });
+    return r.frames;
+  }
+
+  const sameEdge = (e, a, b) => (e.u === a && e.v === b) || (e.u === b && e.v === a);
+
+  function render(f) {
+    const pending = new Map();
+    f.queue.slice(f.head).forEach(v => pending.set(v, (pending.get(v) || 0) + 1));
+
+    const nodeCls = id => {
+      if (f.final && f.mode === 'ok') return 'lv' + f.dist[id];
+      if (f.check && f.check.w === id) return f.check.kind === 'dup' ? 'bad' : 'warn';
+      if (id === f.cur) return f.again ? 'bad' : 'active';
+      if (f.mode === 'bad' && (f.visits[id] > 1 || (pending.get(id) || 0) > 1 || (f.mark[id] && pending.has(id)))) return 'bad';
+      if (pending.has(id)) return 'visited';
+      if (f.mark[id] || f.visits[id]) return 'done';
+      return '';
+    };
+    const edgeCls = e => {
+      if (f.check && sameEdge(e, f.check.u, f.check.w)) return f.check.kind === 'dup' ? 'bad' : 'active';
+      if (f.mode === 'ok') {
+        const isTree = [e.u, e.v].some(x => f.parent[x] && sameEdge(e, f.parent[x], x));
+        if (isTree) return 'tree';
+      }
+      return f.final ? 'dim' : '';
+    };
+    const svg = K.graph({ nodes: NODES, edges: EDGES.map(([u, v]) => ({ u, v })) }, {
+      nodeCls,
+      edgeCls,
+      badge: id => {
+        if (f.mode === 'ok') return f.dist[id] == null ? '' : 'd=' + f.dist[id];
+        return f.visits[id] ? '×' + f.visits[id] : '';
+      },
+    });
+
+    const cap = Math.max(V, f.queue.length);
+    const slots = [];
+    for (let k = 0; k < cap; k++) slots.push(k < f.queue.length ? f.queue[k] : '');
+    const tail = f.queue.length;
+    const queueHtml = K.cells(slots, {
+      idx: true,
+      ptr: k => (k === f.head && k === tail ? 'h=t' : k === f.head ? 'head' : k === tail ? 'tail' : ''),
+      cls: (val, k) => {
+        if (k >= V) return 'bad';
+        if (f.cur && k === f.head - 1) return f.again ? 'bad' : 'active';
+        if (k < f.head) return 'dim';
+        if (k === f.added) return f.check && f.check.kind === 'dup' ? 'bad' : 'warn';
+        if (k < tail) return 'visited';
+        return '';
+      },
+    });
+
+    const markHtml = K.cells(IDS.map(v => f.mark[v]), {
+      idx: IDS,
+      cls: (val, k) => {
+        const v = IDS[k];
+        if (f.check && f.check.w === v) return f.check.kind === 'dup' ? 'bad' : 'warn';
+        if (v === f.cur) return f.again ? 'bad' : 'active';
+        if (!f.mark[v]) return '';
+        if (f.mode === 'ok' && pending.has(v)) return 'visited';
+        return 'done';
+      },
+    });
+
+    const seen = new Set();
+    const orderHtml = f.order.length
+      ? f.order.map(v => {
+        const dup = seen.has(v);
+        seen.add(v);
+        return `<b${dup ? ' class="dup"' : ''}>${K.esc(v)}</b>`;
+      }).join('')
+      : '（空）';
+
+    stage.innerHTML =
+      '<div class="bf">' +
+        `<div class="bf-graph">${svg}</div>` +
+        '<div class="bf-info">' +
+          `<div class="bf-row"><span class="lab">队列</span>${queueHtml}</div>` +
+          `<div class="bf-row"><span class="lab">mark</span>${markHtml}</div>` +
+        '</div>' +
+        `<div class="bf-order">访问顺序：${orderHtml}</div>` +
+      '</div>';
+  }
+
+  const MODES = {
+    ok: { label: '入队即标记', build: buildCorrect },
+    bad: { label: '出队才标记（错误）', build: buildWrong },
+  };
+  let current = 'ok';
+  const controls = document.getElementById('controls');
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = {};
+  Object.keys(MODES).forEach(key => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = MODES[key].label;
+    if (key === current) b.classList.add('active');
+    b.addEventListener('click', () => {
+      if (key === current) return;
+      current = key;
+      Object.keys(buttons).forEach(k => buttons[k].classList.toggle('active', k === key));
+      player.load(MODES[key].build());
+    });
+    buttons[key] = b;
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: MODES[current].build(), render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

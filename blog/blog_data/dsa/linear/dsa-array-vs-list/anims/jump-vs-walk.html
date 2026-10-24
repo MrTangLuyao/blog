@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数组一步到位，链表顺着走</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .race { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+  .row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; padding: 0 4px; }
+  .row-head .name { font-weight: 600; }
+  .row-head .cnt { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row-head .cnt b { color: var(--accent); font-size: 15px; }
+  .race .cells { flex-wrap: nowrap; gap: 3px; padding: 18px 2px 22px; }
+  .race .cells .cell, .chain .cell { min-width: 34px; height: 34px; padding: 0 4px; font-size: 13px; }
+  .chain { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; row-gap: 22px; padding: 6px 2px 22px; }
+  .chain .lw { display: inline-flex; align-items: center; }
+  .chain .arr { display: inline-block; width: 14px; text-align: center; color: var(--muted); font-size: 12px; }
+  .chain .tag { font-size: 11px; color: var(--muted); }
+  .chain .tag.head { color: var(--blue); font-weight: 700; margin-right: 2px; }
+  .pick .val { font-variant-numeric: tabular-nums; color: var(--text); font-size: 13px; }
+  @media (max-width: 600px) {
+    .race .cells { gap: 2px; padding: 15px 2px 18px; }
+    .race .cells .cell { min-width: 0; flex: 1 1 0; padding: 0; height: 28px; font-size: 11px; border-radius: 5px; }
+    .race .cells .cell .idx { font-size: 9px; top: -15px; }
+    .race .cells .cell .ptr { font-size: 9px; bottom: -17px; }
+    .chain { row-gap: 18px; padding: 4px 0 18px; }
+    .chain .cell { min-width: 28px; height: 28px; font-size: 11px; padding: 0 2px; border-radius: 5px; }
+    .chain .cell .ptr { font-size: 9px; bottom: -16px; }
+    .chain .arr { width: 11px; font-size: 10px; }
+  }
+  @media (max-width: 420px) {
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">数组一步到位，链表只能顺着 next 走</div>
+<div class="controls pick" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>p 当前所在 / 正在比较</span>
+  <span><i style="background: rgba(217,119,87,0.30)"></i>这一轮的 mid</span>
+  <span><i style="background: var(--blue)"></i>走过 / 比较过</span>
+  <span><i style="background: var(--green)"></i>取到 / 找到</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  const A = [3, 8, 12, 17, 21, 26, 30, 34, 39, 43, 47, 52, 58, 61, 66];
+  const N = A.length;
+
+  function blank() {
+    return { aCls: Array(N).fill(''), aPtr: {}, lCls: Array(N).fill(''), lPtr: {} };
+  }
+  function snap(o) {   // deep-enough copy so later steps do not change earlier frames
+    return { aCls: o.aCls.slice(), aPtr: Object.assign({}, o.aPtr), lCls: o.lCls.slice(), lPtr: Object.assign({}, o.lPtr) };
+  }
+
+  // <algo> mode 1: take the element at index k
+  function kthFrames(k) {
+    const frames = [];
+    const s = blank();
+    let hops = 0;
+    const push = (aCnt, lCnt, note) => frames.push(Object.assign(snap(s), { aCnt, lCnt, note }));
+
+    push('取址 <b>0</b> 次', 'p 移动 <b>0</b> 次',
+      '同样 15 个数：数组连续存放，链表结点各自 malloc、靠 next 串起来。要取下标 k = <b>' + k + '</b> 的元素' +
+      (k === (N - 1) / 2 ? '（正中间那个）' : '') + '，链表结点也从 0 数起。');
+
+    s.aCls[k] = 'found'; s.aPtr[k] = 'A[' + k + ']';
+    push('取址 <b>1</b> 次', 'p 移动 <b>0</b> 次',
+      '数组：地址 = A + ' + k + ' × 4 字节 = A + ' + (4 * k) + '，算一次就取到 A[' + k + '] = <b>' + A[k] + '</b>。');
+
+    let p = 0;                                   // p = head
+    s.lCls[p] = p === k ? 'found' : 'active'; s.lPtr[p] = 'p';
+    push('取址 <b>1</b> 次', 'p 移动 <b>0</b> 次',
+      '链表：手里只有 head。<code>p = head</code>，指向第 0 个结点' +
+      (p === k ? '，正是要取的，得到 <b>' + A[p] + '</b>。' : '，离目标还有 ' + k + ' 个结点。'));
+
+    while (p < k) {
+      s.lCls[p] = 'visited'; delete s.lPtr[p];
+      p++; hops++;                               // p = p->next
+      s.lCls[p] = p === k ? 'found' : 'active'; s.lPtr[p] = 'p';
+      push('取址 <b>1</b> 次', 'p 移动 <b>' + hops + '</b> 次',
+        '<code>p = p-&gt;next</code>（第 ' + hops + ' 次），p 到第 ' + p + ' 个结点' +
+        (p === k ? '，取到 <b>' + A[p] + '</b>。' : '。'));
+    }
+
+    push('取址 <b>1</b> 次', 'p 移动 <b>' + hops + '</b> 次',
+      '数组 <b>1</b> 步，链表 <b>' + hops + '</b> 步。取第 k 个：数组 O(1)，链表 O(k)，最坏 O(n)；' +
+      '取中间元素要走约 n/2 步，仍是 O(n)。');
+    return frames;
+  }
+
+  // mode 2: binary search order on a sorted list; p can only move forward via next
+  function binFrames(t) {
+    const key = A[t];
+    const frames = [];
+    const s = blank();
+    let lo = 0, hi = N - 1, p = 0, loNode = 0, hops = 0, cmp = 0;
+    const walked = new Set([0]);
+    const comparedMids = [];
+
+    function paint(mid, phase) {   // phase: 'walk' | 'cmp' | 'found' | 'idle'
+      for (let i = 0; i < N; i++) {
+        let c = '';
+        if (i < lo || i > hi) c = 'dim';
+        if (comparedMids.includes(i)) c = 'visited';
+        if (i === mid) c = phase === 'found' ? 'found' : phase === 'cmp' ? 'active' : 'compare';
+        s.aCls[i] = c;
+        let d = walked.has(i) ? 'visited' : '';
+        if (i === mid && phase !== 'idle') d = 'compare';
+        if (i === p) d = phase === 'found' ? 'found' : 'active';
+        s.lCls[i] = d;
+      }
+      s.aPtr = {}; s.lPtr = {};
+      if (mid != null && phase !== 'idle') s.aPtr[mid] = 'mid';
+      const tags = {};
+      const add = (i, x) => { tags[i] = tags[i] ? tags[i] + '/' + x : x; };
+      add(loNode, 'lo');
+      if (mid != null && phase !== 'idle' && mid !== p) add(mid, 'mid');
+      add(p, 'p');
+      s.lPtr = tags;
+    }
+    const push = note => frames.push(Object.assign(snap(s), {
+      aCnt: '比较 <b>' + cmp + '</b> 次 · 每次直接取址',
+      lCnt: '比较 <b>' + cmp + '</b> 次 · p 移动 <b>' + hops + '</b> 次',
+      note }));
+
+    paint(null, 'idle');
+    push('有序链表能二分吗？目标 key = <b>' + key + '</b>（第 ' + t + ' 个，从 0 数起）。两边按同样的二分顺序比较：' +
+      '数组用下标直接取 A[mid]，链表只能让 p 顺着 next 走到 mid；另存的指针 lo 指向范围里第一个结点。');
+
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / 2);
+      let reset = false;
+      if (p > mid) { p = loNode; reset = true; }   // p cannot go back: restart from the saved lo node
+      paint(mid, 'walk');
+      push('范围 [' + lo + ', ' + hi + ']，mid = ' + lo + ' + (' + hi + ' − ' + lo + ')/2 = <b>' + mid + '</b>。' +
+        '数组一次算出 A[' + mid + '] 的地址；链表' +
+        (reset ? '的 p 不能往回走，只能退回保存过的 lo 结点（第 ' + lo + ' 个），' : '的 p 在第 ' + p + ' 个结点，') +
+        (mid - p === 0 ? '已经在 mid 上。' : '还要走 ' + (mid - p) + ' 步。'));
+      while (p < mid) {
+        p++; hops++; walked.add(p);              // p = p->next
+        paint(mid, 'walk');
+        push('<code>p = p-&gt;next</code>，到第 ' + p + ' 个结点（累计移动 ' + hops + ' 次）' +
+          (p === mid ? '，到达 mid。' : '。'));
+      }
+      cmp++;
+      if (A[mid] === key) {
+        comparedMids.push(mid);
+        paint(mid, 'found');
+        push('比较 ' + key + ' = ' + A[mid] + '，<span class="ok">找到</span>。');
+        break;
+      }
+      paint(mid, 'cmp');
+      if (key < A[mid]) {
+        push('比较 ' + key + ' &lt; ' + A[mid] + '，留左半 [' + lo + ', ' + (mid - 1) + ']。下一个 mid 在 p 的左边。');
+        comparedMids.push(mid);
+        hi = mid - 1;
+      } else {
+        push('比较 ' + key + ' &gt; ' + A[mid] + '，留右半 [' + (mid + 1) + ', ' + hi + ']，p 从这里接着往后走。');
+        comparedMids.push(mid);
+        lo = mid + 1; loNode = mid + 1;          // lo node = the node after mid
+      }
+    }
+
+    const more = hops - t;
+    paint(t, 'found');
+    push('两边都比较 <b>' + cmp + '</b> 次；链表的 p 共移动 <b>' + hops + '</b> 次。顺序查找走到第 ' + t + ' 个结点' +
+      (more > 0 ? '只要移动 ' + t + ' 次，二分反而<b>多走 ' + more + ' 次</b>。' : '也是移动 ' + t + ' 次，二分<b>一步也没少走</b>。') +
+      '从 head 走到目标的步数省不掉，二分只省比较、不省移动。');
+    return frames;
+  }
+  // </algo>
+
+  function chain(cls, ptr) {
+    let h = '<div class="chain"><span class="tag head">head</span><span class="arr">→</span>';
+    for (let i = 0; i < N; i++) {
+      const c = ['cell', cls[i] || ''].filter(Boolean).join(' ');
+      h += '<span class="lw"><span class="' + c + '">' + A[i] +
+        (ptr[i] ? '<span class="ptr">' + K.esc(ptr[i]) + '</span>' : '') + '</span>' +
+        '<span class="arr">→</span>' + (i === N - 1 ? '<span class="tag">NULL</span>' : '') + '</span>';
+    }
+    return h + '</div>';
+  }
+
+  function render(f) {
+    stage.innerHTML = '<div class="race">' +
+      '<div class="row-head"><span class="name">数组 A[0..14]</span><span class="cnt">' + f.aCnt + '</span></div>' +
+      K.cells(A, { idx: true, cls: (v, i) => f.aCls[i], ptr: f.aPtr }) +
+      '<div class="row-head"><span class="name">链表</span><span class="cnt">' + f.lCnt + '</span></div>' +
+      chain(f.lCls, f.lPtr) +
+      '</div>';
+  }
+
+  // mode + position picker (own row above the player controls)
+  let mode = 'kth';
+  let pos = 7;
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const kBtn = document.createElement('button');
+  kBtn.type = 'button'; kBtn.textContent = '取第 k 个'; kBtn.className = 'active';
+  const bBtn = document.createElement('button');
+  bBtn.type = 'button'; bBtn.textContent = '链表上二分';
+  group.appendChild(kBtn); group.appendChild(bBtn);
+  const lab = document.createElement('span');
+  lab.className = 'label';
+  const slider = document.createElement('input');
+  slider.type = 'range'; slider.min = '0'; slider.max = String(N - 1); slider.value = String(pos);
+  slider.setAttribute('aria-label', '位置');
+  const val = document.createElement('span');
+  val.className = 'val';
+  [group, lab, slider, val].forEach(el => pick.appendChild(el));
+
+  function build() { return mode === 'kth' ? kthFrames(pos) : binFrames(pos); }
+  function label() {
+    lab.textContent = mode === 'kth' ? '下标' : '目标';
+    val.innerHTML = mode === 'kth' ? 'k = <b>' + pos + '</b>' : 'key = <b>' + A[pos] + '</b>';
+  }
+
+  const player = AnimKit.player({ frames: build(), render, interval: 1000 });
+  label();
+
+  function reload() { label(); player.load(build()); }
+  slider.addEventListener('input', () => { pos = +slider.value; reload(); });
+  function setMode(m) {
+    mode = m;
+    kBtn.classList.toggle('active', m === 'kth');
+    bBtn.classList.toggle('active', m === 'bin');
+    pos = m === 'kth' ? 7 : 13;
+    slider.value = String(pos);
+    reload();
+  }
+  kBtn.addEventListener('click', () => setMode('kth'));
+  bBtn.addEventListener('click', () => setMode('bin'));
+})();
+</script>
+</body>
+</html>

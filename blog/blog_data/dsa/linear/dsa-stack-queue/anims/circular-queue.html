@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>循环数组队列</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .cq { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .cq-ring { flex: 1 1 auto; min-height: 0; position: relative; }
+  .cq-ring > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .cq-mem { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; }
+  .cq-mem .cells { padding: 17px 2px 20px; gap: 4px; }
+  .cq-state { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+  .cq-state b { color: var(--text); }
+  .seg { stroke: #5a5a59; stroke-width: 1.5; fill: rgba(255, 255, 255, 0.03); transition: fill 0.25s, stroke 0.25s; }
+  .seg.live { fill: rgba(74, 222, 128, 0.18); stroke: rgba(74, 222, 128, 0.7); }
+  .seg.put { fill: var(--accent); stroke: var(--accent); }
+  .seg.out { fill: rgba(56, 189, 248, 0.22); stroke: var(--blue); }
+  .seg.warn { fill: rgba(251, 191, 36, 0.20); stroke: var(--yellow); }
+  .rv { font-size: 16px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: central; }
+  .rv.stale { fill: var(--muted); opacity: 0.5; }
+  .ri { font-size: 10px; fill: var(--muted); text-anchor: middle; dominant-baseline: central; }
+  .rc { font-size: 13px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: central; }
+  .rc.sub { font-size: 11px; font-weight: 500; fill: var(--muted); }
+  .rh, .rt { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .rh { fill: var(--blue); }
+  .rt { fill: var(--accent); }
+  .wall { stroke: var(--red); stroke-width: 3; stroke-linecap: round; }
+</style>
+</head>
+<body>
+<div class="title">循环数组队列：head、tail 取模前进</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: rgba(74, 222, 128, 0.7)"></i>队列中的元素</span>
+  <span><i style="background: var(--accent)"></i>刚入队</span>
+  <span><i style="background: var(--blue)"></i>刚出队</span>
+  <span><i style="background: #5a5a59"></i>已出队的旧值</span>
+  <span><i style="background: var(--yellow)"></i>用不上的空位</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+  const CAP = 5;
+
+  const SCENARIOS = [
+    { key: 'wrap', label: '循环数组', wrap: true, ops: [10, 20, 30, 'd', 'd', 40, 50, 60, 70, 80, 'd', 'd', 'd', 'd', 'd', 'd'] },
+    { key: 'flat', label: '不回绕', wrap: false, ops: [10, 20, 30, 'd', 'd', 40, 50, 60] },
+  ];
+
+  // <algo> run the queue for real and record a frame after every operation
+  function build(sc) {
+    const wrap = sc.wrap;
+    const a = new Array(CAP).fill(null);
+    let head = 0, tail = 0, count = 0, staleSaid = false;
+    const frames = [];
+    const step = i => (wrap ? (i + 1) % CAP : i + 1);
+    const stepText = i => (wrap ? '(' + i + ' + 1) % ' + CAP + ' = ' + step(i) : i + ' + 1 = ' + step(i));
+    const liveSet = () => {
+      const s = new Set();
+      for (let i = 0; i < count; i++) s.add(wrap ? (head + i) % CAP : head + i);
+      return s;
+    };
+    const snap = (mark, note) => {
+      if (wrap ? tail !== (head + count) % CAP : tail !== head + count) throw new Error('invariant broken');
+      frames.push({ a: a.slice(), head, tail, count, live: liveSet(), mark, wrap, note });
+    };
+
+    snap({}, '容量 cap = ' + CAP + ' 的空队列：head = tail = 0，count = 0。' +
+      (wrap ? '下标每次加 1 后<b>对 ' + CAP + ' 取模</b>，走到末尾就回到 0。' : '下标<b>只加 1</b>，走到末尾不回到 0。'));
+
+    for (const op of sc.ops) {
+      if (op === 'd') {
+        if (count === 0) {
+          snap({}, 'dequeue()：count = 0，<span class="bad">队列为空，返回失败</span>。');
+          continue;
+        }
+        const at = head, x = a[at];
+        const txt = stepText(at);
+        head = step(head);
+        count--;
+        const mark = {}; mark[at] = 'out';
+        let note = 'dequeue() 取出 a[' + at + '] = <b>' + x + '</b>，head = ' + txt + '，count = ' + count + '。';
+        if (wrap && at === CAP - 1) note += 'head 也<b>绕回了开头</b>。';
+        if (!staleSaid) { note += '<br>a[' + at + '] 里的 ' + x + ' 没有被擦掉，只是不再属于队列；不移动任何元素，O(1)。'; staleSaid = true; }
+        if (count === 0) note += '<br>队列空了：<b>head = tail = ' + head + '</b>，和满的时候一样，只能靠 count = 0 判断。';
+        snap(mark, note);
+      } else {
+        const full = wrap ? count === CAP : tail === CAP;
+        if (full) {
+          const mark = {};
+          let note;
+          if (wrap) {
+            note = 'enqueue(' + op + ')：count = ' + CAP + ' = cap，<span class="bad">队列已满，拒绝</span>。';
+          } else {
+            for (let k = 0; k < head; k++) mark[k] = 'warn';
+            note = 'enqueue(' + op + ')：tail = ' + tail + '，已越过最后一个下标，<span class="bad">放不下了</span>。' +
+              '可下标 0…' + (head - 1) + ' 空着：队列里只有 ' + count + ' 个元素，前面的位置却再也用不上。<br>' +
+              '要么出队时整体左移（O(n)），要么让下标走到末尾后回到 0：这就是循环数组。';
+          }
+          snap(mark, note);
+          continue;
+        }
+        const at = tail;
+        const txt = stepText(at);
+        a[at] = op;
+        tail = step(tail);
+        count++;
+        const mark = {}; mark[at] = 'put';
+        let note = 'enqueue(<b>' + op + '</b>)：写入 a[' + at + ']，tail = ' + txt + '，count = ' + count + '。';
+        if (wrap && at === CAP - 1) note += 'tail <b>绕回了开头</b>，下标 0 的旧值会被覆盖。';
+        if (!wrap && tail === CAP) note += 'tail 已经越过最后一个下标。';
+        if (wrap && count === CAP) note += '<br>count = cap，队列<b>满了</b>：此时 <b>head = tail = ' + head + '</b>。';
+        snap(mark, note);
+      }
+    }
+    return frames;
+  }
+
+  // <render>
+  const P = (cx, cy, rad, deg) => [cx + rad * Math.cos(deg * Math.PI / 180), cy + rad * Math.sin(deg * Math.PI / 180)];
+  const f1 = v => Math.round(v * 10) / 10;
+
+  function ring(f) {
+    const cx = 150, cy = 140, R = 96, r = 54, slice = 360 / CAP, gap = 1.2;
+    let segs = '', texts = '', labels = '';
+    for (let k = 0; k < CAP; k++) {
+      const a0 = -90 + k * slice + gap, a1 = -90 + (k + 1) * slice - gap, mid = -90 + (k + 0.5) * slice;
+      const [x1, y1] = P(cx, cy, R, a0), [x2, y2] = P(cx, cy, R, a1), [x3, y3] = P(cx, cy, r, a1), [x4, y4] = P(cx, cy, r, a0);
+      const big = slice > 180 ? 1 : 0;
+      const d = 'M' + f1(x1) + ',' + f1(y1) + ' A' + R + ',' + R + ' 0 ' + big + ' 1 ' + f1(x2) + ',' + f1(y2) +
+        ' L' + f1(x3) + ',' + f1(y3) + ' A' + r + ',' + r + ' 0 ' + big + ' 0 ' + f1(x4) + ',' + f1(y4) + ' Z';
+      const cls = f.mark[k] || (f.live.has(k) ? 'live' : '');
+      segs += '<path class="seg ' + cls + '" d="' + d + '"/>';
+      const [vx, vy] = P(cx, cy, (R + r) / 2, mid);
+      const v = f.a[k];
+      if (v !== null) texts += '<text class="rv' + (f.live.has(k) || f.mark[k] === 'put' || f.mark[k] === 'out' ? '' : ' stale') + '" x="' + f1(vx) + '" y="' + f1(vy) + '"' + (f.mark[k] === 'put' ? ' style="fill:#fff"' : '') + '>' + v + '</text>';
+      const [ix, iy] = P(cx, cy, r - 11, mid);
+      texts += '<text class="ri" x="' + f1(ix) + '" y="' + f1(iy) + '">' + k + '</text>';
+      const hHere = f.head === k, tHere = f.tail === k;
+      if (hHere) {
+        const [hx, hy] = P(cx, cy, R + 17, tHere ? mid - slice * 0.22 : mid);
+        labels += '<text class="rh" x="' + f1(hx) + '" y="' + f1(hy) + '">head</text>';
+      }
+      if (tHere) {
+        const [tx, ty] = P(cx, cy, R + 17, hHere ? mid + slice * 0.22 : mid);
+        labels += '<text class="rt" x="' + f1(tx) + '" y="' + f1(ty) + '">tail</text>';
+      }
+    }
+    let wall = '';
+    if (!f.wrap) {
+      const [wx1, wy1] = P(cx, cy, r - 4, -90), [wx2, wy2] = P(cx, cy, R + 6, -90);
+      wall = '<line class="wall" x1="' + f1(wx1) + '" y1="' + f1(wy1) + '" x2="' + f1(wx2) + '" y2="' + f1(wy2) + '"/>';
+    }
+    const center = '<text class="rc" x="' + cx + '" y="' + (cy - 7) + '">count = ' + f.count + '</text>' +
+      '<text class="rc sub" x="' + cx + '" y="' + (cy + 11) + '">cap = ' + CAP + '</text>';
+    return '<svg viewBox="0 0 300 280" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
+      segs + wall + texts + labels + center + '</svg>';
+  }
+
+  function render(f) {
+    const mem = K.cells(f.a.map(v => (v === null ? '' : v)), {
+      idx: true,
+      cls: (v, k) => {
+        const m = f.mark[k];
+        if (m === 'put') return 'active';
+        if (m === 'out') return 'visited';
+        if (m === 'warn') return 'warn';
+        if (f.live.has(k)) return 'done';
+        return f.a[k] !== null ? 'dim' : '';
+      },
+      ptr: k => [f.head === k ? 'head' : '', f.tail === k ? 'tail' : ''].filter(Boolean).join(' '),
+    });
+    const tailText = !f.wrap && f.tail === CAP ? '<b>' + f.tail + '</b>（越过末尾）' : '<b>' + f.tail + '</b>';
+    const state = '<div class="cq-state">head = <b>' + f.head + '</b> · tail = ' + tailText + ' · count = <b>' + f.count + '</b></div>';
+    stage.innerHTML = '<div class="cq"><div class="cq-ring">' + ring(f) + '</div><div class="cq-mem">' + mem + state + '</div></div>';
+  }
+
+  // scenario switch, added before the player's own buttons
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = SCENARIOS.map((sc, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    if (i === 0) b.classList.add('active');
+    group.appendChild(b);
+    return b;
+  });
+  controls.appendChild(group);
+
+  const player = AnimKit.player({ frames: build(SCENARIOS[0]), render, interval: 1500 });
+  buttons.forEach((b, i) => b.addEventListener('click', () => {
+    buttons.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    player.load(build(SCENARIOS[i]));
+  }));
+})();
+</script>
+</body>
+</html>

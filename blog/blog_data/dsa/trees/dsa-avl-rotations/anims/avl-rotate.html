@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AVL 插入与旋转</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">AVL 插入与旋转</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--blue)"></i>查找路径</span>
+  <span><i style="background: var(--accent)"></i>新插入</span>
+  <span><i style="background: var(--red)"></i>失衡结点</span>
+  <span><i style="background: var(--yellow)"></i>孩子 / 孙子</span>
+  <span><i style="background: var(--green)"></i>旋转后新接的指针</span>
+  <span><i style="background: transparent; border: 1px dashed var(--red)"></i>将被改掉的指针</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const SCENARIOS = [
+    { label: '综合', keys: [10, 20, 30, 25, 28, 27] },
+    { label: 'LL', keys: [50, 30, 70, 20, 40, 10] },
+    { label: 'RR', keys: [20, 10, 40, 30, 50, 60] },
+    { label: 'LR', keys: [30, 10, 40, 5, 20, 25] },
+    { label: 'RL', keys: [20, 10, 40, 30, 50, 25] },
+    { label: '1…7', keys: [1, 2, 3, 4, 5, 6, 7] },
+  ];
+
+  // <algo>
+  function mkNode(k) { return { key: k, left: null, right: null, h: 1 }; }
+  const H = t => (t ? t.h : 0);
+  const fix = t => { t.h = 1 + Math.max(H(t.left), H(t.right)); };
+  const BF = t => H(t.left) - H(t.right);
+  const sgn = b => (b > 0 ? '+' + b : b < 0 ? '−' + (-b) : '0');
+  const side = d => (d === 'L' ? '左' : '右');
+  function clone(t) { return t ? { key: t.key, h: t.h, left: clone(t.left), right: clone(t.right) } : null; }
+  function isAVL(t) { return !t || (Math.abs(BF(t)) <= 1 && isAVL(t.left) && isAVL(t.right)); }
+  function show(t) { return !t ? '-' : (t.left || t.right) ? t.key + '(' + show(t.left) + ',' + show(t.right) + ')' : String(t.key); }
+  const SIGN = { LL: [2, 1], RR: [-2, -1], LR: [2, -1], RL: [-2, 1] };
+
+  // dir 'R' = right rotation at top (left child moves up), 'L' = left rotation
+  function plan(top, dir) {
+    const up = dir === 'R' ? top.left : top.right;
+    const mid = dir === 'R' ? up.right : up.left;
+    return { top, dir, up, mid };
+  }
+  function rotate(p) {
+    if (p.dir === 'R') { p.top.left = p.mid; p.up.right = p.top; }
+    else { p.top.right = p.mid; p.up.left = p.top; }
+    fix(p.top); fix(p.up);
+  }
+
+  function build(keys) {
+    const frames = [];
+    let root = null;
+    let rotations = 0;
+    const snap = (hl, edges, note) => frames.push({ tree: clone(root), hl, edges, note });
+    snap({}, {}, '空树。依次插入 <b>' + keys.join(', ') + '</b>。');
+
+    for (const k of keys) {
+      const path = [], dirs = [], steps = [];
+      let cur = root;
+      while (cur) {
+        path.push(cur);
+        if (k < cur.key) { steps.push(k + ' &lt; ' + cur.key + ' 往左'); dirs.push('L'); cur = cur.left; }
+        else { steps.push(k + ' &gt; ' + cur.key + ' 往右'); dirs.push('R'); cur = cur.right; }
+      }
+      const before = path.map(p => p.h);
+      const n = mkNode(k);
+      const last = path[path.length - 1];
+      if (!last) root = n;
+      else if (dirs[dirs.length - 1] === 'L') last.left = n;
+      else last.right = n;
+      for (let i = path.length - 1; i >= 0; i--) fix(path[i]);
+
+      let ui = -1;
+      for (let i = path.length - 1; i >= 0; i--) if (Math.abs(BF(path[i])) === 2) { ui = i; break; }
+
+      const hl = {}, edges = {};
+      path.forEach((p, i) => { hl[p.key] = 'visited'; edges[p.key + '-' + (path[i + 1] || n).key] = 'visited'; });
+      hl[k] = 'active';
+      let note = '插入 <b>' + k + '</b>：' + (last
+        ? steps.join('，') + '，挂在 ' + last.key + ' 的' + side(dirs[dirs.length - 1]) + '边。'
+        : '树是空的，它就是根。');
+
+      if (ui < 0) {
+        if (last) note += '往回更新高度，路径上的 BF 都在 −1…+1 之内，<span class="ok">不用旋转</span>。';
+        snap(hl, edges, note);
+        if (!isAVL(root)) throw new Error('not AVL after ' + k);
+        continue;
+      }
+      snap(hl, edges, note + '往回更新高度……');
+
+      const z = path[ui], y = path[ui + 1], x = path[ui + 2] || n;
+      const d1 = dirs[ui], d2 = dirs[ui + 1];
+      const name = d1 + d2;
+      const outside = d1 === d2;
+      if (BF(z) !== SIGN[name][0] || BF(y) !== SIGN[name][1]) throw new Error('case/BF mismatch at ' + z.key);
+
+      // the rotations this case needs, as [node to rotate at, direction, its parent]
+      const opp = d => (d === 'L' ? 'R' : 'L');
+      const todo = outside
+        ? [[z, opp(d1), path[ui - 1] || null]]
+        : [[y, opp(d2), z], [z, opp(d1), path[ui - 1] || null]];
+
+      const checked = path.slice(ui).reverse().map(p => p.key + ' 是 ' + sgn(BF(p))).join('，');
+      // ancestors above the lowest unbalanced node that are also ±2 (they recover by themselves)
+      const above = path.slice(0, ui).filter(p => Math.abs(BF(p)) === 2).map(p => p.key + ' 是 ' + sgn(BF(p)));
+      const aboveTxt = above.length
+        ? '再往上 ' + above.join('，') + '，也失衡，但只修最低的 ' + z.key + '，修好后上面自动恢复。'
+        : '';
+      const p0 = plan(todo[0][0], todo[0][1]);
+      const e2 = {};
+      if (todo[0][2]) e2[todo[0][2].key + '-' + p0.top.key] = 'bad';
+      e2[p0.top.key + '-' + p0.up.key] = 'bad';
+      if (p0.mid) e2[p0.up.key + '-' + p0.mid.key] = 'bad';
+      snap({ [z.key]: 'bad', [y.key]: 'warn', [x.key]: 'warn' }, e2,
+        '往回检查 BF：' + checked + '。第一个失衡的是 <b>' + z.key + '</b>（' + sgn(BF(z)) + '），它的' + side(d1) +
+        '孩子 ' + y.key + ' 是 ' + sgn(BF(y)) + ' → <b>' + name + '</b>，' +
+        (outside ? '外侧，在 ' + z.key + ' ' + (d1 === 'L' ? '右旋' : '左旋') + '一次。'
+                 : '内侧，先在 ' + y.key + ' ' + (d2 === 'L' ? '右旋' : '左旋') + '，再在 ' + z.key + ' ' + (d1 === 'L' ? '右旋' : '左旋') + '。') +
+        aboveTxt);
+
+      todo.forEach(([top, dir, parent], step) => {
+        const p = plan(top, dir);
+        rotate(p);
+        rotations++;
+        if (!parent) root = p.up;
+        else if (parent.left === top) parent.left = p.up;
+        else parent.right = p.up;
+        const pi = parent ? path.indexOf(parent) : -1;
+        for (let i = pi; i >= 0; i--) fix(path[i]);
+
+        const e = {};
+        if (parent) e[parent.key + '-' + p.up.key] = 'done';
+        e[p.up.key + '-' + top.key] = 'done';
+        if (p.mid) e[top.key + '-' + p.mid.key] = 'done';
+        const midTxt = p.mid ? (p.mid.left || p.mid.right ? '（以 ' + p.mid.key + ' 为根）' : '（' + p.mid.key + '）') : '（空）';
+        let msg = '在 <b>' + top.key + '</b> 处' + (dir === 'R' ? '右旋' : '左旋') + '：' + p.up.key + ' 上来，' + top.key +
+          ' 成为它的' + (dir === 'R' ? '右' : '左') + '孩子；' + p.up.key + ' 原来的' + (dir === 'R' ? '右' : '左') + '子树' + midTxt +
+          '改挂为 ' + top.key + ' 的' + (dir === 'R' ? '左' : '右') + '子树。';
+        const isLast = step === todo.length - 1;
+        let h2;
+        if (!isLast) {
+          msg += '现在是 <b>' + d1 + d1 + '</b> 形状，' + z.key + ' 仍是 ' + sgn(BF(z)) + '。';
+          if (Math.abs(BF(p.up)) === 2) msg += p.up.key + ' 此刻也是 ' + sgn(BF(p.up)) + '：这是双旋转的中间状态，下一次旋转后就消失。';
+          h2 = { [z.key]: 'bad', [p.up.key]: 'warn', [top.key]: 'warn' };
+        } else {
+          if (H(p.up) !== before[ui]) throw new Error('subtree height not restored at ' + k);
+          msg += ui === 0
+            ? '<span class="ok">恢复平衡</span>：树高回到插入前的 ' + before[ui] + '。'
+            : '<span class="ok">恢复平衡</span>：这棵子树高度回到插入前的 ' + before[ui] + '，上面的结点不用再动。';
+          h2 = { [z.key]: 'done', [y.key]: 'done', [x.key]: 'done' };
+        }
+        snap(h2, e, msg);
+      });
+      if (!isAVL(root)) throw new Error('not AVL after ' + k);
+    }
+    snap({}, {}, '全部插入完成：共旋转 <b>' + rotations + '</b> 次，树高 ' + H(root) + '。');
+    frames.result = show(root);
+    frames.rotations = rotations;
+    return frames;
+  }
+  // </algo>
+
+  let mode = 'bf';
+  function render(f) {
+    stage.innerHTML = K.tree(f.tree, {
+      cls: nd => f.hl[nd.key] || '',
+      edgeCls: (a, b) => f.edges[a.key + '-' + b.key] || '',
+      badge: nd => (mode === 'bf' ? sgn(BF(nd)) : 'h=' + nd.h),
+    });
+  }
+
+  function group(items, onPick) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach((it, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      if (it.title) b.title = it.title;
+      if (i === 0) b.classList.add('active');
+      b.addEventListener('click', () => {
+        g.querySelectorAll('button').forEach(o => o.classList.remove('active'));
+        b.classList.add('active');
+        onPick(it);
+      });
+      g.appendChild(b);
+    });
+    controls.appendChild(g);
+  }
+
+  let player = null;
+  group(SCENARIOS.map(s => ({ label: s.label, title: '插入 ' + s.keys.join(', '), keys: s.keys })),
+    s => player.load(build(s.keys)));
+  group([{ label: 'BF', m: 'bf', title: '结点上方显示平衡因子' }, { label: '高度', m: 'h', title: '结点上方显示高度' }],
+    it => { mode = it.m; player.go(player.index()); });
+
+  player = AnimKit.player({ frames: build(SCENARIOS[0].keys), render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

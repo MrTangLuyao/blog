@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拓扑排序逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .ts { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; }
+  .ts-graph { flex: 1 1 auto; min-height: 0; position: relative; }
+  .ts-graph > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .ts-info { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .ts-row { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; min-height: 26px; }
+  .ts-row .chip { display: inline-block; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--blue); background: rgba(56, 189, 248, 0.14); color: #d6f2ff; font-weight: 700; font-size: 12px; }
+  .ts-row .chip.top { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+  .ts-row .sep { color: var(--muted); font-size: 11px; }
+  .ts-row .empty { font-style: italic; }
+  .ts-row .cells { padding: 4px 2px; gap: 3px; }
+  .ts-row .cell { min-width: 32px; height: 30px; font-size: 13px; }
+  .ts-badge { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; fill: var(--muted); }
+  .ts-badge.hot { fill: var(--yellow); }
+  .ts-badge.fin { fill: var(--green); }
+  .controls .btn-group { margin-right: 2px; }
+</style>
+</head>
+<body>
+<div class="title">拓扑排序逐步演示</div>
+<div class="controls" id="controls"></div>
+<div class="legend" id="legend"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const legend = document.getElementById('legend');
+
+  // bp = where the small label sits next to the node: n / s / e / w
+  const GRAPHS = {
+    lecture: {
+      label: '课上的图',
+      nodes: [
+        { id: 'A', x: 40, y: 40, bp: 'n' }, { id: 'C', x: 200, y: 40, bp: 'n' }, { id: 'D', x: 360, y: 40, bp: 'n' },
+        { id: 'B', x: 40, y: 200, bp: 's' }, { id: 'E', x: 300, y: 200, bp: 's' },
+      ],
+      edges: [['A', 'C'], ['A', 'E'], ['B', 'D'], ['B', 'E'], ['C', 'D'], ['C', 'E']],
+      // the lecture took B (not A) and later E (not D): the later letter each time
+      pick: cand => cand[cand.length - 1],
+      tieNote: '这里照课上的选法取字母靠后的',
+      orderWord: '字母',
+    },
+    exam: {
+      label: '2016 考题',
+      nodes: [
+        { id: '1', x: 40, y: 40, bp: 'n' }, { id: '3', x: 200, y: 40, bp: 'n' }, { id: '5', x: 360, y: 40, bp: 'n' },
+        { id: '2', x: 40, y: 200, bp: 's' }, { id: '4', x: 200, y: 140, bp: 's' }, { id: '6', x: 360, y: 200, bp: 's' },
+      ],
+      edges: [['1', '2'], ['1', '4'], ['2', '3'], ['2', '4'], ['2', '6'], ['3', '5'], ['4', '6'], ['5', '4'], ['5', '6']],
+      pick: cand => cand[0],
+      tieNote: '',
+      orderWord: '编号从小到大的',
+    },
+  };
+
+  function prep(g) {
+    const ids = g.nodes.map(n => n.id).slice().sort();
+    const adj = new Map(ids.map(v => [v, []]));
+    g.edges.forEach(([u, v]) => adj.get(u).push(v));
+    adj.forEach(list => list.sort());
+    return { ids, adj };
+  }
+  const arrowList = (u, vs) => vs.map(v => u + '→' + v).join('、');
+
+  /* ── mode 1: source removal ── */
+  function buildSR(g) {
+    const { ids, adj } = prep(g);
+    const indeg = {};
+    ids.forEach(v => { indeg[v] = 0; });
+    g.edges.forEach(([, v]) => { indeg[v]++; });
+    const out = new Set(), order = [], gone = new Set();   // gone = removed edges "u>v"
+    const frames = [];
+    const zeros = () => ids.filter(v => !out.has(v) && indeg[v] === 0);
+    function snap(extra) {
+      frames.push(Object.assign({
+        indeg: Object.assign({}, indeg), out: [...out], order: order.slice(), gone: [...gone],
+        cand: zeros(), cur: null, act: [], hot: [], final: false,
+      }, extra));
+    }
+    snap({
+      note: '第 1 步：数每个顶点的<b>入度</b>（指向它的边数），写在顶点旁。' +
+        `入度为 0 的 ${zeros().join('、')} 是源点。`,
+    });
+    while (order.length < ids.length) {
+      const cand = zeros();
+      const u = g.pick(cand);
+      out.add(u);
+      order.push(u);
+      let note = cand.length > 1
+        ? `入度为 0 的有 ${cand.join('、')}，选哪个都合法；${g.tieNote}，<b>输出 ${u}</b>。`
+        : `只有 ${u} 的入度为 0，<b>输出 ${u}</b>。`;
+      if (!adj.get(u).length) note += `${u} 没有出边，入度都不用改。`;
+      snap({ cur: u, note, cand: cand.filter(v => v !== u) });
+      if (adj.get(u).length) {
+        const parts = [], hot = [];
+        adj.get(u).forEach(v => {
+          parts.push(`${v} ${indeg[v]}→${indeg[v] - 1}`);
+          indeg[v]--;
+          hot.push(v);
+          gone.add(u + '>' + v);
+        });
+        const fresh = hot.filter(v => indeg[v] === 0);
+        snap({
+          cur: u, act: adj.get(u).map(v => u + '>' + v), hot,
+          note: `删掉 ${u} 的出边 ${arrowList(u, adj.get(u))}：入度 ${parts.join('，')}。` +
+            (fresh.length ? `${fresh.join('、')} 成了新的源点。` : '没有新的源点。'),
+        });
+      }
+    }
+    snap({
+      final: true,
+      note: `<span class="ok">图删空了。</span>删除顺序 <b>${order.join(' ')}</b> 就是一个拓扑序：所有边都从左指向右。`,
+    });
+    return frames;
+  }
+
+  /* ── mode 2: DFS, reverse finishing order ── */
+  function buildDFS(g) {
+    const { ids, adj } = prep(g);
+    const visited = {}, fin = {}, stack = [], L = [], visitOrder = [], tree = [];
+    let finCount = 0;
+    const frames = [];
+    function snap(extra) {
+      frames.push(Object.assign({
+        visited: Object.assign({}, visited), fin: Object.assign({}, fin), stack: stack.slice(),
+        L: L.slice(), tree: tree.slice(), cur: null, edge: null, justDone: null, final: false,
+      }, extra));
+    }
+    snap({ note: `从 ${ids[0]} 开始 DFS，邻居按${g.orderWord}顺序检查。完成一个 explore 就把顶点插到链表 L 的<b>表头</b>。` });
+    function explore(v, parent) {
+      visited[v] = true;
+      stack.push(v);
+      visitOrder.push(v);
+      if (parent) tree.push(parent + '>' + v);
+      snap({
+        cur: v, edge: parent ? parent + '>' + v : null,
+        note: (parent ? `${parent}→${v}：${v} 未访问，递归调用 <b>explore(${v})</b>。`
+          : `主循环：${v} 未访问，调用 <b>explore(${v})</b>。`) + `${v} 是第 ${visitOrder.length} 个被访问的。`,
+      });
+      adj.get(v).forEach(w => {
+        if (visited[w]) {
+          snap({
+            cur: v, edge: v + '>' + w,
+            note: `${v}→${w}：${w} 已访问${fin[w] ? '（而且已完成）' : ''}，跳过。`,
+          });
+        } else {
+          explore(w, v);
+        }
+      });
+      stack.pop();
+      fin[v] = ++finCount;
+      L.unshift(v);
+      snap({
+        cur: v, justDone: v,
+        note: `${v} 的出边都看完了，<b>explore(${v}) 结束</b>（第 ${finCount} 个完成），` +
+          `${v} 插到 L 表头：L = ${L.join(' ')}。`,
+      });
+    }
+    ids.forEach(v => { if (!visited[v]) explore(v, null); });
+    const finOrder = ids.slice().sort((a, b) => fin[a] - fin[b]);
+    const pos = {};
+    visitOrder.forEach((v, i) => { pos[v] = i; });
+    const back = g.edges.filter(([u, v]) => pos[u] > pos[v]);
+    snap({
+      final: true,
+      note: `<span class="ok">结束。</span>完成顺序 ${finOrder.join(' ')}，倒过来就是 L = <b>${L.join(' ')}</b>，一个拓扑序。` +
+        (back.length ? `访问顺序 ${visitOrder.join(' ')} 却<span class="bad">不是</span>（${back[0][0]}→${back[0][1]} 指向左边）。` : ''),
+    });
+    return frames;
+  }
+
+  function badgeAt(n) {
+    const d = 30;
+    if (n.bp === 's') return [n.x, n.y + d];
+    if (n.bp === 'e') return [n.x + d, n.y];
+    if (n.bp === 'w') return [n.x - d, n.y];
+    return [n.x, n.y - d];
+  }
+  function withBadges(svg, g, text, cls) {
+    let extra = '';
+    g.nodes.forEach(n => {
+      const t = text(n.id);
+      if (t == null || t === '') return;
+      const [x, y] = badgeAt(n);
+      extra += `<text class="ts-badge ${cls(n.id) || ''}" x="${x}" y="${y}">${K.esc(t)}</text>`;
+    });
+    return svg.replace(/<\/svg>$/, extra + '</svg>');
+  }
+
+  function render(f) {
+    const g = GRAPHS[graphKey];
+    const spec = { directed: true, nodes: g.nodes, edges: g.edges.map(([u, v]) => ({ u, v })) };
+    let svg, rows;
+    if (mode === 'sr') {
+      const out = new Set(f.out), cand = new Set(f.cand), gone = new Set(f.gone), act = new Set(f.act);
+      svg = K.graph(spec, {
+        pad: 40,
+        nodeCls: id => (id === f.cur ? 'active' : out.has(id) ? 'done' : cand.has(id) ? 'visited' : ''),
+        edgeCls: e => {
+          const k = e.u + '>' + e.v;
+          if (f.final) return '';
+          return act.has(k) ? 'active' : gone.has(k) ? 'dim' : '';
+        },
+      });
+      svg = withBadges(svg, g, id => (out.has(id) && id !== f.cur ? '' : String(f.indeg[id])),
+        id => (f.hot.indexOf(id) >= 0 ? 'hot' : ''));
+      const chips = f.cand.length
+        ? f.cand.map(v => `<span class="chip">${K.esc(v)}</span>`).join('')
+        : '<span class="empty">（无）</span>';
+      rows =
+        `<div class="ts-row"><span>入度为 0、待输出：</span>${chips}</div>` +
+        `<div class="ts-row"><span>输出：</span>${f.order.length ? K.cells(f.order, { cls: v => (v === f.cur ? 'active' : 'done') }) : '<span class="empty">（空）</span>'}</div>`;
+    } else {
+      const onStack = new Set(f.stack), tree = new Set(f.tree);
+      svg = K.graph(spec, {
+        pad: 40,
+        nodeCls: id => {
+          if (id === f.justDone) return 'found';
+          if (id === f.cur) return 'active';
+          if (f.fin[id]) return 'done';
+          if (onStack.has(id)) return 'visited';
+          return '';
+        },
+        edgeCls: e => {
+          const k = e.u + '>' + e.v;
+          if (k === f.edge) return 'active';
+          if (tree.has(k)) return f.fin[e.v] ? 'tree' : 'visited';
+          return '';
+        },
+      });
+      svg = withBadges(svg, g, id => (f.fin[id] ? '#' + f.fin[id] : ''), () => 'fin');
+      const st = f.stack.length
+        ? f.stack.map((v, k) => `<span class="chip${k === f.stack.length - 1 ? ' top' : ''}">${K.esc(v)}</span>`).join('<span class="sep">›</span>')
+        : '<span class="empty">（空）</span>';
+      rows =
+        `<div class="ts-row"><span>调用栈（底 → 顶）：</span>${st}</div>` +
+        `<div class="ts-row"><span>L（表头在左）：</span>${f.L.length ? K.cells(f.L, { cls: v => (v === f.justDone ? 'active' : 'done') }) : '<span class="empty">（空）</span>'}</div>`;
+    }
+    stage.innerHTML = `<div class="ts"><div class="ts-graph">${svg}</div><div class="ts-info">${rows}</div></div>`;
+  }
+
+  const LEGENDS = {
+    sr: '<span><i style="background: var(--accent)"></i>当前输出 / 删除的边</span>' +
+      '<span><i style="background: var(--blue)"></i>入度为 0</span>' +
+      '<span><i style="background: var(--green)"></i>已输出</span>' +
+      '<span><i style="background: var(--yellow)"></i>入度刚减 1</span>',
+    dfs: '<span><i style="background: var(--accent)"></i>当前 explore</span>' +
+      '<span><i style="background: var(--blue)"></i>在调用栈上</span>' +
+      '<span><i style="background: var(--green)"></i>已完成（#k = 第 k 个完成）</span>',
+  };
+
+  let mode = 'sr', graphKey = 'lecture';
+  const build = () => (mode === 'sr' ? buildSR : buildDFS)(GRAPHS[graphKey]);
+  const controls = document.getElementById('controls');
+  function group(options, get, set) {
+    const box = document.createElement('div');
+    box.className = 'btn-group';
+    const btns = {};
+    Object.keys(options).forEach(key => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = options[key];
+      b.classList.toggle('active', key === get());
+      b.addEventListener('click', () => {
+        if (key === get()) return;
+        set(key);
+        Object.keys(btns).forEach(k => btns[k].classList.toggle('active', k === key));
+        legend.innerHTML = LEGENDS[mode];
+        player.load(build());
+      });
+      btns[key] = b;
+      box.appendChild(b);
+    });
+    controls.appendChild(box);
+  }
+  group({ sr: '源点删除', dfs: 'DFS 完成顺序' }, () => mode, k => { mode = k; });
+  group({ lecture: GRAPHS.lecture.label, exam: GRAPHS.exam.label }, () => graphKey, k => { graphKey = k; });
+  legend.innerHTML = LEGENDS[mode];
+
+  const player = window.AnimKit.player({ frames: build(), render, interval: 1400 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k-d 树：建树与范围查找</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">k-d 树：建树与范围查找</div>
+<div class="controls" id="controls"></div>
+<div class="legend" id="legend"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+  const legend = document.getElementById('legend');
+
+  const PTS = [['A', 8, 5], ['B', 2, 6], ['C', 9, 3], ['D', 5, 2], ['E', 6, 9],
+    ['F', 3, 4], ['G', 7, 1], ['H', 3, 8], ['I', 7, 7]].map(([n, x, y]) => ({ n, x, y }));
+  const MODES = [
+    { label: '建树', kind: 'build' },
+    { label: '查询 Q1', kind: 'query', name: '查询框 Q1', box: { xlo: 1, xhi: 4, ylo: 3, yhi: 7 } },
+    { label: '查询 Q2', kind: 'query', name: '查询框 Q2', box: { xlo: 6, xhi: 10, ylo: 0, yhi: 4 } },
+    { label: '横条', kind: 'query', name: '横条查询', box: { xlo: 0, xhi: 10, ylo: 3, yhi: 4 } },
+  ];
+  const WHOLE = { x0: 0, x1: 10, y0: 0, y1: 10 };
+
+  // <algo> 真实的 k-d 树：深度为偶数比 x，奇数比 y；小于往左，大于等于往右
+  const AX = d => (d % 2 === 0 ? 'x' : 'y');
+  const pt = p => `${p.n}(${p.x},${p.y})`;
+  const mk = (p, d, cell) => ({ key: p.n, p, d, cell, left: null, right: null });
+  function clone(t) { return t ? { key: t.key, p: t.p, d: t.d, cell: t.cell, left: clone(t.left), right: clone(t.right) } : null; }
+  function nodesOf(t, out = []) { if (t) { out.push(t); nodesOf(t.left, out); nodesOf(t.right, out); } return out; }
+  const height = t => (t ? 1 + Math.max(height(t.left), height(t.right)) : 0);
+  // 把 cell 按分割线切成两半
+  function half(cell, a, v, left) {
+    const c = Object.assign({}, cell);
+    if (a === 'x') { if (left) c.x1 = v; else c.x0 = v; }
+    else if (left) c.y1 = v; else c.y0 = v;
+    return c;
+  }
+  function insert(root, p) {
+    if (!root) return mk(p, 0, WHOLE);
+    let t = root;
+    for (;;) {
+      const a = AX(t.d), left = p[a] < t.p[a];
+      const next = left ? t.left : t.right;
+      if (!next) { t[left ? 'left' : 'right'] = mk(p, t.d + 1, half(t.cell, a, t.p[a], left)); return root; }
+      t = next;
+    }
+  }
+  function fullTree() { let r = null; PTS.forEach(p => { r = insert(r, p); }); return r; }
+
+  function base(o) {
+    return Object.assign({ tree: null, cls: {}, edges: {}, hi: null, pending: null, box: null, shade: [], note: '' }, o);
+  }
+
+  function buildFrames() {
+    const frames = [];
+    let root = null;
+    frames.push(base({ note: '依次插入 ' + PTS.map(pt).join(' ') + '。<br>深度为偶数的结点比 <b>x</b>，奇数的比 <b>y</b>；小于往左，大于等于往右。' }));
+    for (const p of PTS) {
+      if (!root) {
+        root = insert(null, p);
+        frames.push(base({ tree: clone(root), cls: { [p.n]: 'active' }, hi: p.n,
+          note: `${pt(p)} 成为根（深度 0，比 x）：画竖线 x = ${p.x}，平面被分成左右两半。` }));
+        continue;
+      }
+      const path = [];
+      let t = root;
+      while (t) {
+        const a = AX(t.d), v = t.p[a], left = p[a] < v;
+        const cls = {}, edges = {};
+        path.forEach((q, i) => { cls[q.key] = 'visited'; if (i) edges[path[i - 1].key + '-' + q.key] = 'visited'; });
+        if (path.length) edges[path[path.length - 1].key + '-' + t.key] = 'visited';
+        cls[t.key] = 'active';
+        frames.push(base({ tree: clone(root), cls, edges, hi: t.key, pending: p,
+          note: `插入 ${pt(p)}：在 ${pt(t.p)} 比 <b>${a}</b>：${p[a]} ${left ? '&lt;' : '≥'} ${v}，往${left ? '左' : '右'}。` }));
+        path.push(t);
+        t = left ? t.left : t.right;
+      }
+      insert(root, p);
+      const parent = path[path.length - 1];
+      const n = parent.left && parent.left.key === p.n ? parent.left : parent.right;
+      const side = parent.left === n ? '左' : '右';
+      const cls = {}, edges = {};
+      path.forEach((q, i) => { cls[q.key] = 'visited'; if (i) edges[path[i - 1].key + '-' + q.key] = 'visited'; });
+      cls[p.n] = 'active';
+      edges[parent.key + '-' + p.n] = 'active';
+      const a = AX(n.d), c = n.cell;
+      frames.push(base({ tree: clone(root), cls, edges, hi: p.n,
+        note: `${p.n} 成为 ${parent.key} 的${side}孩子，深度 ${n.d}，比 <b>${a}</b>：只在它的格子（x ${c.x0}–${c.x1}，y ${c.y0}–${c.y1}）里画${a === 'x' ? '竖线 x' : '横线 y'} = ${p[a]}。` }));
+    }
+    frames.push(base({ tree: clone(root),
+      note: `插入完成，树高 ${height(root)}。每个结点管一个矩形格子，它的分割线把格子一分为二：左子树在小于一侧，右子树在大于等于一侧。` }));
+    return frames;
+  }
+
+  function queryFrames(m) {
+    const root = fullTree();
+    const box = m.box;
+    const frames = [];
+    const cls = {}, edges = {}, shade = [], found = [], pruned = [];
+    let visited = 0;
+    const snap = (cur, note) => {
+      const c = Object.assign({}, cls);
+      if (cur) c[cur] = 'active';
+      frames.push(base({ tree: root, cls: c, edges: Object.assign({}, edges), hi: cur, box, shade: shade.slice(), note }));
+    };
+    const prune = (t, c) => {
+      edges[t.key + '-' + c.key] = 'bad';
+      nodesOf(c).forEach(n => { cls[n.key] = 'dim'; pruned.push(n.key); });
+      shade.push(c.cell);
+    };
+    snap(null, `${m.name}：x ∈ [${box.xlo}, ${box.xhi}]，y ∈ [${box.ylo}, ${box.yhi}]。<br>每到一个结点：先看这个点在不在框内，再拿框和它的分割线比较，决定往哪边走。`);
+    (function go(t, parent) {
+      if (!t) return;
+      visited++;
+      if (parent) edges[parent.key + '-' + t.key] = 'visited';
+      const inb = box.xlo <= t.p.x && t.p.x <= box.xhi && box.ylo <= t.p.y && t.p.y <= box.yhi;
+      const a = AX(t.d), v = t.p[a], lo = box[a + 'lo'], hi = box[a + 'hi'];
+      const goL = lo < v, goR = hi >= v;
+      let s = `<b>${pt(t.p)}</b> ` + (inb ? '<span class="ok">在框内，报告</span>。' : '不在框内。');
+      if (!t.left && !t.right) s += '叶子，返回。';
+      else {
+        s += `比 ${a}：框的 ${a} 范围 [${lo}, ${hi}]，分割值 ${v}；`;
+        if (goL && goR) s += `${lo} &lt; ${v} ≤ ${hi}，框跨过分割线，两边都查。`;
+        else if (goL) s += `${hi} &lt; ${v}，框全在小于一侧，只走左边` + (t.right ? `，<span class="bad">剪掉右子树 {${nodesOf(t.right).map(n => n.key).join(', ')}}</span>。` : '（右边为空）。');
+        else s += `${lo} ≥ ${v}，框全在大于等于一侧，只走右边` + (t.left ? `，<span class="bad">剪掉左子树 {${nodesOf(t.left).map(n => n.key).join(', ')}}</span>。` : '（左边为空）。');
+      }
+      if (!goL && t.left) prune(t, t.left);
+      if (!goR && t.right) prune(t, t.right);
+      snap(t.key, s);
+      cls[t.key] = inb ? 'found' : 'visited';
+      if (inb) found.push(t.key);
+      if (goL) go(t.left, t);
+      if (goR) go(t.right, t);
+    })(root, null);
+    let end = `完成：报告 <span class="ok">${found.join('、') || '（无）'}</span>；访问 ${visited} 个结点` +
+      (pruned.length ? `，${pruned.join('、')} 从未被看过。` : '，一个也没剪掉。');
+    if (m.name === '横条查询') end += '<br>只按 x 切的树遇到横条无从剪枝（框在 x 方向盖住全部），9 个点都得看。';
+    snap(null, end);
+    return frames;
+  }
+
+  const framesFor = m => (m.kind === 'build' ? buildFrames() : queryFrames(m));
+
+  // ─── 绘制 ───
+  const COL = { active: '#d97757', visited: '#38bdf8', found: '#4ade80' };
+  function plane(f, ox, oy) {
+    const U = 24, L = 26, T = 10;
+    const X = x => ox + L + x * U, Y = y => oy + T + (10 - y) * U;
+    let s = `<rect x="${X(0)}" y="${Y(10)}" width="${10 * U}" height="${10 * U}" fill="rgba(255,255,255,0.02)"/>`;
+    let g = '';
+    for (let k = 1; k < 10; k++) g += `<line x1="${X(k)}" y1="${Y(0)}" x2="${X(k)}" y2="${Y(10)}"/><line x1="${X(0)}" y1="${Y(k)}" x2="${X(10)}" y2="${Y(k)}"/>`;
+    s += `<g stroke="rgba(255,255,255,0.06)" stroke-width="1">${g}</g>`;
+    f.shade.forEach(c => { s += `<rect x="${X(c.x0)}" y="${Y(c.y1)}" width="${(c.x1 - c.x0) * U}" height="${(c.y1 - c.y0) * U}" fill="rgba(248,113,113,0.16)"/>`; });
+    if (f.box) {
+      const b = f.box;
+      s += `<rect x="${X(b.xlo)}" y="${Y(b.yhi)}" width="${(b.xhi - b.xlo) * U}" height="${(b.yhi - b.ylo) * U}" fill="rgba(251,191,36,0.10)" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6 4"/>`;
+    }
+    const nodes = nodesOf(f.tree);
+    let lines = '', hot = '';
+    nodes.forEach(n => {
+      const c = n.cell, a = AX(n.d);
+      const ln = a === 'x'
+        ? `x1="${X(n.p.x)}" y1="${Y(c.y0)}" x2="${X(n.p.x)}" y2="${Y(c.y1)}"`
+        : `x1="${X(c.x0)}" y1="${Y(n.p.y)}" x2="${X(c.x1)}" y2="${Y(n.p.y)}"`;
+      if (n.key === f.hi) hot = `<line ${ln} stroke="#d97757" stroke-width="3.5" stroke-linecap="round"/>`;
+      else lines += `<line ${ln} stroke="rgba(255,255,255,${f.cls[n.key] === 'dim' ? '0.15' : '0.5'})" stroke-width="2"/>`;
+    });
+    s += lines + hot;
+    s += `<rect x="${X(0)}" y="${Y(10)}" width="${10 * U}" height="${10 * U}" fill="none" stroke="rgba(255,255,255,0.32)" stroke-width="1.5"/>`;
+    let ax = '';
+    for (let k = 0; k <= 10; k += 2) ax += `<text x="${X(k)}" y="${Y(0) + 15}" text-anchor="middle">${k}</text><text x="${X(0) - 6}" y="${Y(k) + 4}" text-anchor="end">${k}</text>`;
+    s += `<g fill="#a1a1a0" font-size="11">${ax}</g>`;
+    const inTree = new Set(nodes.map(n => n.key));
+    PTS.forEach(p => {
+      const x = X(p.x), y = Y(p.y), st = f.cls[p.n];
+      let dot, lab = '#e8e8e8', op = 1;
+      if (f.pending && f.pending.n === p.n) { dot = `<circle cx="${x}" cy="${y}" r="7" fill="none" stroke="#fbbf24" stroke-width="2.5"/>`; lab = '#fbbf24'; }
+      else if (!inTree.has(p.n)) { dot = `<circle cx="${x}" cy="${y}" r="4" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>`; lab = '#6b6b6a'; }
+      else {
+        const r = st === 'active' ? 7 : 5;
+        dot = `<circle cx="${x}" cy="${y}" r="${r}" fill="${COL[st] || '#e8e8e8'}"/>`;
+        if (st === 'dim') op = 0.3;
+        if (COL[st]) lab = COL[st];
+      }
+      s += `<g opacity="${op}">${dot}<text x="${x + 8}" y="${y - 7}" fill="${lab}" font-size="13" font-weight="700">${p.n}</text></g>`;
+    });
+    return s;
+  }
+
+  function render(f) {
+    const W = stage.clientWidth || 640, H = stage.clientHeight || 300;
+    const treeSvg = K.tree(f.tree, {
+      key: n => n.key, r: 16, gapX: 38, gapY: 58, pad: 28,
+      cls: n => f.cls[n.key] || '',
+      edgeCls: (a, b) => f.edges[a.key + '-' + b.key] || '',
+      badge: n => AX(n.d) + '=' + n.p[AX(n.d)],
+    });
+    const m = treeSvg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+    const tw = m ? +m[1] : 240, th = m ? +m[2] : 80;
+    const PW = 280, PH = 270, TW = 370, TH = 270, GAP = 14;
+    const stacked = W / H < 0.95;
+    let VW, VH, px, py, tx, ty;
+    if (!stacked) { VW = PW + GAP + TW; VH = Math.max(PH, TH); px = 0; py = 0; tx = PW + GAP; ty = 0; }
+    else { VW = Math.max(PW, TW); VH = PH + GAP + TH; px = (VW - PW) / 2; py = 0; tx = (VW - TW) / 2; ty = PH + GAP; }
+    const sc = Math.min(1, TW / tw, TH / th);
+    const w2 = tw * sc, h2 = th * sc;
+    const inner = treeSvg.replace('<svg ', `<svg x="${tx + (TW - w2) / 2}" y="${ty + 4}" width="${w2}" height="${h2}" `);
+    stage.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${plane(f, px, py)}${inner}</svg>`;
+  }
+
+  const LEGENDS = {
+    build: [['#d97757', '当前结点 / 它的分割线'], ['#38bdf8', '走过的路径'], ['transparent; border: 2px solid #fbbf24', '待插入的点']],
+    query: [['#d97757', '当前结点'], ['#38bdf8', '已访问'], ['#4ade80', '在框内（报告）'], ['rgba(248,113,113,0.5)', '剪掉的区域'], ['transparent; border: 1px dashed #fbbf24', '查询框']],
+  };
+  function setLegend(m) {
+    legend.innerHTML = LEGENDS[m.kind].map(([c, t]) => `<span><i style="background: ${c}"></i>${t}</span>`).join('');
+  }
+
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  let player = null;
+  MODES.forEach((m, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = m.label;
+    if (i === 0) b.classList.add('active');
+    b.addEventListener('click', () => {
+      group.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      setLegend(m);
+      player.load(framesFor(m));
+    });
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+  setLegend(MODES[0]);
+  player = window.AnimKit.player({ frames: framesFor(MODES[0]), render, interval: 1400 });
+})();
+</script>
+</body>
+</html>

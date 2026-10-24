@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>合并两个有序数组</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .rows { display: inline-flex; flex-direction: column; max-width: 100%; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row .tag { flex: 0 0 34px; text-align: right; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .row .cells { justify-content: flex-start; flex-wrap: nowrap; padding: 16px 2px 20px; }
+  .cell .ptr { color: var(--accent); }
+  .stat { text-align: center; font-size: 12px; color: var(--muted); padding-top: 2px; }
+  .stat b { color: var(--text); }
+  @media (max-width: 520px) {
+    .row { gap: 6px; }
+    .row .tag { flex-basis: 28px; font-size: 11px; }
+    .row .cells { gap: 3px; padding: 14px 1px 17px; }
+    .row .cell { min-width: 29px; height: 31px; padding: 0 2px; font-size: 13px; border-radius: 6px; }
+    .row .cell .idx { font-size: 9px; top: -15px; }
+    .row .cell .ptr { font-size: 9px; bottom: -16px; }
+  }
+  @media (max-width: 420px) {
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">合并（merge）：两个有序数组 → 一个有序数组</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  const SCEN = [
+    { label: '课上演示', L: [1, 3, 6, 6, 7, 8], R: [2, 4] },
+    { label: '有相等键', L: [2, 5, 8], R: [1, 5, 6, 9] },
+  ];
+
+  // <algo>
+  const SUB = ['', '₁', '₂', '₃', '₄'];
+  // tag equal keys by their order in the original sequence (L first, then R)
+  function tagged(L, R) {
+    const all = L.concat(R), total = {}, seen = {};
+    all.forEach(k => { total[k] = (total[k] || 0) + 1; });
+    const t = all.map(k => { seen[k] = (seen[k] || 0) + 1; return { k, t: total[k] > 1 ? seen[k] : 0 }; });
+    return { L: t.slice(0, L.length), R: t.slice(L.length) };
+  }
+  const name = x => x.k + SUB[x.t];
+  // one loop iteration per output element, same rule as the C code:
+  // take L[i] when R is used up, or when both remain and L[i] <= R[j]
+  function mergeSteps(L, R) {
+    const steps = [], out = [];
+    let i = 0, j = 0, cmp = 0;
+    for (let k = 0; k < L.length + R.length; k++) {
+      const a = i, b = j;
+      let from, compared = false, tie = false;
+      if (j >= R.length) from = 'L';
+      else if (i >= L.length) from = 'R';
+      else {
+        cmp++; compared = true;
+        tie = L[i].k === R[j].k;
+        from = L[i].k <= R[j].k ? 'L' : 'R';
+      }
+      const x = from === 'L' ? L[i++] : R[j++];
+      out.push(x);
+      steps.push({ from, x, a, b, i, j, cmp, compared, tie, out: out.slice() });
+    }
+    return steps;
+  }
+  // </algo>
+
+  function build(sc) {
+    const { L, R } = tagged(sc.L, sc.R);
+    const m = L.length, n = m + R.length;
+    const frames = [{
+      L, R, i: 0, j: 0, out: [], from: null, cmp: 0,
+      note: 'L 和 R 各自从小到大排好。全体最小的元素一定是 <b>L[0] 或 R[0]</b>：比较两个队首，小的抄进输出。',
+    }];
+    mergeSteps(L, R).forEach(s => {
+      let note;
+      const ptr = s.from === 'L' ? 'i' : 'j';
+      if (s.compared && s.tie) {
+        note = 'L[' + s.a + ']=' + name(L[s.a]) + ' 与 R[' + s.b + ']=' + name(R[s.b]) + ' 相等，<b>取左边的 ' + name(s.x) + '</b>（相等取左才稳定），i 右移';
+      } else if (s.compared) {
+        const x = name(L[s.a]), y = name(R[s.b]);
+        note = '比较 L[' + s.a + ']=' + x + ' 与 R[' + s.b + ']=' + y + '：' +
+          (s.from === 'L' ? x + ' ≤ ' + y : y + ' &lt; ' + x) + '，取 <b>' + name(s.x) + '</b>，' + ptr + ' 右移';
+      } else {
+        const other = s.from === 'L' ? 'R' : 'L';
+        const idx = s.from === 'L' ? s.a : s.b;
+        note = other + ' 已用完，直接抄 ' + s.from + '[' + idx + ']=<b>' + name(s.x) + '</b>，不用比较';
+      }
+      frames.push({ L, R, i: s.i, j: s.j, out: s.out, from: s.from, cmp: s.cmp, note });
+    });
+    const last = frames[frames.length - 1];
+    frames.push({
+      L, R, i: m, j: n - m, out: last.out, from: null, cmp: last.cmp, end: true,
+      note: '完成：比较 <b>' + last.cmp + '</b> 次，复制 ' + n + ' 次。长度 ' + m + ' 和 ' + (n - m) +
+        ' 的两个数组，比较次数在 min = ' + Math.min(m, n - m) + ' 与 m + k − 1 = ' + (n - 1) + ' 之间；每轮常数操作，合并是 Θ(n)。',
+    });
+    return frames;
+  }
+
+  function render(f) {
+    const nL = f.L.length, nR = f.R.length, n = nL + nR;
+    const both = f.i < nL && f.j < nR;
+    // taken elements fade out; the two fronts about to be compared are highlighted
+    const row = (vals, p, mark) => K.cells(vals.map(name), {
+      idx: true,
+      cls: (v, k) => k < p ? 'dim' : (k === p && both ? 'compare' : ''),
+      ptr: p < vals.length && !f.end ? { [p]: mark } : {},
+    });
+    const outVals = f.out.map(name);
+    while (outVals.length < n) outVals.push('');
+    const rowOut = K.cells(outVals, {
+      idx: true,
+      cls: (v, k) => k >= f.out.length ? '' : (k === f.out.length - 1 && f.from ? 'active' : 'done'),
+      ptr: f.out.length < n ? { [f.out.length]: 'k' } : {},
+    });
+    stage.innerHTML = '<div class="rows">' +
+      '<div class="row"><span class="tag">L</span>' + row(f.L, f.i, 'i') + '</div>' +
+      '<div class="row"><span class="tag">R</span>' + row(f.R, f.j, 'j') + '</div>' +
+      '<div class="row"><span class="tag">输出</span>' + rowOut + '</div>' +
+      '<div class="stat">比较 <b>' + f.cmp + '</b> 次 · 已输出 <b>' + f.out.length + '</b> / ' + n + '</div>' +
+      '</div>';
+  }
+
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = SCEN.map((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    if (k === 0) b.className = 'active';
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: build(SCEN[0]), render, interval: 1500 });
+  btns.forEach((b, k) => b.addEventListener('click', () => {
+    btns.forEach((o, j) => o.classList.toggle('active', j === k));
+    player.load(build(SCEN[k]));
+  }));
+})();
+</script>
+</body>
+</html>

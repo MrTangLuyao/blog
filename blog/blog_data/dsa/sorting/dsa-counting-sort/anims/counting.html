@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>计数排序</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .hd { fill: var(--text); font-size: 13px; font-weight: 600; dominant-baseline: central; }
+  .lab { fill: var(--muted); font-size: 12px; font-weight: 600; dominant-baseline: central; }
+  .ix { fill: var(--muted); font-size: 11px; font-weight: 500; text-anchor: middle; dominant-baseline: central; }
+  .ptr { fill: var(--blue); font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .k-node.old rect { fill: transparent; stroke-dasharray: 4 3; }
+  .k-node.old text { fill: var(--muted); font-weight: 500; }
+  .bucket { fill: none; stroke: rgba(255, 255, 255, 0.35); stroke-width: 2; stroke-linejoin: round; }
+  .bucket.hot { stroke: var(--accent); stroke-width: 2.5; fill: rgba(217, 119, 87, 0.12); }
+  .tile { fill: rgba(56, 189, 248, 0.45); stroke: var(--blue); stroke-width: 1; transition: opacity 0.3s; }
+  .tile.new { fill: var(--accent); stroke: var(--accent); }
+  .tile.used { opacity: 0.18; }
+  .cnt { fill: var(--text); font-size: 15px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .cnt.zero { fill: var(--muted); }
+  .cnt.hot { fill: var(--accent); }
+  .val { fill: var(--muted); font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .st { fill: #9fdcf7; font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .st.hot { fill: var(--accent); }
+  @media (max-width: 420px) {
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">计数排序（distribution counting）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前元素 / 当前桶</span>
+  <span><i style="background: rgba(56, 189, 248, 0.45); border: 1px solid var(--blue)"></i>已计数</span>
+  <span><i style="background: rgba(74, 222, 128, 0.22); border: 1px solid var(--green)"></i>已写入结果</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const esc = K.esc;
+  const stage = document.getElementById('stage');
+
+  /* ── state snapshot helper ── */
+  function snap(F, s, extra) {
+    F.push(Object.assign({
+      mode: s.mode,
+      a: s.a.slice(),                       // top row (A)
+      aCls: s.aCls.slice(),
+      aPtr: -1, aPtrText: 'i',
+      lo: s.lo,
+      cnt: s.cnt.slice(),
+      tiles: s.tiles.map(t => t.slice()),
+      bHot: -1,
+      cntHot: -1,
+      start: s.start ? s.start.slice() : null,
+      stHot: -1,
+      out: s.out ? s.out.slice() : null,
+      outCls: s.outCls ? s.outCls.slice() : null,
+      head: '',
+      note: '',
+    }, extra));
+  }
+  const fresh = tiles => tiles.forEach(t => t.forEach((x, k) => { if (x === 'new') t[k] = ''; }));
+
+  /* ── mode 1: integers 1..9, count then rewrite A (the C code in the post) ── */
+  function buildInts() {
+    const A = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3];
+    const lo = 1, hi = 9, KK = hi - lo + 1, n = A.length;
+    const s = {
+      mode: 'ints', lo,
+      a: A.map(String), aCls: A.map(() => ''),
+      cnt: new Array(KK).fill(0), tiles: Array.from({ length: KK }, () => []),
+    };
+    const F = [];
+    snap(F, s, {
+      head: '准备：K = 9 个计数器',
+      note: '读数都是 1…9 的整数：K = hi − lo + 1 = 9。<code>calloc</code> 开 9 个计数器并置 0，值 v 记在 <code>count[v − 1]</code>。',
+    });
+    for (let i = 0; i < n; i++) {
+      const v = A[i] - lo;
+      fresh(s.tiles);
+      s.cnt[v]++;
+      s.tiles[v].push('new');
+      s.aCls = A.map((_, k) => (k < i ? 'visited' : k === i ? 'active' : ''));
+      snap(F, s, {
+        aPtr: i, bHot: v, cntHot: v,
+        head: '1. 计数：i = ' + i + '，元素比较 0 次',
+        note: 'A[' + i + '] = ' + A[i] + ' → <code>count[' + v + ']++</code>，count[' + v + '] 变成 <b>' + s.cnt[v] +
+          '</b>。直接用值当下标，没有和任何元素比较。',
+      });
+    }
+    fresh(s.tiles);
+    s.aCls = A.map(() => 'visited');
+    const zeros = [];
+    s.cnt.forEach((c, v) => { if (c === 0) zeros.push(v + lo); });
+    snap(F, s, {
+      head: '计数完成：总和 = ' + s.cnt.reduce((x, y) => x + y, 0) + ' = n',
+      note: '一趟扫描 n = ' + n + ' 次。各值出现次数 ' + s.cnt.join(' ') + '；值 ' + zeros.join('、') +
+        ' 没出现，计数器仍是 0。原来的 A 已不再需要，下面从头覆盖它。',
+    });
+    let pos = 0;
+    s.aCls = A.map(() => 'old');
+    for (let v = 0; v < KK; v++) {
+      if (s.cnt[v] === 0) {
+        snap(F, s, {
+          aPtr: pos, aPtrText: 'pos', bHot: v,
+          head: '2. 写回：v = ' + (v + lo) + '，pos = ' + pos,
+          note: 'count[' + v + '] = 0：值 ' + (v + lo) + ' 一次也不写。空桶也要检查一次，所以写回的代价是 <b>O(n + K)</b>。',
+        });
+        continue;
+      }
+      for (let c = 0; c < s.cnt[v]; c++) {
+        s.a[pos] = String(v + lo);
+        s.aCls[pos] = 'active';
+        s.tiles[v][c] = 'used';
+        snap(F, s, {
+          aPtr: pos, aPtrText: 'pos', bHot: v,
+          head: '2. 写回：v = ' + (v + lo) + '，pos = ' + pos,
+          note: 'count[' + v + '] = ' + s.cnt[v] + '：写 A[' + pos + '] = ' + (v + lo) +
+            '（第 ' + (c + 1) + ' / ' + s.cnt[v] + ' 个），<code>pos++</code>。',
+        });
+        s.aCls[pos] = 'done';
+        pos++;
+      }
+    }
+    snap(F, s, {
+      head: '完成：元素比较 0 次',
+      note: '<span class="ok">A = ' + s.a.join(' ') + '</span>。计数 n = ' + n + ' 步，检查 K = ' + KK +
+        ' 个计数器，写回 n = ' + n + ' 次：Θ(n + K)，输入怎么排列都一样。',
+    });
+    return F;
+  }
+
+  /* ── mode 2: records, counts → start positions, scan left to right (stable) ── */
+  function buildRecs() {
+    const R = [[3, 'a'], [1, 'b'], [3, 'c'], [2, 'd'], [1, 'e'], [2, 'f']];
+    const lo = 1, hi = 3, KK = hi - lo + 1, n = R.length;
+    const lab = r => r[0] + r[1];
+    const s = {
+      mode: 'recs', lo,
+      a: R.map(lab), aCls: R.map(() => ''),
+      cnt: new Array(KK).fill(0), tiles: Array.from({ length: KK }, () => []),
+      start: null,
+      out: new Array(n).fill(null), outCls: new Array(n).fill(''),
+    };
+    const F = [];
+    snap(F, s, {
+      head: '准备：6 条记录，键 1…3',
+      note: '数字是键，字母代表记录的其余部分，也记下原始顺序 a→f。结果要写进另一个数组 out，因为记录不能凭计数“造”出来。',
+    });
+    for (let i = 0; i < n; i++) {
+      const v = R[i][0] - lo;
+      fresh(s.tiles);
+      s.cnt[v]++;
+      s.tiles[v].push('new');
+      s.aCls = R.map((_, k) => (k < i ? 'visited' : k === i ? 'active' : ''));
+      snap(F, s, {
+        aPtr: i, bHot: v, cntHot: v,
+        head: '1. 计数：i = ' + i,
+        note: 'A[' + i + '] = ' + lab(R[i]) + '，键 ' + R[i][0] + ' → <code>count[' + v + ']++</code> = <b>' + s.cnt[v] + '</b>。',
+      });
+    }
+    fresh(s.tiles);
+    s.aCls = R.map(() => '');
+    s.start = new Array(KK).fill(null);
+    let sum = 0;
+    for (let v = 0; v < KK; v++) {
+      s.start[v] = sum;
+      const before = sum;
+      sum += s.cnt[v];
+      snap(F, s, {
+        bHot: v, stHot: v,
+        head: '2. 起始位置：sum = ' + sum,
+        note: '键 ' + (v + lo) + ' 前面共有 ' + before + ' 条更小的记录，所以从 <b>out[' + before + ']</b> 开始放：start[' + v + '] = ' + before +
+          '；sum += count[' + v + '] → ' + sum + '。',
+      });
+    }
+    const used = new Array(KK).fill(0);
+    for (let i = 0; i < n; i++) {
+      const v = R[i][0] - lo;
+      const p = s.start[v];
+      s.out[p] = lab(R[i]);
+      s.outCls = s.outCls.map(c => (c === 'active' ? 'done' : c));
+      s.outCls[p] = 'active';
+      s.start[v]++;
+      s.tiles[v][used[v]++] = 'used';
+      s.aCls = R.map((_, k) => (k < i ? 'visited' : k === i ? 'active' : ''));
+      snap(F, s, {
+        aPtr: i, bHot: v, stHot: v,
+        head: '3. 放置：i = ' + i + '（从左往右）',
+        note: 'A[' + i + '] = ' + lab(R[i]) + ' → <code>out[start[' + v + ']++]</code>：放进 out[' + p + ']，start[' + v + '] 变成 ' + s.start[v] + '。',
+      });
+    }
+    s.outCls = s.outCls.map(() => 'done');
+    s.aCls = R.map(() => 'visited');
+    const groups = [];
+    for (let v = lo; v <= hi; v++) groups.push(s.out.filter(x => +x[0] === v).map(x => x.slice(1)).join(' → '));
+    snap(F, s, {
+      head: '完成：稳定',
+      note: '<span class="ok">out = ' + s.out.join(' ') + '</span>。同键记录的先后：' + groups.join('、') +
+        '，与输入顺序一致，所以<b>稳定</b>。额外空间 O(n + K)。',
+    });
+    return F;
+  }
+
+  const BUILD = { ints: buildInts, recs: buildRecs };
+
+  /* ── drawing ── */
+  const W = 440;
+  function rowGeom(n, cw, gap) {
+    const total = n * cw + (n - 1) * gap;
+    const x0 = (W - total) / 2;
+    return k => x0 + k * (cw + gap);
+  }
+  function cellSvg(x, y, w, h, text, cls) {
+    return '<g class="k-node ' + (cls || '') + '"><rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="6"/>' +
+      (text != null ? '<text x="' + (x + w / 2) + '" y="' + (y + h / 2) + '">' + esc(text) + '</text>' : '') + '</g>';
+  }
+
+  function render(f) {
+    const rec = f.mode === 'recs';
+    const n = f.a.length, KK = f.cnt.length;
+    const cw = rec ? 50 : 38, cg = rec ? 8 : 4, ch = 34;
+    const bw = rec ? 96 : 40, bg = rec ? 24 : 6, bh = 50;
+    const ax = rowGeom(n, cw, cg), bx = rowGeom(KK, bw, bg);
+    let s = '';
+    s += '<text class="hd" x="6" y="16">' + esc(f.head) + '</text>';
+
+    // row A
+    const yA = 48;
+    s += '<text class="lab" x="6" y="' + (yA - 12) + '">' + (rec ? '输入 A（记录）' : '数组 A') + '</text>';
+    for (let k = 0; k < n; k++) {
+      s += cellSvg(ax(k), yA, cw, ch, f.a[k], f.aCls[k]);
+      if (k === f.aPtr) s += '<text class="ptr" x="' + (ax(k) + cw / 2) + '" y="' + (yA + ch + 11) + '">' + esc(f.aPtrText) + '</text>';
+    }
+
+    // buckets
+    const yB = 122;
+    s += '<text class="lab" x="6" y="' + (yB - 12) + '">' +
+      (rec ? 'count[v − 1] 与 start[v − 1]' : 'count[v − 1]：值 v 出现几次') + '</text>';
+    for (let v = 0; v < KK; v++) {
+      const x = bx(v), hot = v === f.bHot;
+      s += '<path class="bucket' + (hot ? ' hot' : '') + '" d="M' + x + ',' + yB + ' L' + x + ',' + (yB + bh) + ' L' + (x + bw) + ',' + (yB + bh) + ' L' + (x + bw) + ',' + yB + '"/>';
+      f.tiles[v].forEach((t, k) => {
+        const ty = yB + bh - 5 - (k + 1) * 11 - k * 3;
+        s += '<rect class="tile ' + t + '" x="' + (x + 6) + '" y="' + ty + '" width="' + (bw - 12) + '" height="11" rx="2"/>';
+      });
+      const cx = x + bw / 2;
+      const c = f.cnt[v];
+      s += '<text class="cnt' + (v === f.cntHot ? ' hot' : c === 0 ? ' zero' : '') + '" x="' + cx + '" y="' + (yB + bh + 15) + '">' +
+        (rec ? 'count ' + c : c) + '</text>';
+      let yy = yB + bh + 31;
+      if (rec) {
+        s += '<text class="st' + (v === f.stHot ? ' hot' : '') + '" x="' + cx + '" y="' + yy + '">' +
+          (f.start && f.start[v] != null ? 'start ' + f.start[v] : 'start —') + '</text>';
+        yy += 16;
+      }
+      s += '<text class="val" x="' + cx + '" y="' + yy + '">值 ' + (v + f.lo) + '</text>';
+    }
+
+    let H = yB + bh + 46;
+    // output (records only)
+    if (rec) {
+      const yO = yB + bh + 84;
+      s += '<text class="lab" x="6" y="' + (yO - 22) + '">输出 out</text>';
+      for (let k = 0; k < n; k++) {
+        s += '<text class="ix" x="' + (ax(k) + cw / 2) + '" y="' + (yO - 8) + '">' + k + '</text>';
+        s += cellSvg(ax(k), yO, cw, ch, f.out[k], f.out[k] == null ? 'old' : f.outCls[k]);
+      }
+      H = yO + ch + 8;
+    }
+    stage.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' + s + '</svg>';
+  }
+
+  /* ── controls: mode buttons go into #controls before the player's own ── */
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = [['ints', '整数：计数后写回'], ['recs', '记录：起始位置（稳定）']].map(([mode, text], k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.dataset.mode = mode;
+    if (k === 0) b.className = 'active';
+    group.appendChild(b);
+    return b;
+  });
+  document.getElementById('controls').appendChild(group);
+  const player = AnimKit.player({ frames: BUILD.ints(), render, interval: 1200 });
+  buttons.forEach(b => b.addEventListener('click', () => {
+    buttons.forEach(x => x.classList.toggle('active', x === b));
+    player.load(BUILD[b.dataset.mode]());
+  }));
+})();
+</script>
+</body>
+</html>

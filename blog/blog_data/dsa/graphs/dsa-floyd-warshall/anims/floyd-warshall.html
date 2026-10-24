@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warshall 与 Floyd-Warshall 逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .fw { position: absolute; inset: 0; display: flex; gap: 10px; }
+  .fw-pane { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; }
+  .fw-pane.mat { flex: 1.1 1 0; }
+  .fw-pane > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  @media (max-width: 519px) { .fw-pane.g { display: none; } }
+  .m-cell rect { fill: rgba(255, 255, 255, 0.04); stroke: #3a3a39; stroke-width: 1; transition: fill 0.25s, stroke 0.25s; }
+  .m-cell text { fill: var(--text); font-size: 14px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .m-cell.zero text { fill: #6b6b6a; }
+  .m-cell.line rect { fill: rgba(217, 119, 87, 0.12); stroke: rgba(217, 119, 87, 0.5); }
+  .m-cell.new rect  { fill: rgba(251, 191, 36, 0.20); stroke: var(--yellow); }
+  .m-cell.new text  { fill: #fef3c7; }
+  .m-cell.src rect  { fill: rgba(56, 189, 248, 0.24); stroke: var(--blue); stroke-width: 2; }
+  .m-cell.src text  { fill: #d6f2ff; }
+  .m-cell.cur rect  { fill: var(--accent); stroke: var(--accent); stroke-width: 2; }
+  .m-cell.cur text  { fill: #fff; }
+  .m-cell.done rect { fill: rgba(74, 222, 128, 0.18); stroke: rgba(74, 222, 128, 0.7); }
+  .m-cell.done text { fill: #d8ffe1; }
+  .m-head { fill: var(--muted); font-size: 13px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .m-head.k { fill: var(--accent); }
+  .m-cap { fill: var(--muted); font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+</style>
+</head>
+<body>
+<div class="title">Warshall 与 Floyd-Warshall 逐步演示</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: rgba(217, 119, 87, 0.45)"></i>第 k 行/列</span>
+  <span><i style="background: var(--blue)"></i>[i][k] 与 [k][j]</span>
+  <span><i style="background: var(--accent)"></i>正在更新</span>
+  <span><i style="background: var(--yellow)"></i>本轮已改</span>
+  <span><i style="background: var(--green)"></i>与初始不同</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const SCENARIOS = {
+    warshall: {
+      label: 'Warshall 传递闭包',
+      bool: true,
+      directed: true,
+      nodes: [
+        { id: 'A', x: 40, y: 40 }, { id: 'C', x: 180, y: 40 }, { id: 'D', x: 320, y: 40 },
+        { id: 'E', x: 110, y: 170 }, { id: 'B', x: 250, y: 170 },
+      ],
+      edges: [['A', 'C'], ['A', 'E'], ['B', 'D'], ['B', 'E'], ['C', 'D'], ['C', 'E'], ['D', 'B']],
+    },
+    floyd: {
+      label: 'Floyd-Warshall 最短路',
+      bool: false,
+      directed: false,
+      nodes: [
+        { id: 'A', x: 40, y: 120 }, { id: 'C', x: 150, y: 40 }, { id: 'F', x: 150, y: 200 },
+        { id: 'D', x: 300, y: 40 }, { id: 'B', x: 300, y: 200 }, { id: 'E', x: 410, y: 120 },
+      ],
+      edges: [
+        ['A', 'C', 2], ['A', 'F', 3], ['C', 'D', 5], ['C', 'F', 4],
+        ['F', 'B', 1], ['B', 'D', 2], ['B', 'E', 4], ['D', 'E', 6],
+      ],
+    },
+  };
+
+  const SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+  const sup = x => String(x).split('').map(c => SUP[+c]).join('');
+  const fmt = v => (v === Infinity ? '∞' : v < 0 ? '−' + (-v) : String(v));
+
+  // Run the real algorithm (k outermost, then i, then j) and record frames.
+  function build(sc) {
+    const ids = sc.nodes.map(n => n.id).slice().sort();
+    const n = ids.length;
+    const at = {};
+    ids.forEach((v, i) => { at[v] = i; });
+    // M = the matrix; P[i][j] = the walk that M[i][j] stands for (row k and
+    // column k never change in round k, so P[i][k] + P[k][j] is always valid)
+    const M = [], P = [];
+    for (let i = 0; i < n; i++) {
+      M.push([]); P.push([]);
+      for (let j = 0; j < n; j++) {
+        M[i].push(sc.bool ? 0 : (i === j ? 0 : Infinity));
+        P[i].push(null);
+      }
+    }
+    sc.edges.forEach(([u, v, w]) => {
+      const a = at[u], b = at[v];
+      M[a][b] = sc.bool ? 1 : w; P[a][b] = [u, v];
+      if (!sc.directed) { M[b][a] = sc.bool ? 1 : w; P[b][a] = [v, u]; }
+    });
+    const init = M.map(r => r.slice());
+    const has = (i, j) => (sc.bool ? M[i][j] === 1 : M[i][j] !== Infinity);
+    const sep = sc.directed ? '→' : '–';
+    const join = (i, k, j) => P[i][k].concat(P[k][j].slice(1));
+
+    const frames = [];
+    function snap(extra) {
+      frames.push(Object.assign({
+        sc, ids, M: M.map(r => r.slice()), init,
+        k: -1, round: 0, cur: null, src: [], fresh: [], path: [], final: false,
+      }, extra));
+    }
+
+    snap({
+      note: sc.bool
+        ? `邻接矩阵 R：有边 i→j 则 R[i][j] = 1。依次让 ${ids.join('、')} 当垫脚石 k，每轮检查全部 ${n}×${n} = ${n * n} 格。`
+        : `距离矩阵 D${sup(0)}：有边填边权，对角线 0，没有边 ∞（无向图，矩阵对称）。依次让 ${ids.join('、')} 当垫脚石 k。`,
+    });
+
+    for (let k = 0; k < n; k++) {
+      const r = k + 1, kk = ids[k];
+      const colIn = [], rowOut = [];
+      for (let i = 0; i < n; i++) if (i !== k && has(i, k)) colIn.push(i);
+      for (let j = 0; j < n; j++) if (j !== k && has(k, j)) rowOut.push(j);
+      if (sc.bool) {
+        if (has(k, k)) { colIn.push(k); rowOut.push(k); colIn.sort(); rowOut.sort(); }
+      }
+      const list = arr => arr.length ? arr.map(i => sc.bool ? ids[i] : `${ids[i]} ${fmt(M[i][k])}`).join('、') : '无';
+      const listRow = arr => arr.length ? arr.map(j => sc.bool ? ids[j] : `${ids[j]} ${fmt(M[k][j])}`).join('、') : '无';
+
+      // count this round's updates first so the opening note can say how many
+      let willUpdate = 0;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        if (sc.bool ? (!M[i][j] && M[i][k] && M[k][j]) : (M[i][k] + M[k][j] < M[i][j])) willUpdate++;
+      }
+
+      let note;
+      if (sc.bool) {
+        note = `第 ${r} 轮，垫脚石 k = <b>${kk}</b>。第 ${kk} 列的 1（能到 ${kk}）：${list(colIn)}；第 ${kk} 行的 1（${kk} 能到）：${listRow(rowOut)}。`;
+        if (!colIn.length) note += `没有顶点能到 ${kk}，本轮不会有新的 1。`;
+        else if (!rowOut.length) note += `${kk} 没有出边，本轮不会有新的 1。`;
+        else if (!willUpdate) note += '交叉处都已是 1，本轮没有新的 1。';
+        else note += '两者交叉处还是 0 的格子将被置 1。';
+      } else {
+        note = `第 ${r} 轮，垫脚石 k = <b>${kk}</b>（D${sup(r)} 允许 ${r === 1 ? ids[0] : ids[0] + ' 至 ' + ids[r - 1]} 当垫脚石）。第 ${kk} 行/列的有限值：${list(colIn)}。`;
+        if (!willUpdate) {
+          let ex = null;
+          for (const i of colIn) { for (const j of rowOut) { if (i !== j) { ex = [i, j]; break; } } if (ex) break; }
+          if (ex) {
+            const [i, j] = ex;
+            note += `例如 ${ids[i]}→${kk}→${ids[j]} = ${fmt(M[i][k])} + ${fmt(M[k][j])} = ${fmt(M[i][k] + M[k][j])}，不比 D[${ids[i]}][${ids[j]}] = ${fmt(M[i][j])} 短。`;
+          }
+          note += '本轮没有更新。';
+        } else {
+          note += `本轮将有 ${willUpdate} 格变小。`;
+        }
+      }
+      snap({ k, round: r, note });
+
+      const fresh = [];
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          if (sc.bool) {
+            if (!M[i][j] && M[i][k] && M[k][j]) {
+              M[i][j] = 1;
+              const p = P[i][j] = join(i, k, j);
+              fresh.push([i, j]);
+              snap({
+                k, round: r, cur: [i, j], src: [[i, k], [k, j]], fresh: fresh.slice(), path: p,
+                note: `R[${ids[i]}][${kk}] = 1 且 R[${kk}][${ids[j]}] = 1 → <b>R[${ids[i]}][${ids[j]}] = 1</b>：${p.join('→')}。`,
+              });
+            }
+          } else if (M[i][k] + M[k][j] < M[i][j]) {
+            const old = M[i][j], a = M[i][k], b = M[k][j];
+            M[i][j] = a + b;
+            const p = P[i][j] = join(i, k, j);
+            fresh.push([i, j]);
+            snap({
+              k, round: r, cur: [i, j], src: [[i, k], [k, j]], fresh: fresh.slice(), path: p,
+              note: `D[${ids[i]}][${kk}] + D[${kk}][${ids[j]}] = ${fmt(a)} + ${fmt(b)} = ${fmt(a + b)} &lt; ${fmt(old)} → <b>D[${ids[i]}][${ids[j]}] = ${fmt(a + b)}</b>（${p.join(sep)}）。`,
+            });
+          }
+        }
+      }
+      if (fresh.length) {
+        snap({
+          k, round: r, fresh: fresh.slice(),
+          note: `第 ${r} 轮结束：改了 ${fresh.length} 格（黄色），但仍检查了全部 ${n * n} 格。` +
+            (sc.bool ? '' : `现在 D${sup(r)} = 只用 ${ids.slice(0, r).join('、')} 当垫脚石时的最短距离。`),
+        });
+      }
+    }
+
+    let last;
+    if (sc.bool) {
+      const loops = ids.filter((v, i) => M[i][i] === 1);
+      last = `<span class="ok">${n} 轮结束，R 就是传递闭包</span>（绿色 = 邻接矩阵里没有的 1）。对角线只有 ${loops.join('、')} 为 1：它们在环上，能回到自己。`;
+    } else {
+      last = `<span class="ok">${n} 轮结束，D${sup(n)} 就是全源最短距离</span>（绿色 = 比初始变小的格）。A 行 ${M[0].map(fmt).join(' ')} 与从 A 跑 Dijkstra 的结果相同。`;
+    }
+    snap({ final: true, note: last });
+    return frames;
+  }
+
+  function matrixSvg(f) {
+    const n = f.ids.length, C = 36, G = 3, LW = 24, TOP = 44;
+    const W = LW + n * (C + G) + 4, H = TOP + n * (C + G) + 4;
+    const key = (i, j) => i + ',' + j;
+    const fresh = new Set(f.fresh.map(([i, j]) => key(i, j)));
+    const src = new Set(f.src.map(([i, j]) => key(i, j)));
+    const cur = f.cur ? key(f.cur[0], f.cur[1]) : null;
+    let caption;
+    if (f.final) caption = f.sc.bool ? 'R = 传递闭包' : `D${sup(n)} = 最短距离`;
+    else if (f.k < 0) caption = f.sc.bool ? 'R = 邻接矩阵' : `D${sup(0)} = 距离矩阵`;
+    else caption = f.sc.bool ? `第 ${f.round} 轮：k = ${f.ids[f.k]}` : `第 ${f.round} 轮：D${sup(f.round - 1)} → D${sup(f.round)}（k = ${f.ids[f.k]}）`;
+    let s = `<text class="m-cap" x="${LW + n * (C + G) / 2}" y="10">${K.esc(caption)}</text>`;
+    for (let j = 0; j < n; j++) {
+      s += `<text class="m-head${j === f.k && !f.final ? ' k' : ''}" x="${LW + j * (C + G) + C / 2}" y="${TOP - 12}">${f.ids[j]}</text>`;
+    }
+    for (let i = 0; i < n; i++) {
+      s += `<text class="m-head${i === f.k && !f.final ? ' k' : ''}" x="${LW / 2}" y="${TOP + i * (C + G) + C / 2}">${f.ids[i]}</text>`;
+      for (let j = 0; j < n; j++) {
+        const v = f.M[i][j];
+        let cls = '';
+        if (f.final) { if (v !== f.init[i][j]) cls = 'done'; }
+        else if (cur === key(i, j)) cls = 'cur';
+        else if (src.has(key(i, j))) cls = 'src';
+        else if (fresh.has(key(i, j))) cls = 'new';
+        else if (f.k >= 0 && (i === f.k || j === f.k)) cls = 'line';
+        const dim = (f.sc.bool && v === 0) || v === Infinity;
+        const x = LW + j * (C + G), y = TOP + i * (C + G);
+        s += `<g class="m-cell ${cls}${dim ? ' zero' : ''}"><rect x="${x}" y="${y}" width="${C}" height="${C}" rx="6"/>` +
+          `<text x="${x + C / 2}" y="${y + C / 2}">${fmt(v)}</text></g>`;
+      }
+    }
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+  }
+
+  function graphSvg(f) {
+    const sc = f.sc;
+    const onPath = new Set();
+    for (let t = 0; t + 1 < f.path.length; t++) {
+      onPath.add(f.path[t] + '>' + f.path[t + 1]);
+      if (!sc.directed) onPath.add(f.path[t + 1] + '>' + f.path[t]);
+    }
+    const ends = f.cur ? [f.ids[f.cur[0]], f.ids[f.cur[1]]] : [];
+    const kId = f.k >= 0 && !f.final ? f.ids[f.k] : null;
+    return K.graph({
+      directed: sc.directed,
+      nodes: sc.nodes,
+      edges: sc.edges.map(([u, v, w]) => ({ u, v, w })),
+    }, {
+      nodeCls: id => (id === kId ? 'active' : ends.includes(id) ? 'visited' : ''),
+      edgeCls: e => (onPath.has(e.u + '>' + e.v) ? 'active' : ''),
+    });
+  }
+
+  function render(f) {
+    stage.innerHTML = `<div class="fw"><div class="fw-pane g">${graphSvg(f)}</div><div class="fw-pane mat">${matrixSvg(f)}</div></div>`;
+  }
+
+  // scenario switcher goes into #controls before the player's own buttons
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = {};
+  Object.keys(SCENARIOS).forEach(name => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = SCENARIOS[name].label;
+    b.addEventListener('click', () => {
+      Object.values(buttons).forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      player.load(build(SCENARIOS[name]));
+    });
+    buttons[name] = b;
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+  buttons.warshall.classList.add('active');
+
+  const player = window.AnimKit.player({ frames: build(SCENARIOS.warshall), render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

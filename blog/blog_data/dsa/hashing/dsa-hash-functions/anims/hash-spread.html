@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>整数哈希函数：键在槽里的分布</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .pick { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .pick .label { min-width: 2.6em; }
+  .pick .btn-group { flex-wrap: wrap; max-width: 100%; }
+  .hist-bar { fill: rgba(56, 189, 248, 0.30); stroke: var(--blue); stroke-width: 1.5; }
+  .hist-bar.cur { fill: var(--accent); stroke: var(--accent); }
+  .hist-num { fill: var(--text); font-size: 13px; font-weight: 700; text-anchor: middle; }
+  .hist-num.cur { fill: #ffb49d; }
+  .hist-idx { fill: var(--muted); font-size: 12px; font-weight: 600; text-anchor: middle; }
+  .hist-idx.off { fill: var(--red); }
+  .hist-off { fill: rgba(248, 113, 113, 0.10); stroke: var(--red); stroke-width: 1.2; stroke-dasharray: 4 3; }
+  .hist-base { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1.5; }
+  .hist-avg { stroke: var(--yellow); stroke-width: 1.2; stroke-dasharray: 5 4; opacity: 0.8; }
+  .hist-info { fill: var(--muted); font-size: 12px; font-weight: 600; }
+  .note { min-height: 62px; }          /* steady height, so the chart does not jump between steps */
+  @media (max-width: 420px) {
+    .pick .btn-group button { padding: 4px 7px; }
+    .note { min-height: 96px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">整数哈希函数：20 个键落进 10 个槽</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: rgba(56, 189, 248, 0.5)"></i>柱高 = 该槽的键数</span>
+  <span><i style="background: var(--accent)"></i>刚放入的键</span>
+  <span><i style="background: var(--yellow)"></i>虚线 = 平均每槽 2 个</span>
+  <span><i style="background: rgba(248, 113, 113, 0.5)"></i>这个函数到不了的槽</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // <algo>
+  const T = 10;                                  // table length (slots 0..9)
+  const KEYSETS = [
+    { id: 'rand', name: '随机', keys: [482, 157, 913, 266, 739, 604, 381, 845, 120, 573, 298, 961, 437, 715, 652, 309, 886, 548, 174, 23] },
+    { id: 'five', name: '5 的倍数', keys: Array.from({ length: 20 }, (_, i) => 5 * (i + 1)) },
+    { id: 'tail', name: '末位 1~3', keys: [101, 112, 123, 131, 142, 153, 161, 172, 183, 191, 202, 213, 221, 232, 243, 251, 262, 273, 281, 292] },
+  ];
+  // h(k) = (a*k + c) mod m, stored in a table of T slots
+  const FUNCS = [
+    { id: 'mod10', name: 'k mod 10', a: 1, c: 0, m: 10 },
+    { id: 'plus3', name: '(k+3) mod 10', a: 1, c: 3, m: 10 },
+    { id: 'mul4', name: '4k mod 10', a: 4, c: 0, m: 10 },
+    { id: 'mul7', name: '7k mod 10', a: 7, c: 0, m: 10 },
+    { id: 'mod7', name: 'k mod 7', a: 1, c: 0, m: 7 },
+  ];
+  const h = (f, k) => (f.a * k + f.c) % f.m;
+  function expr(f, k) {
+    const s = h(f, k);
+    if (f.a === 1 && f.c === 0) return `h(${k}) = ${k} mod ${f.m} = <b>${s}</b>`;
+    if (f.a === 1) return `h(${k}) = (${k} + ${f.c}) mod ${f.m} = ${k + f.c} mod ${f.m} = <b>${s}</b>`;
+    return `h(${k}) = ${f.a} × ${k} mod ${f.m} = ${f.a * k} mod ${f.m} = <b>${s}</b>`;
+  }
+  function counts(f, keys) {
+    const c = new Array(T).fill(0);
+    keys.forEach(k => c[h(f, k)]++);
+    return c;
+  }
+  // slots this function can ever produce, whatever the key
+  function reachable(f) {
+    const r = new Array(T).fill(false);
+    for (let x = 0; x < f.m; x++) r[(f.a * x + f.c) % f.m] = true;
+    return r;
+  }
+  const sameMultiset = (p, q) => p.slice().sort((x, y) => x - y).join() === q.slice().sort((x, y) => x - y).join();
+  const usedOf = c => c.filter(x => x > 0).length;
+  const maxOf = c => Math.max(...c);
+
+  function summary(ks, f) {
+    const c = counts(f, ks.keys);
+    const base = counts(FUNCS[0], ks.keys);
+    let s = `20 个键用到 <b>${usedOf(c)}</b> / ${T} 个槽，最满的槽有 <b>${maxOf(c)}</b> 个键。`;
+    if (f.id === 'mod10') {
+      if (ks.id === 'rand') s += '这组键的末位本身就分散，k mod 10 已经比较均匀。';
+      if (ks.id === 'five') s += '5 的倍数末位只有 0 和 5，只用到 2 个槽。';
+      if (ks.id === 'tail') s += 'k mod 10 就是取末位，键全挤在相邻的 1、2、3 号槽。';
+    } else if (f.id === 'plus3') {
+      const shifted = c.every((v, i) => v === base[(i - f.c + T) % T]);
+      if (shifted) s += '比起 k mod 10，柱子整体循环右移 3 格、高度不变：加常数不改变谁和谁冲突。';
+    } else if (f.id === 'mul4') {
+      s += '4 与 10 有公因数 2，只能落在偶数号槽';
+      s += ks.id === 'five' ? '；4 乘 5 的倍数是 20 的倍数，全进 0 号槽。' : '。';
+    } else if (f.id === 'mul7') {
+      if (sameMultiset(c, base)) s += '7 与 10 互素：冲突的还是 k mod 10 下的同一批键，只是换了槽位。';
+      if (ks.id === 'tail') s += '相邻的 1、2、3 号槽变成 7、4、1 号，彼此隔开（利于线性探测，见 4.4）。';
+      if (ks.id === 'five') s += '5 的倍数乘 7 仍是 5 的倍数，乘数救不了这种规律。';
+    } else if (f.id === 'mod7') {
+      s += '7、8、9 号槽用不到';
+      const mb = maxOf(base), mc = maxOf(c);
+      const why = ks.id === 'five' ? '7 与 5 互素，' : ks.id === 'tail' ? '7 与 10 互素，' : '';
+      if (mc < mb) s += `；但${why ? ' ' + why : ''}键摊到了全部 7 个槽，最满的槽比 k mod 10 少（${mc} 对 ${mb}）。`;
+      else if (mc > mb) s += `，键挤在 7 个槽里，最满的槽比 k mod 10 更满（${mc} 对 ${mb}）。`;
+      else s += `，最满的槽和 k mod 10 一样（${mc} 个）。`;
+    }
+    return s;
+  }
+  // the key list, shortened: first four … last
+  const brief = keys => keys.length <= 6 ? keys.join(', ') : keys.slice(0, 4).join(', ') + ', …, ' + keys[keys.length - 1];
+
+  function build(ks, f) {
+    const frames = [];
+    const c = new Array(T).fill(0);
+    const reach = reachable(f);
+    frames.push({
+      counts: c.slice(), cur: -1, placed: 0, reach,
+      note: `空表，${T} 个槽，h(k) = ${f.name}。依次放入 ${ks.keys.length} 个键：${brief(ks.keys)}`,
+    });
+    ks.keys.forEach((k, i) => {
+      const s = h(f, k);
+      c[s]++;
+      frames.push({
+        counts: c.slice(), cur: s, placed: i + 1, reach,
+        note: `k = ${k}：${expr(f, k)}，放进 ${s} 号槽（现有 ${c[s]} 个）` + (c[s] > 1 ? '，<span class="bad">冲突</span>' : ''),
+      });
+    });
+    frames.push({ counts: c.slice(), cur: -1, placed: ks.keys.length, reach, note: summary(ks, f) });
+    return frames;
+  }
+  // </algo>
+
+  /* ── drawing ── */
+  const X0 = 14, SW = 35, BW = 25, BASE = 176, TOP = 30, MAXC = 20;
+  const W = X0 * 2 + T * SW, H = 204;
+  const yOf = n => BASE - (BASE - TOP) * n / MAXC;
+  function render(fr) {
+    let g = '';
+    const avg = 20 / T;
+    g += `<text class="hist-info" x="${X0}" y="13">已放入 ${fr.placed} / 20 个键</text>`;
+    g += `<line class="hist-avg" x1="${X0 - 4}" y1="${yOf(avg)}" x2="${X0 + T * SW + 4}" y2="${yOf(avg)}"/>`;
+    for (let s = 0; s < T; s++) {
+      const x = X0 + s * SW + (SW - BW) / 2;
+      const n = fr.counts[s];
+      const cur = s === fr.cur ? ' cur' : '';
+      if (!fr.reach[s]) {
+        g += `<rect class="hist-off" x="${x}" y="${BASE - 10}" width="${BW}" height="10" rx="2"/>`;
+      } else if (n > 0) {
+        g += `<rect class="hist-bar${cur}" x="${x}" y="${yOf(n)}" width="${BW}" height="${BASE - yOf(n)}" rx="3"/>`;
+      }
+      if (n > 0) g += `<text class="hist-num${cur}" x="${x + BW / 2}" y="${yOf(n) - 6}">${n}</text>`;
+      g += `<text class="hist-idx${fr.reach[s] ? '' : ' off'}" x="${x + BW / 2}" y="${BASE + 19}">${s}</text>`;
+    }
+    g += `<line class="hist-base" x1="${X0 - 4}" y1="${BASE}" x2="${X0 + T * SW + 4}" y2="${BASE}"/>`;
+    stage.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${g}</svg>`;
+  }
+
+  /* ── pickers (added before the player's own buttons) ── */
+  let ksIdx = 2, fIdx = 0;
+  function picker(label, items, onPick, start) {
+    const row = document.createElement('div');
+    row.className = 'pick';
+    const lab = document.createElement('span');
+    lab.className = 'label';
+    lab.textContent = label;
+    const grp = document.createElement('div');
+    grp.className = 'btn-group';
+    const btns = items.map((it, k) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.name;
+      if (k === start) b.classList.add('active');
+      b.addEventListener('click', () => {
+        btns.forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        onPick(k);
+      });
+      grp.appendChild(b);
+      return b;
+    });
+    row.appendChild(lab);
+    row.appendChild(grp);
+    controls.appendChild(row);
+  }
+  let player = null;
+  function reload() {
+    const frames = build(KEYSETS[ksIdx], FUNCS[fIdx]);
+    player.load(frames);
+    player.go(frames.length - 1);               // show the finished histogram first
+  }
+  picker('键', KEYSETS, k => { ksIdx = k; reload(); }, ksIdx);
+  picker('h(k)', FUNCS, k => { fIdx = k; reload(); }, fIdx);
+  player = window.AnimKit.player({ frames: [], render, interval: 700 });
+  reload();
+})();
+</script>
+</body>
+</html>

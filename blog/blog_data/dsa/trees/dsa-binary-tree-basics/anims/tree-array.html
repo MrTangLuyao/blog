@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>二叉树存进数组</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .ta { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .ta-svg { flex: 1 1 auto; min-height: 0; position: relative; }
+  .ta-svg > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .ta-arr { flex: 0 0 auto; }
+  .ta-arr .cells { padding: 18px 4px 22px; gap: 3px; }
+  .ta-arr .cell { min-width: 31px; height: 31px; padding: 0 4px; font-size: 13px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="title">二叉树按层存进数组（下标从 0 开始）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>正在放的结点</span>
+  <span><i style="background: rgba(217, 119, 87, 0.30); border: 1px solid var(--accent)"></i>它的父结点</span>
+  <span><i style="background: rgba(74, 222, 128, 0.22); border: 1px solid var(--green)"></i>已放好</span>
+  <span><i style="background: rgba(251, 191, 36, 0.20); border: 1px dashed var(--yellow)"></i>空位</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // [key, left, right]; null = no child
+  const SCENARIOS = [
+    { label: '完全二叉树', tree: ['A', ['B', ['D'], ['E']], ['C', ['F'], null]] },
+    { label: 'M 树（有空位）', tree: ['M', ['J', ['F', null, ['G']], ['K']], ['P', null, ['S', ['Q'], null]]] },
+    { label: '右斜链', tree: ['A', null, ['B', null, ['C', null, ['D']]]], chain: true },
+  ];
+
+  function mk(a) { return a ? { key: a[0], left: mk(a[1] || null), right: mk(a[2] || null) } : null; }
+  const sideName = s => (s === 'L' ? '左' : '右');
+
+  // <algo> level-order numbering: root 0, children of i at 2i+1 and 2i+2
+  function build(sc) {
+    const root = mk(sc.tree);
+    const order = [];
+    const queue = [{ node: root, idx: 0, parent: null, side: null }];
+    while (queue.length) {
+      const e = queue.shift();
+      order.push(e);
+      if (e.node.left) queue.push({ node: e.node.left, idx: 2 * e.idx + 1, parent: e, side: 'L' });
+      if (e.node.right) queue.push({ node: e.node.right, idx: 2 * e.idx + 2, parent: e, side: 'R' });
+    }
+    for (let k = 1; k < order.length; k++) {
+      if (order[k].idx <= order[k - 1].idx) throw new Error('level order is not increasing');
+    }
+    const n = order.length;
+    const L = order[n - 1].idx + 1;
+    const byIdx = new Map(order.map(e => [e.idx, e]));
+    const idxOf = new Map(order.map(e => [e.node, e.idx]));
+
+    const frames = [];
+    const placed = new Set();
+    const snap = (cur, par, note, final) => frames.push({ placed: new Set(placed), cur, par, note, final: !!final });
+
+    snap(null, null, `共 ${n} 个结点。按层从上到下、每层从左到右放：根在下标 0；下标 i 的左孩子在 <code>2i+1</code>，右孩子在 <code>2i+2</code>。`);
+
+    let prev = -1;
+    for (const e of order) {
+      let note;
+      if (!e.parent) {
+        note = `根 <b>${e.node.key}</b> → 下标 <b>0</b>。`;
+      } else {
+        const i = e.parent.idx;
+        note = `<b>${e.node.key}</b> 是 ${e.parent.node.key}（下标 ${i}）的${sideName(e.side)}孩子 → ` +
+          `2×${i}+${e.side === 'L' ? 1 : 2} = <b>${e.idx}</b>。`;
+      }
+      if (e.idx > prev + 1) {
+        const direct = new Map(), indirect = [];
+        for (let s = prev + 1; s < e.idx; s++) {
+          const p = (s - 1) >> 1;
+          if (!byIdx.has(p)) { indirect.push(s); continue; }
+          if (!direct.has(p)) direct.set(p, { sides: [], slots: [] });
+          direct.get(p).sides.push(s % 2 === 1 ? '左' : '右');
+          direct.get(p).slots.push(s);
+        }
+        const range = e.idx - prev - 1 === 1 ? `下标 ${prev + 1}` : `下标 ${prev + 1}…${e.idx - 1}`;
+        const parts = [];
+        if (direct.size) {
+          parts.push([...direct].map(([p, d]) =>
+            `${byIdx.get(p).node.key} 没有${d.sides.join('、')}孩子（${d.slots.join('、')}）`).join('，'));
+        }
+        if (indirect.length) {
+          const list = indirect.length >= 3 && indirect[indirect.length - 1] - indirect[0] === indirect.length - 1
+            ? `${indirect[0]}…${indirect[indirect.length - 1]}` : indirect.join('、');
+          parts.push(`${list} 的父位置本身就空着`);
+        }
+        note += ` 跳过${range}：${parts.join('；')}。`;
+      }
+      placed.add(e.idx);
+      snap(e.idx, e.parent ? e.parent.idx : null, note);
+      prev = e.idx;
+    }
+
+    const holes = L - n;
+    const last = order[n - 1];
+    const pi = (last.idx - 1) >> 1;
+    let fin = holes === 0
+      ? `完成：${n} 个结点正好占下标 0…${n - 1}，<span class="ok">没有空位</span>，是完全二叉树。`
+      : `完成：${n} 个结点要 ${L} 格，<span class="bad">空 ${holes} 格</span>（黄框），不是完全二叉树。`;
+    fin += ` 反查：${last.node.key} 在下标 ${last.idx}，父结点在 ⌊(${last.idx}−1)/2⌋ = ${pi}，正是 ${byIdx.get(pi).node.key}。`;
+    if (sc.chain) fin += ` 每往下一层下标从 i 变成 2i+2，约翻一倍：${n} 个结点要 2<sup>${n}</sup> − 1 = ${L} 格。`;
+    if (sc.chain && L !== Math.pow(2, n) - 1) throw new Error('chain slot count');
+    snap(null, null, fin, true);
+
+    return { root, L, idxOf, byIdx, frames };
+  }
+  // </algo>
+
+  let cur = null;
+  function render(f) {
+    const sc = cur;
+    const svg = K.tree(sc.root, {
+      gapX: 46,
+      gapY: 54,
+      pad: 26,
+      cls: node => {
+        const i = sc.idxOf.get(node);
+        if (i === f.cur) return 'active';
+        if (i === f.par) return 'compare';
+        return f.placed.has(i) ? 'done' : '';
+      },
+      edgeCls: (p, c) => (sc.idxOf.get(c) === f.cur ? 'active' : ''),
+      badge: node => {
+        const i = sc.idxOf.get(node);
+        return f.placed.has(i) ? '[' + i + ']' : '';
+      },
+    });
+    const values = [];
+    for (let k = 0; k < sc.L; k++) values.push(f.placed.has(k) ? sc.byIdx.get(k).node.key : '');
+    const ptr = {};
+    if (f.cur === 0) ptr[0] = '根';
+    else if (f.cur != null) {
+      ptr[f.par] = 'i';
+      ptr[f.cur] = f.cur === 2 * f.par + 1 ? '2i+1' : '2i+2';
+    }
+    const arr = K.cells(values, {
+      idx: true,
+      ptr,
+      cls: (v, k) => {
+        if (k === f.cur) return 'active';
+        if (k === f.par) return 'compare';
+        if (f.placed.has(k)) return 'done';
+        if (f.final) return 'warn';
+        return '';
+      },
+    });
+    stage.innerHTML = `<div class="ta"><div class="ta-svg">${svg}</div><div class="ta-arr">${arr}</div></div>`;
+  }
+
+  // scenario buttons go in before the player's own buttons
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  let player = null;
+  const built = SCENARIOS.map(build);
+  SCENARIOS.forEach((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    b.addEventListener('click', () => {
+      group.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      cur = built[k];
+      player.load(cur.frames);
+    });
+    if (k === 1) b.classList.add('active');
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  cur = built[1];
+  player = AnimKit.player({ frames: cur.frames, render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

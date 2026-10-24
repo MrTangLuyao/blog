@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>链表指针操作</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .v-label { fill: var(--blue); font-size: 13px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .v-label.active { fill: var(--accent); }
+  .v-label.bad { fill: var(--red); }
+  .v-edge { stroke: var(--blue); stroke-width: 2; fill: none; }
+  .v-edge.active { stroke: var(--accent); stroke-width: 2.5; }
+  .v-edge.bad { stroke: var(--red); stroke-dasharray: 4 3; }
+  .k-node.freed rect { fill: transparent; stroke: var(--red); stroke-dasharray: 5 4; }
+  .k-node.freed text { fill: var(--muted); }
+  .null-slash { stroke: var(--muted); stroke-width: 1.5; }
+  .ptr-dot { fill: var(--text); }
+  .k-badge.bad { fill: var(--red); }
+  .k-badge.warn { fill: var(--yellow); }
+  .k-badge.freed { fill: var(--muted); }
+  .uninit { fill: var(--muted) !important; font-weight: 600 !important; }
+  @media (max-width: 420px) {
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">链表改指针：头插、中间插入、删除</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>这一步改动的指针</span>
+  <span><i style="background: var(--blue)"></i>指针变量</span>
+  <span><i style="background: var(--yellow)"></i>只剩局部指针拿着</span>
+  <span><i style="background: var(--red)"></i>无法到达（丢失）</span>
+  <span><i style="background: transparent; border: 1px dashed var(--red)"></i>已 free</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  /* ── geometry ── */
+  const WW = 58, PW = 28, BW = WW + PW, BH = 36;   // word cell, pointer cell, box height
+  const ROW = 64, LOW = 160;                       // y of the list row and of the row for new nodes
+  const SLOT = k => 74 + k * 110;
+  const VBW = SLOT(3) + BW + 16, VBH = 250;
+
+  /* ── a tiny heap model: every C statement below is executed on it ── */
+  function makeRun() {
+    const r = { nodes: {}, order: [], vars: {}, freed: new Set(), frames: [] };
+    r.add = (word, x, y, next, isNew) => { r.nodes[word] = { word, x, y, next, isNew: !!isNew }; r.order.push(word); };
+    r.next = w => r.nodes[w].next;
+    r.snap = (note, hi, extra) => {
+      r.frames.push(Object.assign({
+        nodes: r.order.map(w => Object.assign({}, r.nodes[w])),
+        vars: Object.assign({}, r.vars),
+        freed: [...r.freed],
+        hi: hi || {},
+        note,
+      }, extra || {}));
+    };
+    return r;
+  }
+  // nodes reachable from the given pointer values (freed nodes do not count)
+  function reach(nodes, freed, starts) {
+    const seen = new Set();
+    starts.forEach(s => {
+      let w = s;
+      while (w && w !== '?' && nodes[w] && !freed.has(w) && !seen.has(w)) { seen.add(w); w = nodes[w].next; }
+    });
+    return seen;
+  }
+  function lostList(r) {
+    const ok = reach(r.nodes, r.freed, Object.values(r.vars));
+    return r.order.filter(w => !r.freed.has(w) && !ok.has(w));
+  }
+  function chain(r) {
+    const out = [], seen = new Set();
+    let w = r.vars.head;
+    while (w && w !== '?' && !seen.has(w)) { seen.add(w); out.push(w); w = r.next(w); }
+    if (w && seen.has(w)) out.push(w + ' → …（回到 ' + w + '）');
+    else out.push('NULL');
+    return out.join(' → ');
+  }
+  // function returns: locals disappear, freed blocks are gone, the list is redrawn on one row
+  function tidy(r) {
+    Object.keys(r.vars).forEach(k => { if (k !== 'head') delete r.vars[k]; });
+    [...r.freed].forEach(w => { r.order.splice(r.order.indexOf(w), 1); delete r.nodes[w]; });
+    r.freed.clear();
+    let w = r.vars.head, k = 0;
+    const seen = new Set();
+    while (w && !seen.has(w)) { seen.add(w); Object.assign(r.nodes[w], { x: SLOT(k++), y: ROW, isNew: false }); w = r.next(w); }
+  }
+  const lostText = r => '<span class="bad">' + lostList(r).join('、') + ' 再也到不了</span>';
+
+  /* ── scenario 1: head insertion of boat into cat → fly ── */
+  function headInsert(wrong) {
+    const r = makeRun();
+    r.add('cat', SLOT(1), ROW, 'fly');
+    r.add('fly', SLOT(2), ROW, null);
+    r.vars.head = 'cat';
+    r.snap('链表 ' + chain(r) + '，head 指向 cat。要在表头插入 <b>boat</b>。');
+    r.add('boat', SLOT(0), LOW, '?', true);
+    r.vars.new = 'boat';
+    r.snap('<code>new = malloc(sizeof(*new));</code> 写入 boat。新结点的 next 还没赋值（?）。', { var: 'new' });
+    const linkNew = () => {
+      r.nodes[r.vars.new].next = r.vars.head;               // new->next = head;
+      return '<code>new-&gt;next = head;</code> head 此时指向 ' + r.vars.head + '，把这个地址抄进 boat 的 next：' +
+        'boat → ' + r.vars.head + (r.vars.head === r.vars.new ? '，<span class="bad">boat 指向了自己</span>。' : '。');
+    };
+    const moveHead = () => { r.vars.head = r.vars.new; return '<code>head = new;</code> head 改为指向 boat。'; };
+    if (!wrong) {
+      r.snap(linkNew() + '现在 cat 同时被 head 和 boat 指着。', { edge: 'boat' });
+      r.snap(moveHead() + 'cat 仍可经 boat 到达，<span class="ok">没有结点丢失</span>。', { var: 'head' });
+      tidy(r);
+      r.snap('结果：' + chain(r) + '。只做了两次赋值，与表长无关：<b>O(1)</b>。');
+    } else {
+      r.snap(moveHead() + 'cat 的地址原来只存在 head 里，现在被覆盖：' + lostText(r) + '。', { var: 'head' });
+      r.snap(linkNew() + '遍历会在 boat 上无限循环，' + lostList(r).join('、') + ' 也没法 free。', { edge: 'boat' });
+    }
+    return r.frames;
+  }
+
+  /* ── scenario 2: insert dog after prev = cat in boat → cat → fly ── */
+  function midInsert(wrong) {
+    const r = makeRun();
+    r.add('boat', SLOT(0), ROW, 'cat');
+    r.add('cat', SLOT(1), ROW, 'fly');
+    r.add('fly', SLOT(2), ROW, null);
+    r.vars.head = 'boat';
+    r.vars.prev = 'cat';
+    r.snap('有序链表 ' + chain(r) + '，要插入 <b>dog</b>。prev 已指向 cat，dog 应接在它后面。');
+    r.add('dog', (SLOT(1) + SLOT(2)) / 2, LOW, '?', true);
+    r.vars.new = 'dog';
+    r.snap('<code>new = malloc(sizeof(*new));</code> 写入 dog。', { var: 'new' });
+    const linkNew = () => {
+      r.nodes[r.vars.new].next = r.next(r.vars.prev);       // new->next = prev->next;
+      const t = r.next(r.vars.new);
+      return '<code>new-&gt;next = prev-&gt;next;</code> prev-&gt;next 此时是 ' + t + '：dog → ' + t +
+        (t === r.vars.new ? '，<span class="bad">dog 指向了自己</span>。' : '。');
+    };
+    const linkPrev = () => { r.nodes[r.vars.prev].next = r.vars.new; return '<code>prev-&gt;next = new;</code> cat → dog。'; };
+    if (!wrong) {
+      r.snap(linkNew() + 'fly 现在被 cat 和 dog 同时指着。', { edge: 'dog' });
+      r.snap(linkPrev() + 'fly 由 dog 指着，<span class="ok">没有结点丢失</span>。', { edge: 'cat' });
+      tidy(r);
+      r.snap('结果：' + chain(r) + '。已知前驱，插入只改两个指针：<b>O(1)</b>。');
+    } else {
+      r.snap(linkPrev() + 'fly 的地址原来只存在 cat 的 next 里，现在被覆盖：' + lostText(r) + '。', { edge: 'cat' });
+      r.snap(linkNew() + '从 head 遍历会在 dog 上无限循环。', { edge: 'dog' });
+    }
+    return r.frames;
+  }
+
+  /* ── scenario 3: delete cat from boat → cat → dog → fly ── */
+  function del(wrong) {
+    const r = makeRun();
+    const target = 'cat';
+    r.add('boat', SLOT(0), ROW, 'cat');
+    r.add('cat', SLOT(1), ROW, 'dog');
+    r.add('dog', SLOT(2), ROW, 'fly');
+    r.add('fly', SLOT(3), ROW, null);
+    r.vars.head = 'boat';
+    r.snap('链表 ' + chain(r) + '，要删除 <b>' + target + '</b>。先找到它的前驱 q。');
+    r.vars.q = r.vars.head;
+    r.snap('<code>q = head;</code> q 指向 ' + r.vars.q + '。', { var: 'q' });
+    while (r.next(r.vars.q) !== null && r.next(r.vars.q) !== target) {
+      r.vars.q = r.next(r.vars.q);
+      r.snap('q-&gt;next 不是 ' + target + '，<code>q = q-&gt;next;</code>', { var: 'q' });
+    }
+    r.snap('q-&gt;next 是 ' + target + '，就是要删的结点；q 停在它的前驱 ' + r.vars.q + '。', { node: target });
+    if (!wrong) {
+      r.vars.p = r.next(r.vars.q);                              // p = q->next;
+      r.snap('<code>p = q-&gt;next;</code> 先用 p 存下 ' + r.vars.p + ' 的地址。', { var: 'p' });
+      r.nodes[r.vars.q].next = r.next(r.vars.p);                // q->next = p->next;
+      r.snap('<code>q-&gt;next = p-&gt;next;</code> ' + r.vars.q + ' → ' + r.next(r.vars.q) + '，' + target +
+        ' 被绕过，只剩 p 还指着它。', { edge: r.vars.q });
+      r.freed.add(r.vars.p);                                    // free(p);
+      r.snap('<code>free(p);</code> 归还 ' + target + ' 的内存。p 成了悬空指针（dangling pointer），不能再解引用。');
+      tidy(r);
+      r.snap('结果：' + chain(r) + '。已知前驱，删除只改一个指针：<b>O(1)</b>。');
+    } else {
+      r.nodes[r.vars.q].next = r.next(r.next(r.vars.q));        // q->next = q->next->next;
+      r.snap('<code>q-&gt;next = q-&gt;next-&gt;next;</code> 没有先存 ' + target + '：' + r.vars.q + ' 改指 ' +
+        r.next(r.vars.q) + ' 后，' + lostText(r) + '。', { edge: r.vars.q });
+      delete r.vars.q;
+      r.snap('想 free 时已经找不到 ' + lostList(r).join('、') + ' 的地址，这块内存一直占着：<span class="bad">内存泄漏（memory leak）</span>。',
+        {}, { leak: true });
+    }
+    return r.frames;
+  }
+
+  const BUILD = { head: headInsert, mid: midInsert, del };
+
+  /* ── drawing ── */
+  const MARK = { n: 'rgba(255,255,255,0.45)', active: 'var(--accent)', bad: 'var(--red)', v: 'var(--blue)', vactive: 'var(--accent)', vbad: 'var(--red)' };
+  const defs = '<defs>' + Object.keys(MARK).map(k =>
+    `<marker id="m-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+    `<path d="M0,0 L10,5 L0,10 z" style="fill:${MARK[k]}"/></marker>`).join('') + '</defs>';
+
+  // point where the segment from (px,py) towards the centre of box b leaves the box
+  function clip(px, py, b) {
+    const cx = b.x + BW / 2, cy = b.y + BH / 2, dx = px - cx, dy = py - cy;
+    const sx = dx ? (BW / 2) / Math.abs(dx) : Infinity, sy = dy ? (BH / 2) / Math.abs(dy) : Infinity;
+    const s = Math.min(sx, sy);
+    return [cx + dx * s, cy + dy * s];
+  }
+
+  function render(f) {
+    const nodes = {};
+    f.nodes.forEach(n => { nodes[n.word] = n; });
+    const freed = new Set(f.freed);
+    const fromHead = reach(nodes, freed, [f.vars.head]);
+    const fromAny = reach(nodes, freed, Object.values(f.vars));
+    let edges = '', boxes = '', vars = '';
+
+    f.nodes.forEach(n => {
+      let cls = '', badge = '', bcls = '';
+      if (freed.has(n.word)) { cls = 'freed'; badge = '已 free'; bcls = 'freed'; }
+      else if (!fromAny.has(n.word)) { cls = 'bad'; badge = f.leak ? '泄漏' : '丢失'; bcls = 'bad'; }
+      else if (!fromHead.has(n.word)) {
+        if (n.isNew) cls = 'compare';
+        else { cls = 'warn'; badge = '已摘下'; bcls = 'warn'; }
+      }
+      else if (f.hi.node === n.word) cls = 'compare';
+      const x = n.x, y = n.y, px = x + WW + PW / 2, py = y + BH / 2;
+      let g = `<g class="k-node ${cls}"><rect x="${x}" y="${y}" width="${WW}" height="${BH}" rx="3"/>` +
+        `<rect x="${x + WW}" y="${y}" width="${PW}" height="${BH}" rx="3"/>` +
+        `<text x="${x + WW / 2}" y="${py}">${K.esc(n.word)}</text>`;
+      if (!freed.has(n.word)) {
+        if (n.next === null) g += `<line class="null-slash" x1="${x + WW + 5}" y1="${y + BH - 5}" x2="${x + BW - 5}" y2="${y + 5}"/>`;
+        else if (n.next === '?') g += `<text class="uninit" x="${px}" y="${py}">?</text>`;
+      }
+      g += '</g>';
+      if (badge) g += `<text class="k-badge ${bcls}" x="${x + BW / 2}" y="${y + BH + 15}">${badge}</text>`;
+      boxes += g;
+
+      if (freed.has(n.word) || !nodes[n.next]) return;
+      const ec = f.hi.edge === n.word ? 'active' : cls === 'bad' ? 'bad' : '';
+      const mk = ec === 'active' ? 'active' : ec === 'bad' ? 'bad' : 'n';
+      boxes += `<circle class="ptr-dot" cx="${px}" cy="${py}" r="3.5"/>`;
+      const t = nodes[n.next];
+      let d;
+      if (t === n) {                                   // self loop
+        d = `M${px},${py} C${x + BW + 44},${y + BH / 2 + 4} ${x + BW + 22},${y + BH + 46} ${x + 30},${y + BH + 3}`;
+      } else if (t.y === y && t.x > x && f.nodes.some(o => o !== n && o !== t && o.y === y && o.x > x && o.x < t.x)) {
+        d = `M${px},${py} Q${(px + t.x) / 2 + 10},${y + BH + 64} ${t.x + 12},${t.y + BH + 1}`;   // skip over a node
+      } else {
+        const [ex, ey] = clip(px, py, t);
+        d = `M${px},${py} L${ex},${ey}`;
+      }
+      edges += `<path class="k-edge ${ec}" d="${d}" marker-end="url(#m-${mk})"/>`;
+    });
+
+    // pointer variables: head on the far left, the others above (list row) or left of (new row) their node
+    const stack = {};
+    Object.keys(f.vars).forEach(name => {
+      const w = f.vars[name];
+      if (!w || w === '?' || !nodes[w]) return;
+      const t = nodes[w];
+      const vc = f.hi.var === name ? 'active' : freed.has(w) ? 'bad' : '';
+      const mk = vc === 'active' ? 'vactive' : vc === 'bad' ? 'vbad' : 'v';
+      let lx, ly, x1, y1, x2, y2;
+      if (name === 'head') {
+        lx = 26; ly = ROW + BH / 2; x1 = 46; y1 = ly;
+        [x2, y2] = clip(x1, y1, t);
+      } else if (t.y === ROW) {
+        const k = stack[w] = (stack[w] || 0) + 1;
+        lx = t.x + (k === 1 ? 26 : 60); ly = ROW - 30; x1 = lx; y1 = ly + 9; x2 = lx; y2 = ROW - 2;
+      } else {
+        lx = t.x - 30; ly = t.y + BH / 2; x1 = t.x - 17; y1 = ly; x2 = t.x - 2; y2 = ly;
+      }
+      vars += `<text class="v-label ${vc}" x="${lx}" y="${ly}">${name}</text>` +
+        `<path class="v-edge ${vc}" d="M${x1},${y1} L${x2},${y2}" marker-end="url(#m-${mk})"/>`;
+    });
+
+    stage.innerHTML = `<svg viewBox="0 0 ${VBW} ${VBH}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">` +
+      defs + edges + boxes + vars + '</svg>';
+  }
+
+  /* ── controls ── */
+  let scen = 'head', wrong = false;
+  function group(items, get, set) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach(it => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      b.addEventListener('click', () => { set(it.key); sync(); load(); });
+      b.dataset.key = String(it.key);
+      g.appendChild(b);
+    });
+    g.sync = () => g.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.key === String(get())));
+    return g;
+  }
+  const g1 = group([{ key: 'head', label: '头插' }, { key: 'mid', label: '中间插入' }, { key: 'del', label: '删除' }],
+    () => scen, v => { scen = v; });
+  const g2 = group([{ key: false, label: '正确顺序' }, { key: true, label: '错误顺序' }],
+    () => wrong, v => { wrong = v; });
+  controls.appendChild(g1);
+  controls.appendChild(g2);
+  function sync() { g1.sync(); g2.sync(); }
+  sync();
+
+  const player = window.AnimKit.player({ frames: BUILD[scen](wrong), render, interval: 1600 });
+  function load() { player.load(BUILD[scen](wrong)); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插入排序步进</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .wrap { width: 100%; display: flex; flex-direction: column; align-items: center; }
+  .wrap .cells { flex-wrap: nowrap; }
+  .wrap .hand { padding: 16px 4px 0; }
+  .wrap .row { padding: 18px 4px 22px; }
+  .hand .cell.ghost { visibility: hidden; }
+  .hand .cell .idx { color: var(--accent); font-weight: 700; }
+  .status { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .status b { color: var(--accent); font-size: 15px; }
+  @media (max-width: 420px) {
+    .wrap .cells { gap: 3px; width: 100%; }
+    .wrap .cell { min-width: 0; flex: 1 1 0; padding: 0; height: 34px; font-size: 12px; border-radius: 5px; }
+    .wrap .row { padding: 16px 0 20px; }
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">插入排序：取出 val，大的右移，落进空位</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>val / 刚落位</span>
+  <span><i style="background: rgba(217,119,87,0.45)"></i>正在比较 A[j]</span>
+  <span><i style="background: rgba(251,191,36,0.55)"></i>刚右移</span>
+  <span><i style="background: rgba(56,189,248,0.45)"></i>有序前缀</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  const SCENARIOS = [
+    { key: 'lecture', label: '课上数组', values: [2, 0, 9, 7, 1, 5, 2] },
+    { key: 'sorted', label: '已排序', values: [1, 2, 3, 4, 5, 6, 7] },
+    { key: 'reverse', label: '逆序', values: [7, 6, 5, 4, 3, 2, 1] },
+    { key: 'almost', label: '几乎有序', values: [1, 2, 4, 3, 5, 7, 6] },
+  ];
+
+  // equal keys get subscripts in input order (2₁, 2₂) so stability is visible
+  const SUB = '₀₁₂₃₄₅₆₇₈₉';
+  function tag(values) {
+    const total = {}, seen = {};
+    values.forEach(v => { total[v] = (total[v] || 0) + 1; });
+    return values.map(v => {
+      if (total[v] < 2) return { v, s: String(v) };
+      seen[v] = (seen[v] || 0) + 1;
+      return { v, s: v + SUB[seen[v]] };
+    });
+  }
+
+  // <algo> insertion sort with val + shifting; one frame per lift, comparison, shift and drop
+  function build(sc) {
+    const A = tag(sc.values);
+    const n = A.length;
+    const frames = [];
+    let cmp = 0, sh = 0;
+    const snap = f => frames.push(Object.assign(
+      { arr: A.slice(), cmp, sh, val: null, gap: -1, j: -1, mark: -1, round: 0, top: 0, state: '' }, f));
+
+    snap({ state: 'start', note: '输入 [' + A.map(x => x.s).join(', ') + ']。A[0] = ' + A[0].s +
+      ' 单独一个元素，看作长度为 1 的有序前缀。' });
+
+    for (let i = 1; i < n; i++) {
+      const val = A[i];
+      A[i] = null;
+      let c = 0, s = 0, j = i - 1;
+      snap({ state: 'lift', round: i, val, gap: i, top: i,
+        note: '第 ' + i + ' 轮：A[0..' + (i - 1) + '] 已有序。取出 A[' + i + '] = <b>' + val.s +
+          '</b> 存进 val，下标 ' + i + ' 空出来。' });
+      while (j >= 0) {
+        cmp++; c++;
+        const x = A[j];
+        if (x.v > val.v) {
+          snap({ state: 'cmp', round: i, val, gap: j + 1, j, top: i,
+            note: '比较 A[' + j + '] = ' + x.s + ' 与 val = ' + val.s + '：' + x.s + ' &gt; ' + val.s + '，右移。' });
+          A[j + 1] = x; A[j] = null; sh++; s++;
+          snap({ state: 'shift', round: i, val, gap: j, mark: j + 1, top: i,
+            note: x.s + ' 移到下标 ' + (j + 1) + '，空位左移到下标 ' + j + '。' +
+              (j === 0 ? '已到最前面，左边没有元素可比了。' : '') });
+          j--;
+        } else {
+          const eq = x.v === val.v;
+          snap({ state: 'cmp', round: i, val, gap: j + 1, j, top: i,
+            note: '比较 A[' + j + '] = ' + x.s + ' 与 val = ' + val.s + '：' + x.s + (eq ? ' = ' : ' &lt; ') + val.s +
+              '，不大于 val，<b>停止</b>。' + (eq ? '相等也停，' + val.s + ' 不会越过 ' + x.s + '：<span class="ok">稳定</span>。' : '') });
+          break;
+        }
+      }
+      A[j + 1] = val;
+      snap({ state: 'drop', round: i, mark: j + 1, top: i,
+        note: (j < 0 ? 'j = −1，' : '') + 'val = <b>' + val.s + '</b> 放进下标 ' + (j + 1) + '。本轮比较 ' + c +
+          ' 次、移位 ' + s + ' 次' + (j < 0 ? '（一路移到最前面，比较数 = 移位数）' : '（比较数 = 移位数 + 1）') +
+          '，A[0..' + i + '] 有序。' });
+    }
+
+    const tot = '共比较 <b>' + cmp + '</b> 次、移位 <b>' + sh + '</b> 次。';
+    const tail = {
+      lecture: '2₁ 仍在 2₂ 前面：相等键的先后顺序没变。',
+      sorted: '每个新元素只和前一个比 1 次就停，比较 = n − 1 = ' + (n - 1) + '，移位 0：最好情况 Θ(n)。',
+      reverse: '每个新元素都移到最前面，比较 = 移位 = 1 + 2 + … + ' + (n - 1) + ' = n(n − 1)/2 = ' + (n * (n - 1) / 2) + '：最坏情况 Θ(n²)。',
+      almost: '只有两处相邻元素颠倒，比较只比 n − 1 = ' + (n - 1) + ' 多 ' + (cmp - (n - 1)) + ' 次：几乎有序时接近线性。',
+    }[sc.key];
+    snap({ state: 'end', top: n - 1, note: '排序完成。' + tot + tail });
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    const n = f.arr.length;
+    const lifted = k => f.val && k === f.gap;
+    const hand = f.arr.map((_, k) => (lifted(k) ? f.val.s : null));
+    const handHtml = K.cells(hand, {
+      idx: hand.map((_, k) => (lifted(k) ? 'val' : '')),
+      cls: (v, k) => (lifted(k) ? 'active' : 'ghost'),
+    }).replace('class="cells"', 'class="cells hand"');
+    const row = f.arr.map(x => (x ? x.s : null));
+    const cls = (v, k) => {
+      if (f.state === 'end') return 'done';
+      if (k === f.gap) return '';
+      if (k === f.j) return 'compare';
+      if (k === f.mark) return f.state === 'drop' ? 'active' : 'warn';
+      if (k <= f.top) return 'visited';
+      return '';
+    };
+    const ptr = {};
+    if (f.j >= 0) ptr[f.j] = 'j';
+    if (f.state === 'lift') ptr[f.gap] = 'i';
+    const rowHtml = K.cells(row, { idx: true, cls, ptr }).replace('class="cells"', 'class="cells row"');
+    const roundTxt = f.state === 'start' ? '起始' : f.state === 'end' ? '完成' : '第 ' + f.round + ' 轮';
+    stage.innerHTML = '<div class="wrap">' + handHtml + rowHtml +
+      '<div class="status"><span>' + roundTxt + '</span>' +
+      '<span>比较 <b>' + f.cmp + '</b> 次</span><span>移位 <b>' + f.sh + '</b> 次</span>' +
+      '<span>n = ' + n + '</span></div></div>';
+  }
+
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = SCENARIOS.map((sc, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    if (k === 0) b.classList.add('active');
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(group);
+
+  const player = AnimKit.player({ frames: build(SCENARIOS[0]), render, interval: 1300 });
+  btns.forEach((b, k) => b.addEventListener('click', () => {
+    btns.forEach(x => x.classList.toggle('active', x === b));
+    player.load(build(SCENARIOS[k]));
+  }));
+})();
+</script>
+</body>
+</html>

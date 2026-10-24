@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>逐字符计算字符串哈希</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .sh { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; }
+  .sh .cells { padding: 16px 2px 20px; }
+  .sh .cell { min-width: 32px; height: 34px; }
+  .tr { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tr th { color: var(--muted); font-weight: 500; padding: 2px 7px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .tr td { padding: 2px 7px; height: 20px; text-align: right; white-space: nowrap; }
+  .tr td:first-child { text-align: center; }
+  .tr tr.cur td { background: var(--accent-dim); }
+  .tr td.h { color: var(--accent); font-weight: 700; }
+  .tr td.n { color: var(--muted); }
+  .tr tr.start td { color: var(--muted); }
+  .res { font-size: 13px; padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(74, 222, 128, 0.7); background: rgba(74, 222, 128, 0.10); }
+  .res b { color: var(--green); }
+  .controls .field { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
+  .controls input[type="text"] { width: 84px; }
+  .controls input[type="number"] { width: 84px; }
+  @media (max-width: 420px) {
+    .tr { font-size: 11px; }
+    .tr th, .tr td { padding: 1px 4px; height: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">h = (h × 32 + c) mod M，逐字符计算</div>
+<div class="controls" id="controls"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const esc = K.esc;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+  const MAXLEN = 6;
+  let ascii = false;
+
+  // ── page controls (added before the player's buttons) ──
+  function field(text, input) {
+    const lab = document.createElement('label');
+    lab.className = 'field';
+    lab.appendChild(document.createTextNode(text));
+    lab.appendChild(input);
+    return lab;
+  }
+  const word = document.createElement('input');
+  word.type = 'text';
+  word.value = 'stop';
+  word.maxLength = MAXLEN;
+  word.autocomplete = 'off';
+  word.spellcheck = false;
+  const mod = document.createElement('input');
+  mod.type = 'number';
+  mod.value = '101';
+  mod.min = '2';
+  mod.max = '1000000';
+  controls.appendChild(field('单词', word));
+  controls.appendChild(field('M =', mod));
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const encBtns = [['a…z → 0…25', false], ['ASCII', true]].map(([label, val], i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (i === 0) b.classList.add('active');
+    b.addEventListener('click', () => {
+      ascii = val;
+      encBtns.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      reload();
+    });
+    group.appendChild(b);
+    return b;
+  });
+  controls.appendChild(group);
+
+  function clean(raw) {
+    const s = ascii ? raw.replace(/[^\x20-\x7e]/g, '') : raw.toLowerCase().replace(/[^a-z]/g, '');
+    return s.slice(0, MAXLEN);
+  }
+  function readM() {
+    let m = parseInt(mod.value, 10);
+    if (!(m >= 2)) m = 2;
+    if (m > 1000000) m = 1000000;
+    return m;
+  }
+  const codeOf = ch => (ascii ? ch.charCodeAt(0) : ch.charCodeAt(0) - 97);
+
+  // <algo> run the hash for real; one frame per character
+  function build() {
+    const s = clean(word.value);
+    const M = readM();
+    const frames = [];
+    if (!s.length) {
+      frames.push({ s: '', note: ascii ? '输入至少一个可打印的 ASCII 字符。' : '输入至少一个字母 a…z。' });
+      return frames;
+    }
+    const codes = Array.from(s, codeOf);
+    const enc = ascii ? 'ASCII 码' : 'a…z → 0…25';
+    const rows = [];
+    let h = 0, N = 0n;
+    frames.push({ s, codes, M, rows: [], cur: -1, done: false,
+      note: '编码：' + enc + '，M = ' + M + '。h 从 <b>0</b> 开始，每读一个字符 c：<code>h = (h × 32 + c) mod ' + M + '</code>。' });
+    codes.forEach((c, i) => {
+      const t = h * 32 + c;
+      const nh = t % M;
+      const q = Math.floor(t / M);
+      N = N * 32n + BigInt(c);
+      if (BigInt(nh) !== N % BigInt(M)) throw new Error('h differs from N mod M');
+      rows.push({ ch: s[i], c, t, h: nh, N: N.toString() });
+      let note = '读入 \'' + esc(s[i]) + '\'，c = ' + c + '：h = (' + h + ' × 32 + ' + c + ') mod ' + M + ' = ' + t + ' mod ' + M + ' = <b>' + nh + '</b>';
+      if (q > 0) note += '（' + t + ' − ' + q + ' × ' + M + '）';
+      note += '。<br>不取模的 N = ' + N + '，N mod ' + M + ' = ' + nh + '，与 h 相同。';
+      h = nh;
+      frames.push({ s, codes, M, rows: rows.slice(), cur: i, done: false, note });
+    });
+    const sum = codes.reduce((a, b) => a + b, 0);
+    let note = 'h("' + esc(s) + '") = <b>' + h + '</b>，放进槽 ' + h + '（槽号 0…' + (M - 1) + '）。<br>对比：字符值相加 = ' + sum + '，' + sum + ' mod ' + M + ' = ' + (sum % M) + '，打乱字母顺序也不变。';
+    if ((M & (M - 1)) === 0) {
+      const r = Math.ceil(Math.log2(M) / 5);
+      note += '<br><span class="bad">M 是 2 的幂</span>：倒数第 ' + (r + 1) + ' 个及更前的字符乘上的 32 的幂是 M 的倍数，只有最后 ' + r + ' 个字符起作用。';
+    } else if (32 % M === 1) {
+      note += '<br><span class="bad">32 mod ' + M + ' = 1</span>：h 恰好等于字符值之和 mod ' + M + '，重排的词一定冲突。';
+    }
+    frames.push({ s, codes, M, rows: rows.slice(), cur: -1, done: true, h, note });
+    return frames;
+  }
+
+  // <render>
+  function render(f) {
+    if (!f.s) { stage.innerHTML = ''; return; }
+    const shown = Array.from(f.s, ch => (ch === ' ' ? '␣' : ch));
+    const row = K.cells(shown, {
+      idx: true,
+      cls: (v, k) => (k === f.cur ? 'active' : (f.done || k < f.cur) ? 'done' : ''),
+      ptr: k => 'c=' + f.codes[k],
+    });
+    let body = '<tr class="start"><td>起点</td><td></td><td></td><td class="h">0</td><td class="n">0</td></tr>';
+    f.rows.forEach((r, k) => {
+      body += '<tr' + (k === f.cur ? ' class="cur"' : '') + '><td>' + esc(r.ch === ' ' ? '␣' : r.ch) + '</td><td>' + r.c + '</td><td>' + r.t +
+        '</td><td class="h">' + r.h + '</td><td class="n">' + r.N + '</td></tr>';
+    });
+    const table = '<table class="tr"><thead><tr><th>字符</th><th>c</th><th>h×32+c</th><th>h</th><th>不取模 N</th></tr></thead><tbody>' + body + '</tbody></table>';
+    const res = f.done ? '<div class="res">h("' + esc(f.s) + '") = <b>' + f.h + '</b> → 槽 ' + f.h + '</div>' : '';
+    stage.innerHTML = '<div class="sh">' + row + table + res + '</div>';
+  }
+
+  const player = AnimKit.player({ frames: build(), render, interval: 1400 });
+  function reload() { player.load(build()); }
+  word.addEventListener('input', reload);
+  mod.addEventListener('input', reload);
+})();
+</script>
+</body>
+</html>

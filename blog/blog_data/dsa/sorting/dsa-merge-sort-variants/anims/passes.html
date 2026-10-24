@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自底向上与自适应归并的轮次</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  #pick { gap: 8px; }
+  #pick .btn-group { flex-wrap: wrap; }
+  .wrap { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 6px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row .lab { flex: none; width: 40px; text-align: right; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .row.cur .lab { color: var(--accent); font-weight: 700; }
+  .line { flex: 1 1 auto; min-width: 0; display: flex; gap: 6px; padding-bottom: 8px; }
+  .line .cell { flex: 1 1 0; min-width: 0; max-width: 40px; height: 30px; padding: 0; font-size: 13px; border-radius: 6px; }
+  .line .cell.active, .line .cell.found { transform: none; }
+  .line .cell .bar { position: absolute; left: 0; right: 0; bottom: -7px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.35); }
+  .line .cell .bar.cont { right: -6px; }
+  .bar.L { background: var(--accent) !important; }
+  .bar.R { background: var(--blue) !important; }
+  .bar.M { background: var(--green) !important; }
+  .bar.C { background: repeating-linear-gradient(90deg, var(--yellow) 0 5px, transparent 5px 8px) !important; }
+  .status { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 4px; }
+  .status b { color: var(--accent); font-size: 14px; }
+  @media (max-width: 480px) {
+    .legend { display: none; }
+    .wrap { gap: 3px; }
+    .status { font-size: 11px; gap: 2px 12px; }
+    .row { gap: 4px; }
+    .row .lab { width: 30px; font-size: 10px; }
+    .line { gap: 3px; }
+    .line .cell { font-size: 12px; height: 26px; border-radius: 4px; }
+    .line .cell .bar.cont { right: -3px; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">归并的轮次：自底向上 vs 自适应</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>左 run</span>
+  <span><i style="background: var(--blue)"></i>右 run</span>
+  <span><i style="background: var(--green)"></i>合并结果</span>
+  <span><i style="background: var(--yellow)"></i>轮空，原样留下</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  const ALGOS = [
+    { key: 'bu', label: '自底向上' },
+    { key: 'nat', label: '自适应' },
+  ];
+  const INPUTS = [
+    { key: 'ex7', label: '例 7 个', values: [6, 3, 8, 1, 5, 2, 7] },
+    { key: 'lec', label: '课上 14 个', values: [7, 0, 3, 6, 8, 7, 4, 4, 1, 7, 7, 6, 6, 4] },
+    { key: 'sorted', label: '已排序', values: [0, 1, 3, 4, 4, 4, 6, 6, 6, 7, 7, 7, 7, 8] },
+    { key: 'rev', label: '逆序', values: [8, 7, 6, 5, 4, 3, 2, 1] },
+  ];
+
+  const list = (A, lo, hi) => '[' + A.slice(lo, hi).join(' ') + ']';
+  const clone = rows => rows.map(r => ({ label: r.label, vals: r.vals.slice(), segs: r.segs.map(s => Object.assign({}, s)) }));
+
+  // <algo> both versions merge A[lo..mid-1] and A[mid..hi-1], ties taken from the left run
+  function merge(A, lo, mid, hi) {
+    const B = [];
+    let i = lo, j = mid;
+    for (let k = lo; k < hi; k++) {
+      if (j >= hi || (i < mid && A[i] <= A[j])) B.push(A[i++]);
+      else B.push(A[j++]);
+    }
+    for (let k = lo; k < hi; k++) A[k] = B[k - lo];
+  }
+  function runEnd(A, i) {
+    while (i + 1 < A.length && A[i] <= A[i + 1]) i++;
+    return i + 1;
+  }
+  function naturalRuns(A) {
+    const segs = [];
+    for (let lo = 0; lo < A.length; ) { const e = runEnd(A, lo); segs.push({ lo, hi: e, cls: '' }); lo = e; }
+    return segs;
+  }
+
+  function build(algo, input) {
+    const A = input.values.slice();
+    const n = A.length;
+    const frames = [];
+    const rows = [];
+    let merges = 0, round = 0;
+    const snap = (extra) => frames.push(Object.assign({ rows: clone(rows), cur: rows.length - 1, round, merges, runs: 0, width: 0 }, extra));
+    const plainAll = row => row.segs.forEach(s => { s.cls = ''; });
+
+    if (algo === 'bu') {
+      rows.push({ label: '输入', vals: A.slice(), segs: A.map((_, k) => ({ lo: k, hi: k + 1, cls: '' })) });
+      snap({ runs: n, cur: 0, note: '输入 ' + n + ' 个元素。自底向上不做拆分，直接把每个元素看作长度为 1 的有序 run，共 <b>' + n + '</b> 个 run。' });
+      for (let w = 1; w < n; w *= 2) {
+        round++;
+        const src = rows[rows.length - 1];
+        const tgt = { label: '第' + round + '轮', vals: A.map(() => null), segs: [] };
+        rows.push(tgt);
+        const runsBefore = src.segs.length;
+        let lo;
+        for (lo = 0; lo + w < n; lo += 2 * w) {
+          const hi = Math.min(lo + 2 * w, n);
+          const left = list(A, lo, lo + w), right = list(A, lo + w, hi);
+          src.segs.forEach(s => { s.cls = s.lo === lo ? 'L' : s.lo === lo + w ? 'R' : ''; });
+          tgt.segs.forEach(s => { s.cls = ''; });
+          merge(A, lo, lo + w, hi);
+          merges++;
+          for (let k = lo; k < hi; k++) tgt.vals[k] = A[k];
+          tgt.segs.push({ lo, hi, cls: 'M' });
+          snap({ width: w, runs: runsBefore,
+            note: '第 ' + round + ' 轮（宽度 ' + w + '）：合并 ' + left + ' 与 ' + right + ' → <b>' + list(A, lo, hi) + '</b>' +
+              (hi - lo < 2 * w ? '。右边的 run 不满 ' + w + ' 个，照样合并。' : '。') });
+        }
+        if (lo < n) {
+          src.segs.forEach(s => { s.cls = s.lo === lo ? 'C' : ''; });
+          tgt.segs.forEach(s => { s.cls = ''; });
+          for (let k = lo; k < n; k++) tgt.vals[k] = A[k];
+          tgt.segs.push({ lo, hi: n, cls: 'C' });
+          snap({ width: w, runs: runsBefore,
+            note: list(A, lo, n) + ' 右边没有可配对的 run（下标 ' + lo + ' + 宽度 ' + w + ' ≥ n），<b>不合并</b>，原样留到下一轮。' });
+        }
+        plainAll(src);
+        tgt.segs.forEach(s => { s.cls = ''; });
+        const after = tgt.segs.length;
+        if (after > 1) {
+          snap({ width: w, runs: after,
+            note: '第 ' + round + ' 轮结束：' + runsBefore + ' 个 run → <b>' + after + '</b> 个，每个 run 至多 ' + (2 * w) + ' 个元素。这一轮扫过全部 ' + n + ' 个元素，是 Θ(n)。' });
+        }
+      }
+      rows[rows.length - 1].segs.forEach(s => { s.cls = 'M'; });
+      snap({ runs: 1, done: true,
+        note: '<span class="ok">排序完成。</span>' + round + ' 轮 = ⌈log₂ ' + n + '⌉，合并 <b>' + merges + '</b> 次 = n − 1。' +
+          (input.key === 'sorted' ? '输入本来就有序，但自底向上看不出来，轮数、合并次数一次不少：<b>不自适应</b>。' : '每轮 Θ(n)，共 Θ(n log n)。') });
+    } else {
+      rows.push({ label: '输入', vals: A.slice(), segs: naturalRuns(A) });
+      const r0 = rows[0].segs.length;
+      const drops = [];
+      for (let k = 0; k + 1 < n; k++) if (A[k] > A[k + 1]) drops.push(A[k] + '&gt;' + A[k + 1]);
+      snap({ runs: r0, cur: 0,
+        note: '从头扫描，相邻两个元素出现下降就断开' + (drops.length ? '（' + drops.join('、') + '）' : '（一处下降都没有）') +
+          '。' + (r0 === 1 ? '整个数组就是 <b>1</b> 个 run。'
+            : '得到 <b>' + r0 + '</b> 个非递减的 natural run' + (r0 === n ? '：每个 run 只有 1 个元素，和自底向上的起点一样。' : '，比 ' + n + ' 个单元素 run 少得多。')) });
+      if (r0 === 1) {
+        rows[0].segs.forEach(s => { s.cls = 'M'; });
+        snap({ runs: 1, cur: 0, done: true,
+          note: '<span class="ok">只有 1 个 run，整个数组已经有序，结束。</span>一次扫描、' + (n - 1) + ' 次比较、<b>0</b> 次合并：最好情况 <b>Θ(n)</b>。' });
+        return frames;
+      }
+      let runs;
+      do {
+        round++;
+        const src = rows[rows.length - 1];
+        src.segs = naturalRuns(A);
+        const runsBefore = src.segs.length;
+        const tgt = { label: '第' + round + '轮', vals: A.map(() => null), segs: [] };
+        rows.push(tgt);
+        runs = 0;
+        for (let lo = 0, hi; lo < n; lo = hi) {
+          const mid = runEnd(A, lo);
+          runs++;
+          if (mid === n) {
+            src.segs.forEach(s => { s.cls = s.lo === lo ? 'C' : ''; });
+            tgt.segs.forEach(s => { s.cls = ''; });
+            for (let k = lo; k < n; k++) tgt.vals[k] = A[k];
+            tgt.segs.push({ lo, hi: n, cls: 'C' });
+            snap({ runs: runsBefore,
+              note: list(A, lo, n) + ' 是最后一个 run，没有搭档，<b>不合并</b>，原样留到下一轮。' });
+            break;
+          }
+          hi = runEnd(A, mid);
+          const left = list(A, lo, mid), right = list(A, mid, hi);
+          src.segs.forEach(s => { s.cls = s.lo === lo ? 'L' : s.lo === mid ? 'R' : ''; });
+          tgt.segs.forEach(s => { s.cls = ''; });
+          merge(A, lo, mid, hi);
+          merges++;
+          for (let k = lo; k < hi; k++) tgt.vals[k] = A[k];
+          tgt.segs.push({ lo, hi, cls: 'M' });
+          snap({ runs: runsBefore,
+            note: '第 ' + round + ' 轮：扫描找到相邻两个 run ' + left + ' 和 ' + right + '，合并 → <b>' + list(A, lo, hi) + '</b>（' + (hi - lo) + ' 个元素）。' });
+        }
+        plainAll(src);
+        tgt.segs.forEach(s => { s.cls = ''; });
+        if (runs > 1) {
+          snap({ runs,
+            note: '第 ' + round + ' 轮结束：' + runsBefore + ' 个 run → <b>' + runs + '</b> 个。一次扫描加若干次合并，合计只碰每个元素常数次，Θ(n)。' });
+        }
+      } while (runs > 1);
+      rows[rows.length - 1].segs.forEach(s => { s.cls = 'M'; });
+      const bu = Math.ceil(Math.log2(n));
+      snap({ runs: 1, done: true,
+        note: '<span class="ok">只剩 1 个 run，排序完成。</span>' + round + ' 轮 = ⌈log₂ ' + r0 + '⌉，合并 <b>' + merges + '</b> 次 = run 数 − 1。' +
+          (r0 === n ? '逆序输入没有可利用的 run，和自底向上完全相同：最坏 Θ(n log n)。'
+            : '同样的输入，自底向上要 ' + bu + ' 轮、' + (n - 1) + ' 次合并。') });
+    }
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    const rowsHtml = f.rows.map((r, ri) => {
+      const segOf = k => r.segs.find(s => k >= s.lo && k < s.hi);
+      const cellsHtml = r.vals.map((v, k) => {
+        const s = segOf(k);
+        const empty = v === null;
+        let cls = 'cell';
+        if (empty) cls += ' empty';
+        else if (s && s.cls === 'L') cls += ' compare';
+        else if (s && s.cls === 'R') cls += ' visited';
+        else if (s && s.cls === 'M') cls += ' done';
+        else if (s && s.cls === 'C') cls += ' warn';
+        const bar = s && !empty ? '<span class="bar ' + (s.cls || '') + (k + 1 < s.hi ? ' cont' : '') + '"></span>' : '';
+        return '<span class="' + cls + '">' + (empty ? '·' : K.esc(v)) + bar + '</span>';
+      }).join('');
+      return '<div class="row' + (ri === f.cur && !f.done ? ' cur' : '') + '"><span class="lab">' + K.esc(r.label) + '</span><div class="line">' + cellsHtml + '</div></div>';
+    }).join('');
+    const parts = [];
+    parts.push('<span>' + (f.round ? '第 ' + f.round + ' 轮' : '起始') + (f.width ? '（宽度 ' + f.width + '）' : '') + '</span>');
+    parts.push('<span>run 数 <b>' + f.runs + '</b></span>');
+    parts.push('<span>累计合并 <b>' + f.merges + '</b> 次</span>');
+    stage.innerHTML = '<div class="wrap">' + rowsHtml + '<div class="status">' + parts.join('') + '</div></div>';
+  }
+
+  let algo = 0, input = 1;
+  function group(items, active, onPick) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    const btns = items.map((it, k) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      if (k === active) b.classList.add('active');
+      b.addEventListener('click', () => {
+        btns.forEach(x => x.classList.toggle('active', x === b));
+        onPick(k);
+      });
+      g.appendChild(b);
+      return b;
+    });
+    pick.appendChild(g);
+  }
+  let player = null;
+  const reload = () => player.load(build(ALGOS[algo].key, INPUTS[input]));
+  group(ALGOS, algo, k => { algo = k; reload(); });
+  group(INPUTS, input, k => { input = k; reload(); });
+  player = AnimKit.player({ frames: build(ALGOS[algo].key, INPUTS[input]), render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

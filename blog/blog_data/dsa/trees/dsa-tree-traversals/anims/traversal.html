@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>二叉树的三种遍历</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .nul line { stroke: rgba(255, 255, 255, 0.22); stroke-width: 1.5; stroke-dasharray: 3 3; }
+  .nul circle { fill: none; stroke: rgba(255, 255, 255, 0.28); stroke-width: 1.5; stroke-dasharray: 3 2; }
+  .nul text { fill: var(--muted); font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .nul.called line { stroke: rgba(56, 189, 248, 0.6); stroke-dasharray: none; }
+  .nul.called circle { stroke: var(--blue); fill: rgba(56, 189, 248, 0.18); stroke-dasharray: none; }
+  .nul.called text { fill: #d6f2ff; }
+  .nul.cur line { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: none; }
+  .nul.cur circle { stroke: var(--accent); fill: var(--accent); stroke-dasharray: none; }
+  .nul.cur text { fill: #fff; }
+  .info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stats { font-size: 12px; color: var(--muted); text-align: center; }
+  .stats b { color: var(--text); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 8px; }
+  .row .lab { font-size: 11px; color: var(--muted); }
+  .info .cells { padding: 6px 2px 4px; gap: 3px; }
+  .info .cell { min-width: 30px; height: 30px; font-size: 13px; }
+  @media (max-width: 420px) {
+    .info .cell { min-width: 26px; height: 26px; font-size: 12px; padding: 0 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">二叉树的三种遍历（课上的例子树）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前调用</span>
+  <span><i style="background: rgba(217, 119, 87, 0.30); border: 1px solid var(--accent)"></i>调用栈上</span>
+  <span><i style="background: rgba(74, 222, 128, 0.5)"></i>已输出</span>
+  <span><i style="background: rgba(56, 189, 248, 0.3); border: 1px solid var(--blue)"></i>调用过的 NULL</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="info" id="info"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const info = document.getElementById('info');
+  const controls = document.getElementById('controls');
+
+  // lecture tree M(J(F(-,G),K),P(-,S(Q,-)))
+  const N = (key, left, right) => ({ key, left: left || null, right: right || null });
+  const ROOT = N('M', N('J', N('F', null, N('G')), N('K')), N('P', null, N('S', N('Q'), null)));
+
+  const ORDERS = [
+    { id: 'pre', label: '前序', fn: 'preorder', rule: '根、左、右' },
+    { id: 'in', label: '中序', fn: 'inorder', rule: '左、根、右' },
+    { id: 'post', label: '后序', fn: 'postorder', rule: '左、右、根' },
+  ];
+
+  // <algo> run the real recursion and record a frame at every call and every visit
+  function build(order) {
+    const fn = order.fn;
+    const frames = [];
+    const out = [];
+    const stack = [];          // keys of real nodes whose call is still running
+    const calledNull = [];     // ids of NULL children already called
+    let calls = 0, nulls = 0, visits = 0, n = 0;
+    let returned = [];         // calls that finished since the last frame
+    (function count(t) { if (t) { n++; count(t.left); count(t.right); } })(ROOT);
+
+    function snap(cur, note) {
+      frames.push({
+        out: out.slice(), stack: stack.slice(), calledNull: calledNull.slice(), cur,
+        calls, nulls, visits, depth: stack.length + (cur && cur.nul ? 1 : 0), note,
+      });
+    }
+    function back() {
+      if (!returned.length) return '';
+      const s = returned.join('、') + ' 的调用结束，返回到 ' + stack[stack.length - 1] + '。';
+      returned = [];
+      return s;
+    }
+    function visit(t, why) {
+      visits++;
+      out.push(t.key);
+      snap({ node: t.key, visit: true }, back() + why + 'visit(' + t.key + ')：输出 <b>' + t.key + '</b>。');
+    }
+
+    snap(null, '规则：' + order.rule + '。从根开始调用 <code>' + fn + '(M)</code>。每次进入函数都计数，参数是 NULL 也算。');
+
+    (function rec(t, parent, side) {
+      calls++;
+      if (!t) {
+        nulls++;
+        const id = parent.key + side;
+        snap({ nul: id }, back() + '调用 <code>' + fn + '(' + parent.key + '-&gt;' + (side === 'L' ? 'left' : 'right') + ')</code>：是 NULL，直接返回。' +
+          '（第 ' + calls + ' 次调用，第 ' + nulls + ' 次落在 NULL 上）');
+        calledNull.push(id);
+        return;
+      }
+      const ret = back();      // which call we came back to, before t goes on the stack
+      stack.push(t.key);
+      const plan =order.id === 'pre' ? '前序：先访问 ' + t.key + '，再做左、右子树。'
+        : order.id === 'in' ? '中序：先做左子树' + (t.left ? '（根是 ' + t.left.key + '）' : '（空）') + '，不能马上输出 ' + t.key + '。'
+          : '后序：左、右子树都做完才输出 ' + t.key + '。';
+      snap({ node: t.key }, ret + '调用 <code>' + fn + '(' + t.key + ')</code>（第 ' + calls + ' 次调用）。' + plan);
+      if (order.id === 'pre') visit(t, '');
+      rec(t.left, t, 'L');
+      if (order.id === 'in') visit(t, t.key + ' 的左子树做完，');
+      rec(t.right, t, 'R');
+      if (order.id === 'post') visit(t, t.key + ' 的左、右子树都做完，');
+      stack.pop();
+      returned.push(t.key);
+    })(ROOT, null, '');
+
+    if (calls !== 2 * n + 1 || nulls !== n + 1 || visits !== n) throw new Error('count mismatch');
+    snap(null, '结束：输出 <b>' + out.join(' ') + '</b>。<code>' + fn + '</code> 共调用 <b>' + calls + '</b> 次 = 2×' + n + ' + 1（' +
+      n + ' 次在结点上，' + nulls + ' 次在 NULL 上），visit ' + visits + ' 次。' +
+      (order.id === 'in' ? '这棵树按字母是 BST，中序正好是字母序。' : ''));
+    frames.result = out.join(' ');
+    return frames;
+  }
+  // </algo>
+
+  // layout constants shared with AnimKit.tree (nodes at in-order rank, rows by depth)
+  const R = 18, GX = 44, GY = 56, PAD = 30, SDX = 18, SDY = 38, SR = 9;
+  const pos = {};
+  (function () {
+    let col = 0;
+    (function walk(t, d) {
+      if (!t) return;
+      walk(t.left, d + 1);
+      pos[t.key] = { x: PAD + col * GX, y: PAD + d * GY };
+      col++;
+      walk(t.right, d + 1);
+    })(ROOT, 0);
+  })();
+  const STUBS = [];
+  (function walk(t) {
+    if (!t) return;
+    [['L', t.left, -1], ['R', t.right, 1]].forEach(([s, c, dir]) => {
+      if (!c) STUBS.push({ id: t.key + s, x: pos[t.key].x, y: pos[t.key].y, dir });
+    });
+    walk(t.left); walk(t.right);
+  })(ROOT);
+
+  function stubsSvg(f) {
+    return STUBS.map(s => {
+      const cx = s.x + s.dir * SDX, cy = s.y + SDY;
+      const len = Math.hypot(SDX, SDY);
+      const ux = s.dir * SDX / len, uy = SDY / len;
+      const st = f.cur && f.cur.nul === s.id ? 'cur' : f.calledNull.includes(s.id) ? 'called' : '';
+      return '<g class="nul ' + st + '"><line x1="' + (s.x + ux * R) + '" y1="' + (s.y + uy * R) + '" x2="' + (cx - ux * SR) + '" y2="' + (cy - uy * SR) +
+        '"/><circle cx="' + cx + '" cy="' + cy + '" r="' + SR + '"/><text x="' + cx + '" y="' + cy + '">∅</text></g>';
+    }).join('');
+  }
+
+  function render(f) {
+    const onStack = new Set(f.stack);
+    let svg = K.tree(ROOT, {
+      r: R, gapX: GX, gapY: GY, pad: PAD,
+      cls: nd => {
+        if (f.cur && f.cur.node === nd.key) return f.cur.visit ? 'found' : 'active';
+        if (onStack.has(nd.key)) return f.out.includes(nd.key) ? 'done' : 'compare';
+        return f.out.includes(nd.key) ? 'done' : '';
+      },
+      edgeCls: (a, b) => {
+        const i = f.stack.indexOf(a.key);
+        return i >= 0 && f.stack[i + 1] === b.key ? 'active' : '';
+      },
+    });
+    // room below the deepest row for the NULL stubs, drawn under the nodes
+    const maxY = Math.max.apply(null, STUBS.map(s => s.y + SDY + SR)) + 6;
+    svg = svg.replace(/viewBox="0 0 ([\d.]+) ([\d.]+)"/, (m, w, h) => 'viewBox="0 0 ' + w + ' ' + Math.max(+h, maxY) + '"');
+    svg = svg.replace(/(<svg[^>]*>)/, '$1' + stubsSvg(f));
+    stage.innerHTML = svg;
+
+    const total = Object.keys(pos).length;
+    const values = f.out.concat(new Array(total - f.out.length).fill(''));
+    const justOut = f.cur && f.cur.visit;
+    info.innerHTML = '<div class="stats">调用 <b>' + f.calls + '</b> 次（其中 NULL <b>' + f.nulls + '</b> 次）· visit <b>' + f.visits +
+      '</b> 次 · 栈深 <b>' + f.depth + '</b></div>' +
+      '<div class="row"><span class="lab">输出</span>' +
+      K.cells(values, { cls: (v, i) => (v === '' ? '' : justOut && i === f.out.length - 1 ? 'found' : 'done') }) + '</div>';
+  }
+
+  let current = ORDERS[1];
+  const g = document.createElement('div');
+  g.className = 'btn-group';
+  ORDERS.forEach(o => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = o.label;
+    b.title = o.rule;
+    if (o === current) b.classList.add('active');
+    b.addEventListener('click', () => {
+      g.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      current = o;
+      player.load(build(o));
+    });
+    g.appendChild(b);
+  });
+  controls.appendChild(g);
+
+  const player = AnimKit.player({ frames: build(current), render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>最近点对：分治逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .cp-grid { stroke: rgba(255, 255, 255, 0.05); stroke-width: 1; }
+  .cp-tick { fill: #75756f; font-size: 10px; text-anchor: middle; dominant-baseline: central; }
+  .cp-region { fill: rgba(255, 255, 255, 0.04); }
+  .cp-band { fill: rgba(251, 191, 36, 0.12); stroke: rgba(251, 191, 36, 0.65); stroke-width: 1.2; stroke-dasharray: 4 4; }
+  .cp-line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; }
+  .cp-line.old { stroke: rgba(255, 255, 255, 0.22); stroke-width: 1.5; }
+  .cp-line-label { fill: var(--accent); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .cp-chip rect { fill: rgba(255, 255, 255, 0.04); stroke: #3a3a39; stroke-width: 1; }
+  .cp-chip.p rect { fill: var(--accent); stroke: var(--accent); }
+  .cp-chip.q rect { fill: rgba(217, 119, 87, 0.30); stroke: var(--accent); }
+  .cp-chip text { fill: var(--text); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .cp-chip text .sub { fill: var(--muted); font-size: 10px; font-weight: 500; }
+  .cp-chip.p text .sub { fill: #fff; }
+  .cp-list-label { fill: var(--muted); font-size: 11px; text-anchor: end; dominant-baseline: central; }
+  .k-weight.visited { fill: var(--blue); }
+  .k-weight.bad { fill: var(--red); }
+</style>
+</head>
+<body>
+<div class="title">最近点对：分治逐步演示</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>分割线 / 正在比较</span>
+  <span><i style="background: rgba(251, 191, 36, 0.5)"></i>中间带</span>
+  <span><i style="background: var(--blue)"></i>另一半的最优</span>
+  <span><i style="background: var(--green)"></i>目前最近</span>
+  <span><i style="background: var(--red)"></i>y 差 ≥ d，停止</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const EXAMPLE = [[1, 8], [2, 2], [5, 9], [6, 4], [7, 7], [9, 1], [16, 10], [18, 6]];
+  const NAMES = 'ABCDEFGHIJ';
+
+  /* ---------- geometry of the drawing ---------- */
+  const U = 26, XMAX = 19, YMAX = 11;
+  const PX = 26, PT = 28;                       // left pad, top pad (room for the line label)
+  const PLOT_B = PT + YMAX * U;                 // pixel y of y = 0
+  const W = PX + XMAX * U + 14;
+  const LIST_Y = PLOT_B + 42;
+  const H = LIST_Y + 18;
+  const X = x => PX + x * U;
+  const Y = y => PLOT_B - y * U;
+  const R = 11;
+
+  /* ---------- helpers ---------- */
+  const d2 = (p, q) => (p.x - q.x) ** 2 + (p.y - q.y) ** 2;
+  function fmt(v) {
+    const s = Math.sqrt(v);
+    return Number.isInteger(s) ? String(s) : '√' + v + ' ≈ ' + s.toFixed(2);
+  }
+  function short(v) {
+    const s = Math.sqrt(v);
+    return Number.isInteger(s) ? String(s) : '√' + v;
+  }
+  const rng = ids => (ids.length === 1 ? ids[0] : ids[0] + '–' + ids[ids.length - 1]);
+  const pairName = b => b.a + b.b;
+  const num = v => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
+  /* ---------- run the algorithm and record frames ---------- */
+  function build(raw) {
+    const pts = raw.map(([x, y]) => ({ x, y })).sort((p, q) => p.x - q.x);
+    pts.forEach((p, i) => { p.id = NAMES[i]; });
+    const byId = {};
+    pts.forEach(p => { byId[p.id] = p; });
+    const n = pts.length;
+    const frames = [];
+    const anc = [];                             // split lines of the enclosing calls
+    let computed = 0;
+
+    function snap(o) {
+      frames.push(Object.assign({
+        pts, active: null, lo: 0, hi: XMAX, old: anc.slice(), cur: null,
+        band: null, pairs: [], nodes: {}, list: null, li: -1, lj: -1, note: '',
+      }, o));
+    }
+
+    snap({ note: `${n} 个点已按 x 排序，从左到右命名 ${rng(pts.map(p => p.id))}：` +
+      pts.map(p => `${p.id}(${p.x},${p.y})`).join(' ') + '。另备一份按 y 排序的副本，给中间带用。' });
+
+    function solve(P, Q, lo, hi) {
+      const ids = P.map(p => p.id);
+      const name = '[' + rng(ids) + ']';
+      const active = new Set(ids);
+      const base = { active, lo, hi };
+
+      if (P.length <= 3) {
+        let best = null;
+        const tried = [];
+        for (let i = 0; i < P.length; i++) {
+          for (let j = i + 1; j < P.length; j++) {
+            const v = d2(P[i], P[j]);
+            computed++;
+            tried.push({ a: P[i].id, b: P[j].id, v });
+            if (!best || v < best.v) best = { a: P[i].id, b: P[j].id, v };
+          }
+        }
+        const pairs = tried.map(t => ({ a: t.a, b: t.b, cls: t.a === best.a && t.b === best.b ? 'done' : 'active', label: short(t.v) }));
+        const nodes = {};
+        nodes[best.a] = nodes[best.b] = 'done';
+        const note = P.length === 2
+          ? `子问题 ${name} 只有 2 个点，直接算：${pairName(best)} = ${fmt(best.v)}。`
+          : `子问题 ${name} 只有 3 个点，蛮力比较 3 对：` + tried.map(t => `${t.a}${t.b} = ${short(t.v)}`).join('，') +
+            `；最近的是 ${pairName(best)} = ${fmt(best.v)}。`;
+        snap(Object.assign({}, base, { pairs, nodes, note }));
+        return best;
+      }
+
+      const nl = Math.ceil(P.length / 2);
+      const L = P.slice(0, nl), Rt = P.slice(nl);
+      const m = (L[nl - 1].x + Rt[0].x) / 2;
+      snap(Object.assign({}, base, {
+        cur: m,
+        note: `子问题 ${name}（${P.length} 个点）：竖线 x = ${num(m)} 把它分成左 [${rng(L.map(p => p.id))}] 和右 [${rng(Rt.map(p => p.id))}]。先递归解左半，再解右半。`,
+      }));
+
+      const inL = new Set(L.map(p => p.id));
+      const QL = Q.filter(p => inL.has(p.id)), QR = Q.filter(p => !inL.has(p.id));
+      anc.push(m);
+      const bl = solve(L, QL, lo, m);
+      const br = solve(Rt, QR, m, hi);
+      anc.pop();
+
+      let best = bl.v <= br.v ? bl : br;
+      const other = best === bl ? br : bl;
+      const lrPairs = [
+        { a: best.a, b: best.b, cls: 'done', label: short(best.v) },
+        { a: other.a, b: other.b, cls: 'visited', label: short(other.v) },
+      ];
+      const lrNodes = {};
+      lrNodes[best.a] = lrNodes[best.b] = 'done';
+      snap(Object.assign({}, base, {
+        cur: m, pairs: lrPairs, nodes: lrNodes,
+        note: `回到 ${name}：左半 dL = ${fmt(bl.v)}（${pairName(bl)}），右半 dR = ${fmt(br.v)}（${pairName(br)}）。` +
+          `d = min(dL, dR) = ${fmt(best.v)}。还要检查跨过竖线的点对。`,
+      }));
+
+      const dStrip = best.v;
+      const S = Q.filter(p => (p.x - m) ** 2 < dStrip);
+      const band = { m, d: Math.sqrt(dStrip) };
+      const sIds = S.map(p => p.id);
+      const inBand = P.filter(p => (p.x - m) ** 2 < dStrip).map(p => p.id);
+      snap(Object.assign({}, base, {
+        cur: m, band, pairs: lrPairs, nodes: lrNodes, list: sIds,
+        note: S.length < 2
+          ? (S.length ? `中间带：|x − ${num(m)}| &lt; d 的点只有 ${sIds[0]} 一个` : `中间带：没有点满足 |x − ${num(m)}| &lt; d`) + '，没有跨线点对要比较。'
+          : `中间带：|x − ${num(m)}| &lt; d 的点有 ${inBand.join('、')}，按 y 从小到大排成 <b>${sIds.join(', ')}</b>。带外的点离竖线超过 d，不可能和另一侧的点更近。`,
+      }));
+
+      let fromStrip = false;
+      for (let i = 0; i < S.length - 1; i++) {
+        for (let j = i + 1; j < S.length; j++) {
+          const p = S[i], q = S[j];
+          const dy = q.y - p.y;
+          const nodes = {};
+          nodes[best.a] = nodes[best.b] = 'done';
+          nodes[p.id] = 'active';
+          nodes[q.id] = 'compare';
+          const bestPair = { a: best.a, b: best.b, cls: 'done', label: short(best.v) };
+          const common = Object.assign({}, base, { cur: m, band, list: sIds, li: i, lj: j });
+          if (dy * dy >= best.v) {
+            snap(Object.assign(common, {
+              nodes, pairs: [bestPair, { a: p.id, b: q.id, cls: 'bad', label: 'Δy ' + dy }],
+              note: `${p.id} 与 ${q.id}：y 差 ${dy} ≥ d = ${fmt(best.v)}，<span class="bad">停</span>。${q.id} 之后的点 y 差只会更大，${p.id} 不用再往后比。`,
+            }));
+            break;
+          }
+          const v = d2(p, q);
+          computed++;
+          if (v < best.v) {
+            const old = best.v;
+            best = p.id < q.id ? { a: p.id, b: q.id, v } : { a: q.id, b: p.id, v };
+            fromStrip = true;
+            const nn = {};
+            nn[p.id] = nn[q.id] = 'done';
+            snap(Object.assign(common, {
+              nodes: nn, pairs: [{ a: p.id, b: q.id, cls: 'done', label: short(v) }],
+              note: `${p.id} 与 ${q.id}：y 差 ${dy} &lt; d，算距离 ${fmt(v)} &lt; ${short(old)} → <span class="ok">更新</span>，d = ${short(v)}（${pairName(best)}）。`,
+            }));
+          } else {
+            snap(Object.assign(common, {
+              nodes, pairs: [bestPair, { a: p.id, b: q.id, cls: 'active', label: short(v) }],
+              note: `${p.id} 与 ${q.id}：y 差 ${dy} &lt; d，算距离 ${fmt(v)}，不比 d = ${short(best.v)} 小。`,
+            }));
+          }
+        }
+      }
+
+      const fin = {};
+      fin[best.a] = fin[best.b] = 'done';
+      snap(Object.assign({}, base, {
+        cur: m, pairs: [{ a: best.a, b: best.b, cls: 'done', label: short(best.v) }], nodes: fin,
+        note: `子问题 ${name} 的答案：${pairName(best)}，距离 ${fmt(best.v)}` +
+          (fromStrip ? '（跨线点对，由中间带找到）。' : '（来自' + (best === bl ? '左半' : '右半') + '，中间带没有更近的）。'),
+      }));
+      return best;
+    }
+
+    const Q0 = pts.slice().sort((p, q) => p.y - q.y || p.x - q.x);
+    const ans = solve(pts, Q0, 0, XMAX);
+    const nodes = {};
+    nodes[ans.a] = nodes[ans.b] = 'found';
+    const A = byId[ans.a], B = byId[ans.b];
+    snap({
+      pairs: [{ a: ans.a, b: ans.b, cls: 'done', label: short(ans.v) }], nodes,
+      note: `完成：最近点对是 <b>${A.id}(${A.x},${A.y})</b> 和 <b>${B.id}(${B.x},${B.y})</b>，距离 ${fmt(ans.v)}。` +
+        `一共算了 ${computed} 次距离；蛮力要 n(n−1)/2 = ${n * (n - 1) / 2} 次。`,
+    });
+    return frames;
+  }
+
+  /* ---------- drawing ---------- */
+  function render(f) {
+    const byId = {};
+    f.pts.forEach(p => { byId[p.id] = p; });
+    let s = '';
+    // active region
+    s += `<rect class="cp-region" x="${X(f.lo)}" y="${PT}" width="${X(f.hi) - X(f.lo)}" height="${PLOT_B - PT}"/>`;
+    // grid + ticks
+    for (let x = 0; x <= XMAX; x++) s += `<line class="cp-grid" x1="${X(x)}" y1="${PT}" x2="${X(x)}" y2="${PLOT_B}"/>`;
+    for (let y = 0; y <= YMAX; y++) s += `<line class="cp-grid" x1="${X(0)}" y1="${Y(y)}" x2="${X(XMAX)}" y2="${Y(y)}"/>`;
+    for (let x = 0; x <= XMAX - 1; x += 2) s += `<text class="cp-tick" x="${X(x)}" y="${PLOT_B + 12}">${x}</text>`;
+    for (let y = 2; y <= YMAX - 1; y += 2) s += `<text class="cp-tick" x="${PX - 13}" y="${Y(y)}">${y}</text>`;
+    // band
+    if (f.band) {
+      const a = Math.max(0, f.band.m - f.band.d), b = Math.min(XMAX, f.band.m + f.band.d);
+      s += `<rect class="cp-band" x="${X(a)}" y="${PT}" width="${X(b) - X(a)}" height="${PLOT_B - PT}"/>`;
+    }
+    // split lines
+    f.old.forEach(m => { s += `<line class="cp-line old" x1="${X(m)}" y1="${PT}" x2="${X(m)}" y2="${PLOT_B}"/>`; });
+    if (f.cur != null) {
+      s += `<line class="cp-line" x1="${X(f.cur)}" y1="${PT - 4}" x2="${X(f.cur)}" y2="${PLOT_B}"/>`;
+      s += `<text class="cp-line-label" x="${X(f.cur)}" y="${PT - 15}">x = ${num(f.cur)}</text>`;
+    }
+    // pairs
+    let labels = '';
+    f.pairs.forEach(pr => {
+      const p = byId[pr.a], q = byId[pr.b];
+      const x1 = X(p.x), y1 = Y(p.y), x2 = X(q.x), y2 = Y(q.y);
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      s += `<line class="k-edge ${pr.cls}" x1="${x1 + ux * R}" y1="${y1 + uy * R}" x2="${x2 - ux * R}" y2="${y2 - uy * R}"/>`;
+      if (pr.label) {
+        let nx = -uy, ny = ux;
+        if (ny > 0) { nx = -nx; ny = -ny; }            // put the label on the upper side
+        labels += `<text class="k-weight ${pr.cls}" x="${(x1 + x2) / 2 + nx * 12}" y="${(y1 + y2) / 2 + ny * 12}">${K.esc(pr.label)}</text>`;
+      }
+    });
+    // points
+    f.pts.forEach(p => {
+      let cls = f.nodes[p.id] || '';
+      if (f.active && !f.active.has(p.id)) cls = 'dim';
+      s += `<g class="k-node ${cls}"><circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${R}"/><text x="${X(p.x)}" y="${Y(p.y)}">${p.id}</text></g>`;
+    });
+    s += labels;
+    // strip list in y order
+    if (f.list) {
+      const CW = 42, GAP = 5;
+      const total = f.list.length * CW + Math.max(0, f.list.length - 1) * GAP;
+      const lab = 64;
+      let x0 = (W - total + lab) / 2;
+      s += `<text class="cp-list-label" x="${x0 - 8}" y="${LIST_Y}">带内按 y</text>`;
+      if (!f.list.length) s += `<text class="cp-list-label" style="text-anchor:start" x="${x0}" y="${LIST_Y}">（空）</text>`;
+      f.list.forEach((id, k) => {
+        const c = k === f.li ? 'p' : k === f.lj ? 'q' : '';
+        const x = x0 + k * (CW + GAP);
+        s += `<g class="cp-chip ${c}"><rect x="${x}" y="${LIST_Y - 13}" width="${CW}" height="26" rx="6"/>` +
+          `<text x="${x + CW / 2}" y="${LIST_Y}">${id}<tspan class="sub" dx="3">${byId[id].y}</tspan></text></g>`;
+      });
+    }
+    stage.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+  }
+
+  /* ---------- scenarios ---------- */
+  function randomPoints() {
+    const xs = [];
+    for (let x = 1; x <= 18; x++) xs.push(x);
+    const ys = [];
+    for (let y = 1; y <= 10; y++) ys.push(y);
+    const shuffle = a => {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      return a;
+    };
+    const px = shuffle(xs).slice(0, 10).sort((a, b) => a - b);
+    const py = shuffle(ys);
+    return px.map((x, i) => [x, py[i]]);
+  }
+
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const bEx = document.createElement('button');
+  bEx.type = 'button'; bEx.textContent = '例子（8 点）'; bEx.className = 'active';
+  const bRnd = document.createElement('button');
+  bRnd.type = 'button'; bRnd.textContent = '随机 10 点';
+  group.appendChild(bEx); group.appendChild(bRnd);
+  controls.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: build(EXAMPLE), render, interval: 1500 });
+  bEx.addEventListener('click', () => {
+    bEx.classList.add('active'); bRnd.classList.remove('active');
+    player.load(build(EXAMPLE));
+  });
+  bRnd.addEventListener('click', () => {
+    bRnd.classList.add('active'); bEx.classList.remove('active');
+    player.load(build(randomPoints()));
+  });
+})();
+</script>
+</body>
+</html>

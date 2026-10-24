@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BST 删除的三种情况</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">BST 删除的三种情况</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--blue)"></i>查找路径</span>
+  <span><i style="background: var(--accent)"></i>比较中 / 换了键</span>
+  <span><i style="background: var(--red)"></i>要删除</span>
+  <span><i style="background: var(--yellow)"></i>上移的孩子</span>
+  <span><i style="background: var(--green)"></i>前驱或后继 / 新指针</span>
+  <span><i style="background: transparent; border: 1px dashed var(--red)"></i>断开的指针</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const LETTERS = ['M', 'J', 'P', 'F', 'K', 'S', 'G', 'Q'];   // insertion order of the lecture tree
+
+  // <algo>
+  function insert(t, k) {
+    if (!t) return { id: k, key: k, left: null, right: null };
+    if (k < t.key) t.left = insert(t.left, k);
+    else t.right = insert(t.right, k);
+    return t;
+  }
+  function lecture() { let t = null; LETTERS.forEach(k => { t = insert(t, k); }); return t; }
+  function clone(t) { return t ? { id: t.id, key: t.key, left: clone(t.left), right: clone(t.right) } : null; }
+  function inorder(t, out) { if (t) { inorder(t.left, out); out.push(t.key); inorder(t.right, out); } return out; }
+  function show(t) { return !t ? '-' : (t.left || t.right) ? t.key + '(' + show(t.left) + ',' + show(t.right) + ')' : t.key; }
+  const side = d => (d === 'left' ? '左' : '右');
+  const name = n => (n.key === n.id ? n.key : n.key + '（原 ' + n.id + ' 的位置）');
+  const kids = n => [n.left, n.right].filter(Boolean).length;
+
+  function build(target, mode) {
+    const frames = [];
+    let root = lecture();
+    const snap = (hl, edges, note) => frames.push({ tree: clone(root), hl, edges, note });
+    snap({}, {}, '删除 <b>' + target + '</b>。中序（in-order）：' + inorder(root, []).join(' ') + '。先像查找一样往下走。');
+
+    // 1) find the node, remembering its parent
+    const hl = {}, edges = {};
+    let cur = root, parent = null, dir = null;
+    while (cur) {
+      const h = Object.assign({}, hl, { [cur.id]: 'compare' });
+      if (target === cur.key) { snap(h, Object.assign({}, edges), '比较 ' + target + ' 和 ' + cur.key + '：相等，<b>找到</b>。'); break; }
+      const d = target < cur.key ? 'left' : 'right';
+      snap(h, Object.assign({}, edges), '比较 ' + target + ' 和 ' + cur.key + '：' + target + (d === 'left' ? ' &lt; ' : ' &gt; ') + cur.key + '，往' + side(d) + '走。');
+      hl[cur.id] = 'visited';
+      if (cur[d]) edges[cur.id + '-' + cur[d].id] = 'visited';
+      parent = cur; dir = d; cur = cur[d];
+    }
+    if (!cur) throw new Error('target not in tree: ' + target);
+    const x = cur;
+
+    // unlink a node that has at most one child; returns the frames' edge map for the result
+    function unlink(n, p, d, keep, who) {
+      const child = n.left || n.right;
+      const pre = Object.assign({}, keep), preE = {};
+      pre[n.id] = 'bad';
+      if (p) { if (!pre[p.id]) pre[p.id] = 'visited'; preE[p.id + '-' + n.id] = 'bad'; }
+      if (child) { pre[child.id] = 'warn'; preE[n.id + '-' + child.id] = 'bad'; }
+      const owner = !p ? '根指针' : name(p) + (p.key === p.id ? ' ' : '') + '的' + side(d) + '指针';
+      snap(pre, preE, (child
+        ? who + ' 只有' + (n.left ? '左' : '右') + '孩子 ' + child.key + ' → <b>情况 2</b>：' + owner + '直接改指 ' + child.key + '（它带着整棵子树上移），再 free 掉 ' + n.key + '。'
+        : who + ' 是叶子 → <b>情况 1</b>：' + owner + '改成 NULL，再 free 掉 ' + n.key + '。'));
+      if (p) p[d] = child; else root = child;
+      const post = {}, postE = {};
+      if (p) post[p.id] = 'done';
+      if (child) { post[child.id] = 'done'; if (p) postE[p.id + '-' + child.id] = 'done'; }
+      return { post, postE };
+    }
+
+    let res;
+    if (kids(x) < 2) {
+      res = unlink(x, parent, dir, {}, x.key);
+    } else {
+      // 2) two children: walk to the predecessor or successor
+      const pred = mode === 'pred';
+      const first = pred ? 'left' : 'right', then = pred ? 'right' : 'left';
+      const word = pred ? '前驱（predecessor）' : '后继（successor）';
+      const h0 = { [x.id]: 'bad' };
+      snap(h0, {}, x.key + ' 有两个孩子 ' + x.left.key + ' 和 ' + x.right.key + ' → <b>情况 3</b>：找' + word +
+        '，即' + (pred ? '左' : '右') + '子树中最' + (pred ? '右' : '左') + '的结点。');
+      const wh = { [x.id]: 'bad' }, we = {};
+      let sp = x, sd = first, s = x[first];
+      wh[s.id] = 'visited'; we[x.id + '-' + s.id] = 'visited';
+      snap(Object.assign({}, wh), Object.assign({}, we), '先到' + (pred ? '左' : '右') + '孩子 ' + s.key + '。');
+      while (s[then]) {
+        we[s.id + '-' + s[then].id] = 'visited';
+        snap(Object.assign({}, wh, { [s[then].id]: 'visited' }), Object.assign({}, we),
+          s.key + ' 有' + side(then) + '孩子，往' + side(then) + '走到 ' + s[then].key + '。');
+        wh[s[then].id] = 'visited';
+        sp = s; sd = then; s = s[then];
+      }
+      snap(Object.assign({}, wh, { [s.id]: 'found' }), Object.assign({}, we),
+        s.key + ' 没有' + side(then) + '孩子，停下：' + x.key + ' 的' + (pred ? '前驱' : '后继') + '是 <b>' + s.key + '</b>' +
+        (pred ? '，比 ' + x.key + ' 小的键里最大的。' : '，比 ' + x.key + ' 大的键里最小的。'));
+      // 3) copy the key up, then remove the old node (it has at most one child)
+      const old = x.key;
+      x.key = s.key;
+      snap({ [x.id]: 'active', [s.id]: 'bad' }, {}, '把 ' + s.key + ' 复制到 ' + old + ' 的结点里。树里暂时有两个 ' + s.key +
+        '，接着删掉下面原来那个。它' + (pred ? '没有右孩子' : '没有左孩子') + '，所以至多一个孩子。');
+      res = unlink(s, sp, sd, { [x.id]: 'active' }, '原来的 ' + s.key);
+      res.post[x.id] = 'active';
+    }
+
+    const seq = inorder(root, []);
+    for (let i = 1; i < seq.length; i++) if (seq[i - 1] >= seq[i]) throw new Error('in-order not sorted after deleting ' + target);
+    snap(res.post, res.postE, '<span class="ok">删除完成</span>。中序：' + seq.join(' ') + '，仍然有序。');
+    frames.result = show(root);
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    stage.innerHTML = K.tree(f.tree, {
+      cls: n => f.hl[n.id] || '',
+      edgeCls: (p, c) => f.edges[p.id + '-' + c.id] || '',
+    });
+  }
+
+  // scenario buttons go into #controls before the player appends its own
+  const controls = document.getElementById('controls');
+  function group(items, attr) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach(([value, text]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset[attr] = value;
+      b.textContent = text;
+      g.appendChild(b);
+    });
+    return g;
+  }
+  const lab = document.createElement('span');
+  lab.className = 'label';
+  lab.textContent = '删除';
+  const targets = group([['G', 'G'], ['P', 'P'], ['J', 'J'], ['M', 'M']], 'k');
+  const modes = group([['pred', '用前驱'], ['succ', '用后继']], 'm');
+  [lab, targets, modes].forEach(el => controls.appendChild(el));
+  let target = 'G', mode = 'succ';
+  const twoKids = { J: true, M: true };
+  function sync() {
+    targets.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.k === target));
+    modes.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('active', b.dataset.m === mode);
+      b.disabled = !twoKids[target];
+    });
+  }
+  sync();
+  const player = AnimKit.player({ frames: build(target, mode), render, interval: 1300 });
+  targets.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    target = b.dataset.k; sync(); player.load(build(target, mode));
+  });
+  modes.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    mode = b.dataset.m; sync(); player.load(build(target, mode));
+  });
+})();
+</script>
+</body>
+</html>

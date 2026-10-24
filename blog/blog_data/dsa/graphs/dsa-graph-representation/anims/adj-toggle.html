@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>邻接矩阵与邻接表：同步加边删边</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .p-title { fill: var(--text); font-size: 12px; font-weight: 600; text-anchor: middle; }
+  .p-foot { fill: var(--muted); font-size: 11px; font-weight: 600; text-anchor: middle; }
+  .m-head { fill: var(--muted); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .m-head.sel { fill: var(--yellow); }
+  .m-cell { cursor: pointer; }
+  .m-cell rect { fill: rgba(255, 255, 255, 0.04); stroke: #4a4a49; stroke-width: 1; transition: fill 0.25s, stroke 0.25s; }
+  .m-cell text { fill: var(--muted); font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .m-cell.one rect { fill: rgba(56, 189, 248, 0.22); stroke: var(--blue); }
+  .m-cell.one text { fill: #d6f2ff; }
+  .m-cell.diag rect { fill: transparent; stroke-dasharray: 3 3; }
+  .m-cell.diag text { opacity: 0.5; }
+  .m-cell.row rect { stroke: var(--yellow); stroke-width: 2; }
+  .m-cell.hot rect { fill: var(--accent); stroke: var(--accent); }
+  .m-cell.hot text { fill: #fff; }
+  .m-cell:hover rect { stroke: var(--accent); }
+  .l-label { fill: var(--muted); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .l-label.sel { fill: var(--yellow); }
+  .l-box { fill: #343433; stroke: #5a5a59; stroke-width: 1.5; transition: fill 0.25s, stroke 0.25s; }
+  .l-row.sel .l-box { stroke: var(--yellow); stroke-width: 2; }
+  .l-node text { fill: var(--text); font-size: 13px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .l-node.hot .l-box { fill: var(--accent); stroke: var(--accent); }
+  .l-node.hot text { fill: #fff; }
+  .l-ptr { stroke: rgba(255, 255, 255, 0.5); stroke-width: 1.5; }
+  .l-nil { stroke: var(--muted); stroke-width: 1.5; }
+  .l-dot { fill: var(--text); }
+  .stage .k-node { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="title">邻接矩阵 vs 邻接表：同步加边、删边</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--yellow)"></i>选中顶点的行与链表</span>
+  <span><i style="background: rgba(56, 189, 248, 0.6)"></i>1 = 有边</span>
+  <span><i style="background: var(--accent)"></i>刚改动</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const N = 5;
+  const L = ['A', 'B', 'C', 'D', 'E'];
+  const LECTURE = [[0, 2], [1, 2], [1, 3], [2, 3]];          // A-C, B-C, B-D, C-D
+  const stage = document.getElementById('stage');
+  const noteEl = document.getElementById('note');
+
+  /* ─── model: the two representations, always changed together ─── */
+  let directed = false;
+  let m = [];          // m[u][v] = 1 if edge u-v (or u→v)
+  let lists = [];      // lists[u] = neighbour ids, head first
+  let sel = -1;        // first vertex clicked
+  let hotCells = [], hotNodes = [], hotEdge = null;
+  let msg = '';
+
+  function clearGraph() {
+    m = Array.from({ length: N }, () => Array(N).fill(0));
+    lists = Array.from({ length: N }, () => []);
+  }
+  function push(u, v) { lists[u].unshift(v); }               // head insertion, O(1)
+  function insertEdge(u, v) {
+    m[u][v] = 1; push(u, v);
+    if (!directed) { m[v][u] = 1; push(v, u); }
+  }
+  function unlink(u, v) {                                     // walk u's list to v, delete it
+    const k = lists[u].indexOf(v);
+    lists[u].splice(k, 1);
+    return k + 1;                                             // nodes walked
+  }
+  function removeEdge(u, v) {
+    m[u][v] = 0;
+    const s1 = unlink(u, v);
+    let s2 = 0;
+    if (!directed) { m[v][u] = 0; s2 = unlink(v, u); }
+    return [s1, s2];
+  }
+  function ones() { let c = 0; m.forEach(r => r.forEach(x => { c += x; })); return c; }
+  function edgeCount() { return directed ? ones() : ones() / 2; }
+  function nodeCount() { return lists.reduce((s, l) => s + l.length, 0); }
+  function outDeg(u) { return m[u].reduce((s, x) => s + x, 0); }
+  function inDeg(v) { return m.reduce((s, r) => s + r[v], 0); }
+  function resetMarks() { hotCells = []; hotNodes = []; hotEdge = null; }
+
+  /* ─── actions ─── */
+  function toggle(u, v) {
+    resetMarks();
+    const a = L[u], b = L[v];
+    if (u === v) {
+      msg = `[${a}][${a}] 在主对角线上，表示自环；简单图没有自环，这一格恒为 0。`;
+      return;
+    }
+    hotCells = directed ? [[u, v]] : [[u, v], [v, u]];
+    if (m[u][v]) {
+      const [s1, s2] = removeEdge(u, v);
+      msg = directed
+        ? `删有向边 ${a}→${b}：矩阵清 [${a}][${b}] 一格，O(1)；链表要沿 ${a} 的表走到第 ${s1} 个结点才找到 ${b}，O(deg)。`
+        : `删边 ${a}–${b}：矩阵清两格，O(1)；链表要先找到结点：${a} 的表走到第 ${s1} 个，${b} 的表走到第 ${s2} 个，O(deg)。`;
+    } else {
+      insertEdge(u, v);
+      hotNodes = directed ? [[u, v]] : [[u, v], [v, u]];
+      hotEdge = [u, v];
+      msg = directed
+        ? `加有向边 ${a}→${b}：只改 [${a}][${b}] 一格，` +
+          (m[v][u] ? `[${b}][${a}] 本来就是 1（${b}→${a} 已存在）` : `[${b}][${a}] 仍是 0，矩阵不对称`) +
+          `；只在 ${a} 的表头插入 ${b}，O(1)。`
+        : `加边 ${a}–${b}：矩阵改两格 [${a}][${b}] 与 [${b}][${a}]；${b} 插到 ${a} 的表头，${a} 插到 ${b} 的表头，各 O(1)。`;
+    }
+  }
+
+  function select(u) {
+    resetMarks();
+    sel = u;
+    const a = L[u];
+    const row = m[u].map((x, v) => (x ? L[v] : null)).filter(Boolean);
+    const len = lists[u].length;
+    if (!row.length) {
+      msg = `选中 ${a}：没有${directed ? '出边' : '邻居'}。矩阵仍要扫完 ${a} 行的 ${N} 格才知道；${a} 的表头是 NULL，一步就知道。再点另一个顶点加边。`;
+    } else {
+      msg = `选中 ${a}：${directed ? '出边指向' : '邻居是'} ${row.join('、')}。矩阵要扫完 ${a} 行的 ${N} 格（O(V)），邻接表只走 ${len} 个结点（O(deg)）。再点另一个顶点加边或删边。`;
+    }
+  }
+
+  function clickVertex(u) {
+    if (sel === -1) {
+      select(u);
+    } else if (sel === u) {
+      sel = -1; resetMarks();
+      msg = `取消选中 ${L[u]}。`;
+    } else {
+      const s = sel;
+      sel = -1;
+      toggle(s, u);
+    }
+    draw();
+  }
+
+  function clickCell(i, j) { sel = -1; toggle(i, j); draw(); }
+
+  function preset(kind) {
+    clearGraph(); sel = -1; resetMarks();
+    if (kind === 'lecture') {
+      LECTURE.forEach(([u, v]) => insertEdge(u, v));
+      msg = directed
+        ? '同样 4 条边当作有向边 A→C、B→C、B→D、C→D：每条边只占矩阵一格、只存一个结点，矩阵不对称。'
+        : '课上的例子：按边表 A–C、B–C、B–D、C–D 依次表头插入，表内顺序因此与字母序相反，表示的仍是同一张图。';
+    } else if (kind === 'complete') {
+      for (let u = 0; u < N; u++) {
+        for (let v = directed ? 0 : u + 1; v < N; v++) {
+          if (u !== v) insertEdge(u, v);
+        }
+      }
+      msg = directed
+        ? `有向完全图：每对顶点两个方向都有边，共 V(V − 1) = ${edgeCount()} 条，邻接表 ${nodeCount()} 个结点。`
+        : `完全图：V(V − 1)/2 = ${edgeCount()} 条边，矩阵除对角线外全是 1；邻接表 ${nodeCount()} 个结点，已和矩阵的 ${N * N} 格相当。`;
+    } else {
+      msg = `没有边：矩阵照样占 ${N * N} 格（V²），邻接表只剩 ${N} 个空表头（V）。`;
+    }
+  }
+
+  /* ─── drawing ─── */
+  const GW = 196, GH = 206, MW = 152, MH = 186, LW = 200, LH = 184;
+  const SIZE = { G: [GW, GH], M: [MW, MH], L: [LW, LH] };
+  const ARRANGE = [[['G', 'M', 'L']], [['G', 'M'], ['L']], [['G'], ['M', 'L']]];
+  const GAPX = 18, GAPY = 12;
+  const POS = L.map((_, k) => {
+    const t = -Math.PI / 2 + k * 2 * Math.PI / N;
+    return { x: Math.round(70 * Math.cos(t)), y: Math.round(70 * Math.sin(t)) };
+  });
+
+  function layout(W, H) {
+    let best = null;
+    ARRANGE.forEach(rows => {
+      const rw = rows.map(r => r.reduce((s, p) => s + SIZE[p][0], 0) + GAPX * (r.length - 1));
+      const rh = rows.map(r => Math.max(...r.map(p => SIZE[p][1])));
+      const w = Math.max(...rw);
+      const h = rh.reduce((s, x) => s + x, 0) + GAPY * (rows.length - 1);
+      const sc = Math.min(W / w, H / h);
+      if (!best || sc > best.sc + 1e-9) best = { rows, rw, rh, w, h, sc };
+    });
+    const at = {};
+    let y = 0;
+    best.rows.forEach((r, i) => {
+      let x = (best.w - best.rw[i]) / 2;
+      r.forEach(p => {
+        at[p] = { x, y: y + (best.rh[i] - SIZE[p][1]) / 2 };
+        x += SIZE[p][0] + GAPX;
+      });
+      y += best.rh[i] + GAPY;
+    });
+    return { w: best.w, h: best.h, at };
+  }
+
+  function graphPanel(o) {
+    const nodes = L.map((id, k) => ({ id, x: POS[k].x, y: POS[k].y }));
+    const edges = [];
+    for (let u = 0; u < N; u++) {
+      for (let v = directed ? 0 : u + 1; v < N; v++) {
+        if (u !== v && m[u][v]) edges.push({ u: L[u], v: L[v], directed });
+      }
+    }
+    const k = id => L.indexOf(id);
+    const isHot = e => hotEdge && ((k(e.u) === hotEdge[0] && k(e.v) === hotEdge[1]) ||
+      (!directed && k(e.u) === hotEdge[1] && k(e.v) === hotEdge[0]));
+    const fromSel = e => sel >= 0 && (k(e.u) === sel || (!directed && k(e.v) === sel));
+    const svg = AnimKit.graph({ nodes, edges }, {
+      edgeCls: e => (isHot(e) ? 'active' : fromSel(e) ? 'visited' : ''),
+      nodeCls: id => {
+        const u = k(id);
+        if (u === sel) return 'warn';
+        if (sel >= 0 && m[sel][u]) return 'visited';
+        if (hotEdge && (u === hotEdge[0] || u === hotEdge[1])) return 'compare';
+        return '';
+      },
+      badge: id => (directed ? `出${outDeg(k(id))} 入${inDeg(k(id))}` : `度 ${outDeg(k(id))}`),
+    });
+    return `<text class="p-title" x="${o.x + GW / 2}" y="${o.y + 12}">图：V = ${N}，边数 ${edgeCount()}</text>` +
+      svg.replace('<svg ', `<svg x="${o.x}" y="${o.y + 18}" width="${GW}" height="${GH - 18}" `);
+  }
+
+  function matrixPanel(o) {
+    const C = 26, HD = 22, TOP = o.y + 18;
+    let s = `<text class="p-title" x="${o.x + MW / 2}" y="${o.y + 12}">邻接矩阵 adj[i][j]</text>`;
+    for (let j = 0; j < N; j++) {
+      s += `<text class="m-head" x="${o.x + HD + j * C + C / 2}" y="${TOP + HD / 2}">${L[j]}</text>`;
+    }
+    for (let i = 0; i < N; i++) {
+      const cy = TOP + HD + i * C;
+      s += `<text class="m-head${i === sel ? ' sel' : ''}" x="${o.x + HD / 2}" y="${cy + C / 2}">${L[i]}</text>`;
+      for (let j = 0; j < N; j++) {
+        const cls = ['m-cell'];
+        if (m[i][j]) cls.push('one');
+        if (i === j) cls.push('diag');
+        if (i === sel) cls.push('row');
+        if (hotCells.some(([a, b]) => a === i && b === j)) cls.push('hot');
+        const x = o.x + HD + j * C;
+        s += `<g class="${cls.join(' ')}" data-i="${i}" data-j="${j}"><rect x="${x + 1}" y="${cy + 1}" width="${C - 2}" height="${C - 2}" rx="4"/>` +
+          `<text x="${x + C / 2}" y="${cy + C / 2}">${m[i][j]}</text></g>`;
+      }
+    }
+    s += `<text class="p-foot" x="${o.x + MW / 2}" y="${TOP + HD + N * C + 13}">${N * N} 格 = V²，其中 ${ones()} 个 1</text>`;
+    return s;
+  }
+
+  function listsPanel(o) {
+    const RH = 30, BW = 24, BH = 22, HX = o.x + 18, STEP = 38;
+    let s = `<text class="p-title" x="${o.x + LW / 2}" y="${o.y + 12}">邻接表 adj[i]</text>`;
+    for (let u = 0; u < N; u++) {
+      const cy = o.y + 18 + u * RH + RH / 2;
+      s += `<g class="l-row${u === sel ? ' sel' : ''}">`;
+      s += `<text class="l-label${u === sel ? ' sel' : ''}" x="${o.x + 8}" y="${cy}">${L[u]}</text>`;
+      s += `<rect class="l-box" x="${HX}" y="${cy - BH / 2}" width="22" height="${BH}" rx="3"/>`;
+      if (!lists[u].length) {
+        s += `<line class="l-nil" x1="${HX + 4}" y1="${cy + 8}" x2="${HX + 18}" y2="${cy - 8}"/>`;
+      } else {
+        s += `<circle class="l-dot" cx="${HX + 11}" cy="${cy}" r="2.5"/>`;
+        s += `<line class="l-ptr" x1="${HX + 11}" y1="${cy}" x2="${HX + 22 + 13}" y2="${cy}" marker-end="url(#l-arr)"/>`;
+      }
+      lists[u].forEach((v, k) => {
+        const x = HX + 22 + 14 + k * STEP;
+        const hot = hotNodes.some(([a, b]) => a === u && b === v);
+        s += `<g class="l-node${hot ? ' hot' : ''}"><rect class="l-box" x="${x}" y="${cy - BH / 2}" width="${BW}" height="${BH}" rx="3"/>` +
+          `<text x="${x + BW / 2}" y="${cy}">${L[v]}</text></g>`;
+        if (k < lists[u].length - 1) {
+          s += `<line class="l-ptr" x1="${x + BW}" y1="${cy}" x2="${x + STEP - 1}" y2="${cy}" marker-end="url(#l-arr)"/>`;
+        }
+      });
+      s += '</g>';
+    }
+    s += `<text class="p-foot" x="${o.x + LW / 2}" y="${o.y + 18 + N * RH + 13}">${N} 个表头 + ${nodeCount()} 个结点 = V + ${directed ? 'E' : '2E'}</text>`;
+    return s;
+  }
+
+  function draw() {
+    const W = stage.clientWidth || 640, H = stage.clientHeight || 300;
+    const lay = layout(W, H);
+    const defs = '<defs><marker id="l-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+      '<path d="M0,0 L10,5 L0,10 z" style="fill: rgba(255, 255, 255, 0.6)"/></marker></defs>';
+    stage.innerHTML = `<svg viewBox="0 0 ${lay.w} ${lay.h}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">` +
+      defs + graphPanel(lay.at.G) + matrixPanel(lay.at.M) + listsPanel(lay.at.L) + '</svg>';
+    noteEl.innerHTML = msg;
+  }
+
+  /* ─── controls ─── */
+  function mkBtn(text, cls) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    if (cls) b.className = cls;
+    return b;
+  }
+  const bar = document.getElementById('controls');
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const modeBtns = [mkBtn('无向', 'active'), mkBtn('有向')];
+  modeBtns.forEach(b => group.appendChild(b));
+  bar.appendChild(group);
+  const lectureBtn = mkBtn('课上例子'), completeBtn = mkBtn('完全图'), clearBtn = mkBtn('清空');
+  [lectureBtn, completeBtn, clearBtn].forEach(b => bar.appendChild(b));
+
+  /* ─── wiring ─── */
+  stage.addEventListener('click', e => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    const node = t.closest('.k-node');
+    if (node) {
+      const k = Array.prototype.indexOf.call(stage.querySelectorAll('.k-node'), node);
+      if (k >= 0) clickVertex(k);
+      return;
+    }
+    const cell = t.closest('.m-cell');
+    if (cell) clickCell(+cell.getAttribute('data-i'), +cell.getAttribute('data-j'));
+  });
+  modeBtns.forEach((b, k) => b.addEventListener('click', () => {
+    const d = k === 1;
+    if (d === directed) return;
+    directed = d;
+    modeBtns.forEach(x => x.classList.toggle('active', x === b));
+    preset('lecture');
+    draw();
+  }));
+  lectureBtn.addEventListener('click', () => { preset('lecture'); draw(); });
+  completeBtn.addEventListener('click', () => { preset('complete'); draw(); });
+  clearBtn.addEventListener('click', () => { preset('clear'); draw(); });
+  let pending = false;
+  window.addEventListener('resize', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; draw(); });
+  });
+
+  preset('lecture');
+  msg += ' 点一个顶点看它的邻居，再点另一个顶点（或直接点矩阵格子）加边、删边。';
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>建堆：自底向上 vs 逐个插入</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .bh { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .bh-stats { flex: 0 0 auto; text-align: center; font-size: 12px; color: var(--muted); }
+  .bh-stats b { color: var(--accent); font-weight: 700; }
+  .bh-svg { flex: 1 1 auto; min-height: 0; position: relative; }
+  .bh-svg > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .bh-arr { flex: 0 0 auto; }
+  .bh-arr .cells { padding: 16px 4px 20px; gap: 3px; }
+  .bh-arr .cell { min-width: 30px; height: 30px; padding: 0 4px; font-size: 13px; border-radius: 6px; }
+  .legend i.dimmed { background: rgba(255, 255, 255, 0.10); border: 1px solid var(--border); opacity: 0.45; }
+  @media (max-width: 420px) {
+    .legend, .controls .label, .controls input[type="range"] { display: none; }
+    .bh-arr .cells { gap: 2px; padding: 15px 2px 18px; }
+    .bh-arr .cell { min-width: 25px; height: 26px; padding: 0 3px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">建堆：自底向上 vs 逐个插入（数组下标从 1 开始）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>正在移动的元素</span>
+  <span><i style="background: rgba(217, 119, 87, 0.30); border: 1px solid var(--accent)"></i>比较对象</span>
+  <span><i style="background: rgba(251, 191, 36, 0.20); border: 1px solid var(--yellow)"></i>将与之交换</span>
+  <span><i style="background: rgba(74, 222, 128, 0.22); border: 1px solid var(--green)"></i>已经是堆</span>
+  <span><i class="dimmed"></i>还没插入</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  const INPUTS = [
+    { label: '课上例子', a: [1, 0, 7, 3, 7, 4, 1, 8, 2, 4], min: false },
+    { label: '升序 1…15', a: Array.from({ length: 15 }, (_, k) => k + 1), min: false,
+      tip: '升序是逐个插入的最坏情况：每个新元素都比已有的全部元素大，一路换到根。' },
+    { label: '2015 最小堆', a: [100, 12, 79, 11, 13, 77, 11, 87, 25], min: true },
+  ];
+  const METHODS = [{ label: '自底向上', key: 'up' }, { label: '逐个插入', key: 'ins' }];
+
+  // <algo>
+  // H is 1-based (H[0] unused). above(x, y): x may sit above y (max-heap: x > y; min-heap: x < y)
+  function words(isMin) {
+    return {
+      above: isMin ? (x, y) => x < y : (x, y) => x > y,
+      pick: isMin ? '较小' : '较大',
+      wrong: isMin ? '&gt;' : '&lt;',   // node vs child (or parent vs new) when a swap is needed
+      ok: isMin ? '≤' : '≥',
+    };
+  }
+
+  // plain bottom-up (no frames); tieRight picks the right child when both children are equal
+  function bottomUpPlain(a, isMin, tieRight) {
+    const w = words(isMin), n = a.length, H = [null, ...a];
+    let swaps = 0;
+    for (let i = Math.floor(n / 2); i >= 1; i--) {
+      let j = i;
+      while (2 * j <= n) {
+        let c = 2 * j;
+        if (c + 1 <= n && (w.above(H[c + 1], H[c]) || (tieRight && H[c + 1] === H[c]))) c++;
+        if (!w.above(H[c], H[j])) break;
+        [H[j], H[c]] = [H[c], H[j]];
+        j = c; swaps++;
+      }
+    }
+    return { H: H.slice(1), swaps };
+  }
+
+  function bottomUp(a, isMin) {
+    const w = words(isMin), n = a.length, H = [null, ...a];
+    const last = Math.floor(n / 2);
+    const done = new Array(n + 1).fill(false);
+    for (let k = last + 1; k <= n; k++) done[k] = true;
+    const frames = [];
+    let swaps = 0, cur = null;
+    const snap = o => frames.push(Object.assign({
+      H: H.slice(), done: done.slice(), dim: [], act: null, cmp: [], sel: null,
+      cur, pl: 'i', swaps, mode: 'up', n,
+    }, o));
+
+    snap({ note: `原数组直接当作完全二叉树。下标 ${last + 1}…${n} 是叶子（绿），单个结点本身就是堆。` +
+      `从最后一个父结点 i = ⌊${n}/2⌋ = ${last} 开始，倒着做 sift down，${isMin ? '最小堆和较小的孩子交换' : '和较大的孩子交换'}。` });
+
+    for (let i = last; i >= 1; i--) {
+      cur = i;
+      const v = H[i];
+      let j = i, head = `i = ${i}：`, stop = '', stopCmp = [];
+      for (;;) {
+        const kids = [2 * j, 2 * j + 1].filter(c => c <= n);
+        if (!kids.length) { stop = `${v} 到了下标 ${j}，是叶子，停。`; break; }
+        let c = kids[0];
+        if (kids.length === 2 && w.above(H[kids[1]], H[c])) c = kids[1];
+        const kv = kids.map(k => H[k]).join('、');
+        const pick = kids.length === 2
+          ? `，${w.pick}的是 ${H[c]}` + (H[kids[0]] === H[kids[1]] ? '（两个相等，取左边）' : '')
+          : '';
+        if (w.above(H[c], H[j])) {
+          snap({ act: j, cmp: kids, sel: c,
+            note: `${head}${v} 在下标 ${j}，孩子是 ${kv}${pick}；${v} ${w.wrong} ${H[c]}，交换。` });
+          [H[j], H[c]] = [H[c], H[j]];
+          swaps++; j = c; head = '';
+        } else {
+          stop = `${head}${v} 在下标 ${j}，孩子是 ${kv}${pick}；${v} ${w.ok} ${H[c]}，停。`;
+          stopCmp = kids;
+          break;
+        }
+      }
+      (function mark(k) { if (k > n) return; done[k] = true; mark(2 * k); mark(2 * k + 1); })(i);
+      snap({ act: j, cmp: stopCmp, note: `${stop}以下标 ${i} 为根的子树已是堆。` });
+    }
+    cur = null;
+    return { frames, H: H.slice(1), swaps, snap };
+  }
+
+  function insertion(a, isMin) {
+    const w = words(isMin), n = a.length, H = [null, ...a];
+    const done = new Array(n + 1).fill(false);
+    const dim = new Array(n + 1).fill(true);
+    done[1] = true; dim[1] = false;
+    const frames = [];
+    let swaps = 0, cur = null;
+    const snap = o => frames.push(Object.assign({
+      H: H.slice(), done: done.slice(), dim: dim.slice(), act: null, cmp: [], sel: null,
+      cur, pl: 'k', swaps, mode: 'ins', n,
+    }, o));
+
+    snap({ note: `H[1] = ${H[1]} 自己就是一个堆（绿）。灰色元素按顺序插入：H[1..k−1] 已是堆时，` +
+      `H[k] 正好在堆末尾的下一个位置，对它 sift up。` });
+
+    for (let k = 2; k <= n; k++) {
+      cur = k; dim[k] = false;
+      const v = H[k];
+      let j = k, head = `插入 H[${k}] = ${v}：`, stop = '', stopCmp = [];
+      for (;;) {
+        if (j === 1) { stop = `${v} 到了根，停。`; break; }
+        const p = j >> 1;
+        if (w.above(H[j], H[p])) {
+          snap({ act: j, cmp: [p], sel: p,
+            note: `${head}${v} 在下标 ${j}，父结点 ${H[p]} ${w.wrong} ${v}，交换。` });
+          [H[j], H[p]] = [H[p], H[j]];
+          swaps++; j = p; head = '';
+        } else {
+          stop = `${head}${v} 在下标 ${j}，父结点 ${H[p]} ${w.ok} ${v}，停。`;
+          stopCmp = [p];
+          break;
+        }
+      }
+      done[k] = true;
+      snap({ act: j, cmp: stopCmp, note: `${stop}堆现在是 H[1..${k}]。` });
+    }
+    cur = null;
+    return { frames, H: H.slice(1), swaps, snap };
+  }
+
+  // both methods on one input, each ending with a frame that compares the two
+  function buildAll(inp) {
+    const up = bottomUp(inp.a, inp.min);
+    const ins = insertion(inp.a, inp.min);
+    const same = up.H.join(' ') === ins.H.join(' ');
+    const kind = inp.min ? '最小堆' : '最大堆';
+    let upNote = `完成，得到${kind} ${up.H.join(' ')}，共 <b>${up.swaps}</b> 次交换。` +
+      `同一输入逐个插入要 ${ins.swaps} 次` + (same ? '，结果相同。' : `，得到的是 ${ins.H.join(' ')}。`);
+    const alt = bottomUpPlain(inp.a, inp.min, true);
+    if (alt.H.join(' ') !== up.H.join(' ')) {
+      upNote += `若相等的孩子取右边，得到 ${alt.H.join(' ')}，同样是合法的${kind}。`;
+    }
+    let insNote = `完成，得到${kind} ${ins.H.join(' ')}，共 <b>${ins.swaps}</b> 次交换；自底向上只要 ${up.swaps} 次。`;
+    if (inp.tip) insNote += inp.tip;
+    up.snap({ final: true, note: upNote });
+    ins.snap({ final: true, note: insNote });
+    return { up, ins };
+  }
+  // </algo>
+
+  function render(f) {
+    const n = f.n;
+    const root = (function mk(i) {
+      return i <= n ? { key: f.H[i], idx: i, left: mk(2 * i), right: mk(2 * i + 1) } : null;
+    })(1);
+    const cls = i => {
+      if (i === f.act) return 'active';
+      if (i === f.sel) return 'warn';
+      if (f.cmp.indexOf(i) >= 0) return 'compare';
+      if (f.done[i]) return 'done';
+      if (f.dim[i]) return 'dim';
+      return '';
+    };
+    const svg = K.tree(root, {
+      gapX: 42, gapY: 56, pad: 26,
+      cls: nd => cls(nd.idx),
+      edgeCls: (p, c) => (f.sel != null && f.act != null &&
+        ((p.idx === f.act && c.idx === f.sel) || (p.idx === f.sel && c.idx === f.act)) ? 'active' : ''),
+      badge: nd => nd.idx,
+    });
+    const vals = f.H.slice(1);
+    const ptr = {};
+    if (f.cur != null) ptr[f.cur - 1] = f.pl;
+    const arr = K.cells(vals, { idx: vals.map((_, k) => k + 1), ptr, cls: (v, k) => cls(k + 1) });
+    let stats = `交换 <b>${f.swaps}</b> 次`;
+    if (f.mode === 'up' && f.cur != null) stats += ` · 正在处理父结点 i = ${f.cur}`;
+    if (f.mode === 'ins' && f.cur != null) stats += ` · 已插入 ${f.cur} / ${n}`;
+    if (f.final) stats += ' · 完成';
+    stage.innerHTML = `<div class="bh"><div class="bh-stats">${stats}</div>` +
+      `<div class="bh-svg">${svg}</div><div class="bh-arr">${arr}</div></div>`;
+  }
+
+  const built = INPUTS.map(buildAll);
+  let inpIdx = 0, methIdx = 0, player = null;
+  const framesNow = () => built[inpIdx][METHODS[methIdx].key].frames;
+
+  function group(items, initial, onPick) {
+    const g = document.createElement('div');
+    g.className = 'btn-group';
+    items.forEach((it, k) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      if (k === initial) b.classList.add('active');
+      b.addEventListener('click', () => {
+        g.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        onPick(k);
+      });
+      g.appendChild(b);
+    });
+    controls.appendChild(g);
+  }
+  group(INPUTS, 0, k => { inpIdx = k; player.load(framesNow()); });
+  group(METHODS, 0, k => { methIdx = k; player.load(framesNow()); });
+
+  player = AnimKit.player({ frames: framesNow(), render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

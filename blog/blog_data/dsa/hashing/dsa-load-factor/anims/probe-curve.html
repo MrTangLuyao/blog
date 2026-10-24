@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>装载因子与平均探测次数</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .wrap { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; }
+  .readout { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 16px; font-size: 13px; }
+  .readout .a { font-size: 16px; font-weight: 700; }
+  .readout .sub { color: var(--muted); font-size: 12px; }
+  .readout i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .readout b { font-variant-numeric: tabular-nums; }
+  .chart { flex: 1 1 auto; min-height: 0; position: relative; }
+  .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .grid { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
+  .axis { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1.2; }
+  .tick { fill: var(--muted); font-size: 12px; }
+  .lp { stroke: var(--accent); stroke-width: 2.6; fill: none; }
+  .dh { stroke: var(--blue); stroke-width: 2.6; fill: none; }
+  .ch { stroke: var(--muted); stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+  .cur { stroke: rgba(255, 255, 255, 0.45); stroke-width: 1.2; stroke-dasharray: 4 4; }
+  .off { font-size: 12px; font-weight: 700; paint-order: stroke; stroke: #2a2a29; stroke-width: 4px; }
+  @media (max-width: 420px) {
+    .readout { font-size: 12px; gap: 2px 10px; }
+    .readout .a { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">装载因子 α 与一次插入的平均探测次数（公式表的估计）</div>
+<div class="controls" id="controls"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // the three estimates (open addressing: equation sheet; chaining: 1 + alpha)
+  const DH = a => 1 / (1 - a);
+  const LP = a => 1 / ((1 - a) * (1 - a));
+  const CH = a => 1 + a;
+
+  const near = (x, y) => Math.abs(x - y) < 1e-9;
+  const fmt = x => (near(x, Math.round(x)) ? String(Math.round(x)) : x.toFixed(2));
+  const fmtA = a => String(Number(a.toFixed(2)));
+
+  // frames: alpha = 0, 0.05, ..., 0.95, then 0.99
+  const ALPHAS = [];
+  for (let k = 0; k <= 19; k++) ALPHAS.push(Math.round(k * 5) / 100);
+  ALPHAS.push(0.99);
+
+  const YMAX = 20;
+  function noteFor(a) {
+    const dh = DH(a), lp = LP(a);
+    const n = Math.round(a * 1000);
+    if (a === 0) {
+      return '空表：第一次探测就碰到空格，三种方法都只看 <b>1</b> 格。按“播放”让表逐渐变满。';
+    }
+    let s = 'α = ' + fmtA(a) + '（1000 格存 ' + n + ' 个键）：双重哈希 1/(1−α) = <b>' + fmt(dh) +
+      '</b>，线性探测 1/(1−α)² = <b>' + fmt(lp) + '</b>，是前者的 ' + fmt(lp / dh) + ' 倍（= 1/(1−α)）。';
+    if (near(a, 0.5)) s += '一半的格子空着。';
+    else if (near(a, 0.75)) s += '课上的例子：4 次对 16 次。';
+    else if (near(a, 0.95)) s += '双重哈希也到了 20 次。';
+    else if (near(a, 0.99)) s += '两者都已失控，表必须更早 rehash。';
+    else if (lp > YMAX && LP(a - 0.05) <= YMAX) s += '线性探测已超出图的上边界。';
+    return s;
+  }
+  const frames = ALPHAS.map(a => ({ a, dh: DH(a), lp: LP(a), ch: CH(a), note: noteFor(a) }));
+
+  // chart geometry (viewBox units)
+  const W = 440, H = 270, L = 40, R = 420, T = 14, B = 238;
+  const X = a => L + (R - L) * a;
+  const Y = v => B - (B - T) * Math.min(v, YMAX) / YMAX;
+
+  // polyline of f on [0, 1), clipped where f reaches YMAX
+  function curve(f) {
+    const pts = [];
+    for (let a = 0; a < 0.999; a += 0.002) {
+      if (f(a) > YMAX) {
+        let lo = a - 0.002, hi = a;                     // bisection for f = YMAX
+        for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (f(mid) > YMAX) hi = mid; else lo = mid; }
+        pts.push(X(lo).toFixed(1) + ',' + Y(YMAX).toFixed(1));
+        break;
+      }
+      pts.push(X(a).toFixed(1) + ',' + Y(f(a)).toFixed(1));
+    }
+    return pts.join(' ');
+  }
+  const PATHS = { lp: curve(LP), dh: curve(DH), ch: curve(CH) };
+
+  function axes() {
+    let s = '';
+    for (let v = 0; v <= YMAX; v += 4) {
+      s += '<line class="grid" x1="' + L + '" y1="' + Y(v) + '" x2="' + R + '" y2="' + Y(v) + '"/>' +
+        '<text class="tick" x="' + (L - 7) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    }
+    [0, 0.25, 0.5, 0.75, 1].forEach(a => {
+      s += '<line class="axis" x1="' + X(a) + '" y1="' + B + '" x2="' + X(a) + '" y2="' + (B + 4) + '"/>' +
+        '<text class="tick" x="' + X(a) + '" y="' + (B + 17) + '" text-anchor="middle">' + a + '</text>';
+    });
+    s += '<line class="axis" x1="' + L + '" y1="' + B + '" x2="' + R + '" y2="' + B + '"/>' +
+      '<line class="axis" x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + B + '"/>' +
+      '<text class="tick" x="' + (R - 4) + '" y="' + (B - 6) + '" text-anchor="end">α →</text>';
+    return s;
+  }
+  const AXES = axes();
+
+  // a dot on a curve, or a small triangle at the top edge when the value is off the chart
+  function marker(a, v, color, dx) {
+    const x = X(a);
+    if (v <= YMAX) return '<circle cx="' + x + '" cy="' + Y(v) + '" r="5" fill="' + color + '" stroke="#2a2a29" stroke-width="2"/>';
+    const xx = x + dx;
+    return '<path d="M' + (xx - 6) + ',' + (T + 10) + ' L' + xx + ',' + T + ' L' + (xx + 6) + ',' + (T + 10) + ' z" fill="' + color + '"/>' +
+      '<text class="off" x="' + xx + '" y="' + (T + 26) + '" text-anchor="middle" fill="' + color + '">↑' + fmt(v) + '</text>';
+  }
+
+  const PRESETS = [0.25, 0.5, 0.75, 0.9];
+  const group = document.createElement('span');
+  group.className = 'btn-group';
+  PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'α = ' + p;
+    b.addEventListener('click', () => player.go(ALPHAS.findIndex(a => near(a, p))));
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  function render(f) {
+    const a = f.a;
+    Array.prototype.forEach.call(group.children, (b, k) => b.classList.toggle('active', near(PRESETS[k], a)));
+    const lpOff = f.lp > YMAX;
+    const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
+      AXES +
+      '<polyline class="ch" points="' + PATHS.ch + '"/>' +
+      '<polyline class="dh" points="' + PATHS.dh + '"/>' +
+      '<polyline class="lp" points="' + PATHS.lp + '"/>' +
+      '<line class="cur" x1="' + X(a) + '" y1="' + T + '" x2="' + X(a) + '" y2="' + B + '"/>' +
+      marker(a, f.ch, '#a1a1a0', 0) +
+      marker(a, f.dh, '#38bdf8', 0) +
+      marker(a, f.lp, '#d97757', lpOff && f.dh >= YMAX - 2 ? -48 : 0) +   // keep clear of the blue mark at the top
+      '</svg>';
+    const readout = '<div class="readout">' +
+      '<span class="a">α = ' + fmtA(a) + '</span>' +
+      '<span><i style="background: var(--accent)"></i>线性探测 <b>' + fmt(f.lp) + '</b></span>' +
+      '<span><i style="background: var(--blue)"></i>双重哈希 <b>' + fmt(f.dh) + '</b></span>' +
+      '<span class="sub"><i style="background: var(--muted)"></i>拉链法查找失败 1 + α = ' + fmt(f.ch) + '</span>' +
+      '</div>';
+    stage.innerHTML = '<div class="wrap">' + readout + '<div class="chart">' + svg + '</div></div>';
+  }
+
+  const player = window.AnimKit.player({ frames, render, interval: 1000 });
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updated": "2026-08-03",
+  "updated": "2026-10-24",
   "entries": [
     {
       "kind": "post",
@@ -76,7 +76,8 @@
       "tags": [
         "sql",
         "code"
-      ]
+      ],
+      "protected": true
     },
     {
       "kind": "collection",
@@ -93,7 +94,8 @@
       "tags": [
         "python",
         "code"
-      ]
+      ],
+      "protected": true
     },
     {
       "kind": "collection",
@@ -111,7 +113,27 @@
         "c",
         "algorithms",
         "code"
-      ]
+      ],
+      "protected": true
+    },
+    {
+      "kind": "collection",
+      "slug": "dsa",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "数据结构与算法",
+        "en": "Data Structures & Algorithms"
+      },
+      "excerpt": {
+        "zh": "COMP20003 复习：复杂度 · 链表 · 树 · 哈希 · 排序 · 堆 · 图",
+        "en": "COMP20003 revision: complexity · lists · trees · hashing · sorting · heaps · graphs"
+      },
+      "tags": [
+        "c",
+        "algorithms",
+        "code"
+      ],
+      "protected": true
     }
   ]
 }

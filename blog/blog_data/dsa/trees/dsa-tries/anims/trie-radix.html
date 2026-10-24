@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trie 插入、查找与 radix 压缩</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+</head>
+<body>
+<div class="title">Trie：插入、查找，再压缩成 radix 树</div>
+<div class="controls" id="controls"></div>
+<div class="legend" id="stats"></div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const statsEl = document.getElementById('stats');
+  const controls = document.getElementById('controls');
+
+  const WORDS = ['cat', 'car', 'card', 'dog', 'do', 'pen'];
+  const QUERIES = ['dog', 'ca', 'cow'];
+
+  // <algo> trie with one character per node; radix compression merges labels
+  let nextId = 1;
+  const mk = label => ({ id: nextId++, label, end: false, kids: [] });
+  const clone = n => ({ id: n.id, label: n.label, end: n.end, kids: n.kids.map(clone) });
+  const child = (n, ch) => n.kids.find(k => k.label[0] === ch) || null;
+  function addChild(n, c) {
+    n.kids.push(c);
+    n.kids.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  }
+  function count(n) { return n.kids.reduce((s, c) => s + 1 + count(c), 0); }   // 不含根
+  function ends(n) { return (n.end ? 1 : 0) + n.kids.reduce((s, c) => s + ends(c), 0); }
+  // 前序遍历（孩子按字母序）收集子树里的单词，prefix 是到 n 为止的字符串
+  function words(n, prefix) {
+    const out = n.end ? [prefix] : [];
+    n.kids.forEach(c => out.push(...words(c, prefix + c.label)));
+    return out;
+  }
+  const under = n => (n.label ? n.label + ' 下面' : '根下面');
+
+  function buildTrie(onStep) {
+    nextId = 1;
+    const root = mk('');
+    for (const w of WORDS) {
+      let t = root, i = 0;
+      const path = [root], reused = [];
+      while (i < w.length && child(t, w[i])) { t = child(t, w[i]); path.push(t); reused.push(w[i]); i++; }
+      if (onStep && reused.length) onStep(root, path.slice(), null, w, 'reuse', reused);
+      let made = 0;
+      while (i < w.length) {
+        const n = mk(w[i]);
+        addChild(t, n);
+        path.push(n);
+        if (onStep) onStep(root, path.slice(), n, w, 'new', { parent: t, first: i === 0 && !reused.length });
+        t = n; i++; made++;
+      }
+      const was = t.end;
+      t.end = true;
+      if (onStep) onStep(root, path.slice(), t, w, 'end', { made, was });
+    }
+    return root;
+  }
+
+  function pathMarks(path, cls) {
+    const hl = {}, eh = {};
+    path.forEach((n, k) => {
+      hl[n.id] = cls;
+      if (k) eh[path[k - 1].id + '-' + n.id] = cls;
+    });
+    return { hl, eh };
+  }
+
+  function framesInsert() {
+    const frames = [];
+    const snap = (root, m, note) => frames.push({ tree: clone(root), hl: m.hl, eh: m.eh, note, st: { n: count(root), w: ends(root) } });
+    nextId = 1;
+    snap(mk(''), { hl: {}, eh: {} }, '空 trie 只有一个根结点，它不代表任何字符。依次插入 <b>' + WORDS.join(', ') + '</b>。');
+    const root = buildTrie((root, path, node, w, kind, info) => {
+      const m = pathMarks(path, 'visited');
+      if (kind === 'reuse') {
+        snap(root, m, '插入 <b>' + w + '</b>：' + info.join(' → ') + ' 已经在树里，沿着走，不新建结点（共享前缀 <code>' + info.join('') + '</code>）。');
+      } else if (kind === 'new') {
+        m.hl[node.id] = 'active';
+        m.eh[info.parent.id + '-' + node.id] = 'active';
+        snap(root, m, (info.first ? '插入 <b>' + w + '</b>：' : '') + under(info.parent) + '没有 <b>' + node.label + '</b>，新建结点 ' + node.label + '。');
+      } else {
+        m.hl[node.id] = 'found';
+        const longer = words(node, w).filter(x => x !== w);
+        const msg = info.made
+          ? '走完 <b>' + w + '</b>，把最后的结点 ' + node.label + ' 标为词尾（is_end = 1）。'
+          : '<b>' + w + '</b> 的每个字符都在已有路径上：<span class="ok">一个结点也不新建</span>，只把 ' + node.label +
+            ' 标为词尾。没有这个标记，就分不清 ' + w + ' 是单词还是只是 ' + longer.join('、') + ' 的前缀。';
+        snap(root, m, msg);
+      }
+    });
+    const total = WORDS.join('').length;
+    snap(root, { hl: {}, eh: {} }, WORDS.length + ' 个单词共 ' + total + ' 个字符，trie 只有 <b>' + count(root) +
+      '</b> 个结点（不含根）：共同前缀只存一次。孩子按 a→z 做前序遍历，经过词尾的顺序是 ' + words(root, '').join(', ') + '，正是字典序。');
+    return frames;
+  }
+
+  function framesSearch() {
+    const frames = [];
+    const root = buildTrie(null);
+    const snap = (m, note) => frames.push({ tree: clone(root), hl: m.hl, eh: m.eh, note, st: { n: count(root), w: ends(root) } });
+    snap({ hl: {}, eh: {} }, '插入完 6 个单词的 trie。依次查找 <b>' + QUERIES.join('、') + '</b>：从根出发，每读一个字符走一条边。');
+    for (const q of QUERIES) {
+      let t = root;
+      const path = [root];
+      let broke = false;
+      for (let i = 0; i < q.length; i++) {
+        const c = child(t, q[i]);
+        if (!c) {
+          const m = pathMarks(path, 'visited');
+          m.hl[t.id] = 'bad';
+          snap(m, '查找 <b>' + q + '</b>：' + under(t) + '没有 <b>' + q[i] + '</b> 这条边，<span class="bad">查找失败</span>。只读了 ' + (i + 1) +
+            ' 个字符就停下，后面的字符不用看。');
+          broke = true;
+          break;
+        }
+        path.push(c);
+        const m = pathMarks(path, 'visited');
+        m.hl[c.id] = 'active';
+        snap(m, '查找 <b>' + q + '</b>：第 ' + (i + 1) + ' 个字符 ' + q[i] + '，' + under(t) + '有这条边，往下走。');
+        t = c;
+      }
+      if (broke) continue;
+      const m = pathMarks(path, 'visited');
+      if (t.end) {
+        m.hl[t.id] = 'found';
+        snap(m, '读完 <b>' + q + '</b>，停在 ' + t.label + '，它是词尾：<span class="ok">找到</span>。走了 ' + q.length + ' 步，与 trie 里有多少单词无关。');
+      } else {
+        m.hl[t.id] = 'bad';
+        snap(m, '读完 <b>' + q + '</b>，路是通的，但 ' + t.label + ' <span class="bad">不是词尾</span>：' + q +
+          ' 只是 ' + words(t, q).join('、') + ' 的前缀，不是存进来的单词。');
+      }
+    }
+    return frames;
+  }
+
+  function framesRadix() {
+    const frames = [];
+    const root = buildTrie(null);
+    const snap = (m, note) => frames.push({ tree: clone(root), hl: m.hl, eh: m.eh, note, st: { n: count(root), w: ends(root) } });
+    const before = count(root);
+    snap({ hl: {}, eh: {} }, '规则：一个结点<b>不是词尾</b>且<b>只有一个孩子</b>，就和孩子合并成一个结点，字符串接起来。从上往下逐个检查。');
+    (function visit(n, isRoot, above) {          // above = 根到 n 的父结点拼出的字符串
+      if (!isRoot) {
+        if (!n.end && n.kids.length === 1) {
+          const chain = [n];
+          let u = n;
+          while (!u.end && u.kids.length === 1) { u = u.kids[0]; chain.push(u); }
+          const m = { hl: {}, eh: {} };
+          chain.forEach((c, k) => { m.hl[c.id] = 'warn'; if (k) m.eh[chain[k - 1].id + '-' + c.id] = 'active'; });
+          const labels = chain.map(c => c.label);
+          const heads = labels.slice(0, -1);
+          snap(m, (heads.length === 1
+            ? heads[0] + ' 不是词尾、只有一个孩子 ' + labels[1]
+            : heads.join('、') + ' 都不是词尾、都只有一个孩子') + '：' + labels.join(' → ') + ' 可以并成一个结点。');
+          n.label = labels.join('');
+          n.end = u.end;
+          n.kids = u.kids;
+          const m2 = { hl: {}, eh: {} };
+          m2.hl[n.id] = 'active';
+          const why = n.kids.length === 0 ? '它是叶子'
+            : n.end ? '它是词尾（' + above + n.label + '），下面的 ' + n.kids.map(c => c.label).join('、') + ' 要单独保留'
+            : '它有 ' + n.kids.length + ' 个孩子 ' + n.kids.map(c => c.label).join('、');
+          snap(m2, '合并成 <b>' + n.label + '</b>，到此为止：' + why + '。');
+        } else if (n.end && n.kids.length === 1) {
+          const m = { hl: {}, eh: {} };
+          m.hl[n.id] = 'bad';
+          snap(m, n.label + ' 只有一个孩子 ' + n.kids[0].label + '，但它是词尾：<span class="bad">不能合并</span>，否则 ' +
+            above + n.label + ' 这个单词的结束位置就没了。');
+        }
+      }
+      n.kids.forEach(c => visit(c, false, above + n.label));   // n.label 已是合并后的字符串
+    })(root, true, '');
+    // 自检：除根外，非词尾结点至少两个孩子；存的单词不变
+    (function check(n, isRoot) {
+      if (!isRoot && !n.end && n.kids.length < 2) throw new Error('radix invariant broken at ' + n.label);
+      n.kids.forEach(c => check(c, false));
+    })(root, true);
+    if (words(root, '').join() !== WORDS.slice().sort().join()) throw new Error('word set changed');
+    snap({ hl: {}, eh: {} }, 'radix 树完成：结点 ' + before + ' → <b>' + count(root) + '</b>（不含根）。查找时一段一段比较字符串，比较的字符总数仍是 O(L)，但要跟的指针少了。');
+    return frames;
+  }
+  // </algo>
+
+  // ---- drawing: leaves left to right, a parent centred over its children ----
+  const H = 28, GX = 24, GY = 52, PAD = 18, CW = 9.5, RR = 11;
+  function layout(root) {
+    const pos = new Map();
+    let cursor = PAD, depth = 0;
+    const wOf = n => (n.label ? Math.max(34, 18 + CW * n.label.length) : RR * 2);
+    (function lay(n, d) {
+      depth = Math.max(depth, d);
+      const w = wOf(n);
+      let cx;
+      if (!n.kids.length) cx = cursor + w / 2;
+      else {
+        n.kids.forEach(c => lay(c, d + 1));
+        cx = (pos.get(n.kids[0]).x + pos.get(n.kids[n.kids.length - 1]).x) / 2;
+      }
+      pos.set(n, { x: cx, y: PAD + H / 2 + d * GY, w });
+      cursor = Math.max(cursor, cx + w / 2 + GX);
+    })(root, 0);
+    return { pos, w: cursor - GX + PAD, h: PAD * 2 + depth * GY + H };
+  }
+
+  function svg(f, box) {
+    const L = layout(f.tree);
+    const dx = (box.w - L.w) / 2;
+    let edges = '', nodes = '';
+    L.pos.forEach((p, n) => {
+      n.kids.forEach(c => {
+        const q = L.pos.get(c);
+        const y1 = n.label ? p.y + H / 2 : p.y + RR;
+        edges += '<line class="k-edge ' + (f.eh[n.id + '-' + c.id] || '') + '" x1="' + (p.x + dx) + '" y1="' + y1 +
+          '" x2="' + (q.x + dx) + '" y2="' + (q.y - H / 2) + '"/>';
+      });
+      const cls = f.hl[n.id] || '';
+      const x = p.x + dx;
+      if (!n.label) {
+        nodes += '<g class="k-node ' + cls + '"><circle cx="' + x + '" cy="' + p.y + '" r="' + RR + '"/></g>';
+      } else {
+        nodes += '<g class="k-node ' + cls + '"><rect x="' + (x - p.w / 2) + '" y="' + (p.y - H / 2) + '" width="' + p.w +
+          '" height="' + H + '" rx="7"/><text x="' + x + '" y="' + p.y + '">' + K.esc(n.label) + '</text></g>';
+        if (n.end) nodes += '<circle cx="' + (x + p.w / 2 - 1) + '" cy="' + (p.y - H / 2 + 1) + '" r="5" style="fill: var(--green); stroke: var(--surface); stroke-width: 2"/>';
+      }
+    });
+    return '<svg viewBox="0 0 ' + box.w + ' ' + box.h + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' + edges + nodes + '</svg>';
+  }
+
+  let box = { w: 300, h: 200 };
+  function fit(frames) {
+    box = { w: 300, h: 200 };
+    frames.forEach(f => {
+      const L = layout(f.tree);
+      box.w = Math.max(box.w, L.w);
+      box.h = Math.max(box.h, L.h);
+    });
+    return frames;
+  }
+
+  const MODES = [
+    { label: '插入', make: framesInsert, legend: [['blue', '沿用的路径'], ['accent', '新结点'], ['green', '设词尾标记']] },
+    { label: '查找', make: framesSearch, legend: [['blue', '走过'], ['accent', '当前'], ['green', '找到'], ['red', '失败']] },
+    { label: '压缩成 radix', make: framesRadix, legend: [['yellow', '待合并'], ['accent', '合并结果'], ['red', '不能合并']] },
+  ];
+  let legend = MODES[0].legend;
+
+  function render(f) {
+    stage.innerHTML = svg(f, box);
+    statsEl.innerHTML = legend.map(([c, t]) => '<span><i style="background: var(--' + c + ')"></i>' + t + '</span>').join('') +
+      '<span><i style="background: var(--green); border-radius: 50%"></i>词尾</span>' +
+      '<span>结点 ' + f.st.n + '（不含根）</span>';
+  }
+  let player = null;
+  const g = document.createElement('div');
+  g.className = 'btn-group';
+  MODES.forEach((m, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = m.label;
+    if (i === 0) b.classList.add('active');
+    b.addEventListener('click', () => {
+      g.querySelectorAll('button').forEach(o => o.classList.remove('active'));
+      b.classList.add('active');
+      legend = m.legend;
+      player.load(fit(m.make()));
+    });
+    g.appendChild(b);
+  });
+  controls.appendChild(g);
+
+  player = AnimKit.player({ frames: fit(MODES[0].make()), render, interval: 1500 });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+{
+  "version": 4,
+  "updated": "2026-10-24",
+  "title": {
+    "zh": "第 2 部分 · 数组、链表与基础 ADT",
+    "en": "Part 2 · Arrays, Lists & Basic ADTs"
+  },
+  "entries": [
+    {
+      "kind": "post",
+      "slug": "dsa-adt-dictionary",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "2.1 抽象数据类型与字典",
+        "en": "2.1 ADTs & the Dictionary"
+      },
+      "excerpt": {
+        "zh": "ADT vs 具体结构 · 栈 / 队列 / 字典 / 优先队列 · 键与五个操作 · build 与 update 的拆解 · C 头文件接口",
+        "en": "ADT vs concrete structure · Stack / queue / dictionary / PQ · Keys & five operations · Build and update reduced · C header as interface"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-memory-arrays",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "2.2 内存、指针与数组",
+        "en": "2.2 Memory, Pointers & Arrays"
+      },
+      "excerpt": {
+        "zh": "RAM 字节编址 · 指针 & 与 * · 数组连续存放与 O(1) 下标 · A[k] ≡ *(A+k) · 二维数组按行存放与地址公式 · int *A[10] 不是二维数组 · 数组操作代价",
+        "en": "Byte-addressed RAM · pointers & and * · contiguous arrays and O(1) indexing · A[k] ≡ *(A+k) · row-major 2D arrays and the address formula · int *A[10] is not a 2D array · array operation costs"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 9,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-array-dictionary",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "2.3 用数组做字典：线性查找与二分查找",
+        "en": "2.3 Arrays as Dictionaries & Binary Search"
+      },
+      "excerpt": {
+        "zh": "无序数组线性查找 O(n) · 开头插入/删除要移位 · 二分查找与偶数取整规则 · 循环不变式 · 有序数组逐个插入 O(n²) · n 次插入 + m 次查找要不要排序",
+        "en": "Linear search O(n) · shifting at the front · binary search and the even-count rounding rule · loop invariant · sorted build by insertion O(n²) · n inserts + m finds: sort or not"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-linked-list",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "2.4 链表：节点、头插、插入与删除",
+        "en": "2.4 Linked Lists in C"
+      },
+      "excerpt": {
+        "zh": "结点 = 数据 + next · head 与 NULL · 头插两行的顺序 · 遍历与 O(n) 查找 · 已知前驱的 O(1) 插入/删除 · 先存 p 再 free · 释放整表 · 有序插入与按键删除完整程序",
+        "en": "Node = data + next · head and NULL · order of the two head-insertion lines · traversal and O(n) search · O(1) insert/delete after a known predecessor · save p before free · freeing a list · full sorted-insert / delete-by-key program"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-array-vs-list",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "2.5 数组 vs 链表：对比表与陷阱题",
+        "en": "2.5 Arrays vs Linked Lists"
+      },
+      "excerpt": {
+        "zh": "随机访问 vs 顺着 next 走 · 对比表 · 有序链表不能二分 · 插入 O(1) 的前提 · 字典 n 次插入 + m 次查找 · 在 X 后插入的最好/最坏 · 缓存局部性 · 尾指针、双向链表、捷径指针",
+        "en": "Random access vs pointer walking · comparison table · no binary search on sorted lists · when list insert is O(1) · dictionary cost for n inserts + m finds · insert-after-X best/worst · cache locality · tail pointer, doubly linked lists, shortcut pointers"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-dynamic-array",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "2.6 动态数组与均摊分析",
+        "en": "2.6 Dynamic Arrays & Amortised Analysis"
+      },
+      "excerpt": {
+        "zh": "定长数组装满 · +1 扩容 Θ(n²) · 翻倍扩容 · 均摊 O(1) · ×3 与任意倍数 · realloc 与临时指针 · 悬空指针 · 去均摊（不考）",
+        "en": "Fixed-size arrays · +1 growth Θ(n²) · doubling · amortised O(1) · tripling and any constant factor · realloc with a temp pointer · dangling pointers · de-amortisation (not examinable)"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    },
+    {
+      "kind": "post",
+      "slug": "dsa-stack-queue",
+      "date": "2026-10-24",
+      "title": {
+        "zh": "2.7 栈、队列与循环数组",
+        "en": "2.7 Stacks, Queues & Circular Arrays"
+      },
+      "excerpt": {
+        "zh": "LIFO / FIFO · 数组栈与链表栈 · 队列 forward / backward · 循环数组取模 · 满与空的判断 · 代价表 · 链表队列代码",
+        "en": "LIFO vs FIFO · array and linked-list stacks · forward/backward queues · circular array with modulo · full vs empty · cost table · linked-list queue code"
+      },
+      "tags": [
+        "c",
+        "algorithms"
+      ],
+      "readingTime": 10,
+      "lang": "zh"
+    }
+  ]
+}

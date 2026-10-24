@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prim 逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .pm { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; }
+  .pm-graph { flex: 1 1 auto; min-height: 0; position: relative; }
+  .pm-graph > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .pm-info { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .pm-pq { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; min-height: 24px; }
+  .pm-pq .chip { display: inline-block; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--blue); background: rgba(56, 189, 248, 0.14); color: #d6f2ff; font-weight: 700; font-size: 12px; }
+  .pm-pq .chip.min { border-width: 2px; padding: 1px 7px; background: rgba(56, 189, 248, 0.32); color: #fff; }
+  .pm-pq .empty { font-style: italic; }
+  .pm-row { display: flex; align-items: center; gap: 6px; }
+  .pm-row .lab { font-size: 11px; color: var(--muted); }
+  .pm-tree { font-size: 12px; color: var(--muted); text-align: center; min-height: 18px; }
+  .pm-tree b { color: var(--green); }
+  .pm-info .cells { padding: 16px 2px 18px; gap: 3px; }
+  .pm-info .cell { min-width: 34px; height: 32px; font-size: 13px; }
+  .k-edge.cross { stroke: var(--blue); stroke-width: 1.6; stroke-dasharray: 4 4; opacity: 0.8; }
+  .k-weight.bad { fill: var(--red); }
+  .k-weight.cand { fill: var(--blue); }
+</style>
+</head>
+<body>
+<div class="title">Prim 逐步演示（与 Dijkstra 对比）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前顶点 / 刚处理的边</span>
+  <span><i style="background: var(--green)"></i>已在树中</span>
+  <span><i style="background: var(--blue)"></i>PQ 中 / 决定其键的边</span>
+  <span><i style="background: transparent; border: 1px dashed var(--blue)"></i>其他跨越边</span>
+  <span><i style="background: var(--red)"></i>不更新</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+
+  const NODES = [
+    { id: 'A', x: 30, y: 120 }, { id: 'C', x: 110, y: 40 }, { id: 'F', x: 190, y: 200 },
+    { id: 'D', x: 360, y: 40 }, { id: 'B', x: 280, y: 200 }, { id: 'E', x: 440, y: 120 },
+  ];
+  const EDGES = [
+    ['A', 'C', 2], ['A', 'F', 3], ['C', 'D', 5], ['C', 'F', 4],
+    ['F', 'B', 1], ['B', 'D', 2], ['B', 'E', 4], ['D', 'E', 6],
+  ];
+  const MODES = {
+    primA: { label: 'Prim·从 A', algo: 'prim', start: 'A' },
+    primC: { label: 'Prim·从 C', algo: 'prim', start: 'C' },
+    dijC: { label: 'Dijkstra·从 C', algo: 'dijkstra', start: 'C' },
+  };
+
+  const fmt = d => (d === Infinity ? '∞' : String(d));
+  const weight = (a, b) => EDGES.find(([u, v]) => (u === a && v === b) || (u === b && v === a))[2];
+
+  // Run Prim (key = weight of the single connecting edge) or Dijkstra
+  // (key = whole path length) and record a frame at every step.
+  function build(mode) {
+    const prim = mode.algo === 'prim';
+    const kname = prim ? 'cost' : 'dist';
+    const ids = NODES.map(n => n.id).slice().sort();
+    const adj = new Map(ids.map(v => [v, []]));
+    EDGES.forEach(([u, v, w]) => { adj.get(u).push({ v, w }); adj.get(v).push({ v: u, w }); });
+    adj.forEach(list => list.sort((a, b) => (a.v < b.v ? -1 : 1)));
+
+    const key = {}, from = {}, inT = {};
+    ids.forEach(v => { key[v] = Infinity; from[v] = null; inT[v] = false; });
+    const s = mode.start;
+    key[s] = 0;
+    const pq = new Map([[s, 0]]);
+    const added = [];               // tree edges in the order they joined: [from, to, w]
+
+    const frames = [];
+    function snap(extra) {
+      frames.push(Object.assign({
+        ids, prim,
+        key: Object.assign({}, key),
+        from: Object.assign({}, from),
+        inT: Object.assign({}, inT),
+        pq: [...pq.entries()],
+        added: added.slice(),
+        cur: null, edge: null, fresh: null, changed: null, final: false,
+      }, extra));
+    }
+
+    snap({
+      note: prim
+        ? `初始：cost[${s}] = 0，其余为 ∞；PQ 里只有 <b>${s}0</b>。cost[v] = 把 v 接到树上的<b>单条边</b>的最小权重。`
+        : `初始：dist[${s}] = 0，其余为 ∞；PQ 里只有 <b>${s}0</b>。dist[v] = 从 ${s} 到 v 的<b>整条路径</b>长度。`,
+    });
+
+    while (pq.size) {
+      let u = null;
+      pq.forEach((d, v) => {
+        if (u === null || d < pq.get(u) || (d === pq.get(u) && v < u)) u = v;
+      });
+      pq.delete(u);
+      inT[u] = true;
+      let note;
+      let fresh = null;
+      if (u === s) {
+        note = `取出 <b>${u}0</b>：起点进树，不需要边。`;
+      } else {
+        const w = weight(from[u], u);
+        added.push([from[u], u, w]);
+        fresh = { u: from[u], v: u };
+        note = prim
+          ? `取出最小的 <b>${u}${key[u]}</b>：边 ${from[u]}–${u}（${w}）是当前最便宜的跨越边，加入 MST。`
+          : `取出最小的 <b>${u}${key[u]}</b>：dist[${u}] = ${key[u]} 确定，边 ${from[u]}–${u}（${w}）进入最短路径树。`;
+      }
+      const skipped = adj.get(u).filter(e => inT[e.v]).map(e => e.v);
+      if (skipped.length === adj.get(u).length) note += ` 邻居 ${skipped.join('、')} 都已在树中，没有要更新的。`;
+      else if (skipped.length) note += ` 邻居 ${skipped.join('、')} 已在树中，跳过。`;
+      snap({ cur: u, fresh, note });
+
+      adj.get(u).forEach(({ v, w }) => {
+        if (inT[v]) return;
+        const cand = prim ? w : key[u] + w;
+        const expr = prim ? `边权 ${w}` : `${key[u]} + ${w} = ${cand}`;
+        const name = `${u}–${v}`;
+        const primWould = w < key[v];
+        if (cand < key[v]) {
+          const old = key[v];
+          key[v] = cand;
+          from[v] = u;
+          pq.set(v, cand);
+          const pqText = old === Infinity ? `<b>${v}${cand}</b> 入 PQ` : `PQ 里 ${v}${old} 换成 <b>${v}${cand}</b>`;
+          snap({
+            cur: u, edge: { u, v, kind: 'better' }, changed: v,
+            note: `看 ${name}：${expr} &lt; ${kname}[${v}] = ${fmt(old)} → ${kname}[${v}] = ${cand}，from[${v}] = ${u}，${pqText}。`,
+          });
+        } else {
+          let extra = '';
+          if (!prim && primWould && key[v] === weight(from[v], v)) extra = `（Prim 只比边权：${w} &lt; ${key[v]}，会更新）`;
+          snap({
+            cur: u, edge: { u, v, kind: 'worse' },
+            note: `看 ${name}：${expr} ≥ ${kname}[${v}] = ${key[v]}，<span class="bad">不更新</span>${extra}。`,
+          });
+        }
+      });
+    }
+
+    const list = added.map(([a, b, w]) => `${a}–${b} ${w}`).join('、');
+    const total = added.reduce((t, e) => t + e[2], 0);
+    snap({
+      final: true,
+      note: prim
+        ? `<span class="ok">PQ 空，结束。</span>MST：${list}，共 V − 1 = ${added.length} 条边，总权重 <b>${total}</b>。`
+        : `<span class="ok">PQ 空，结束。</span>最短路径树：${list}，总权重 <b>${total}</b>，比 MST 的 ${mstTotal()} 大：最短路径树不是 MST。`,
+    });
+    return frames;
+  }
+
+  function mstTotal() {
+    const fr = build(MODES.primA);
+    return fr[fr.length - 1].added.reduce((t, e) => t + e[2], 0);
+  }
+
+  function render(f) {
+    const same = (e, a, b) => (e.u === a && e.v === b) || (e.u === b && e.v === a);
+    const inPq = new Set(f.pq.map(p => p[0]));
+    const edgeState = e => {
+      if (f.edge && same(e, f.edge.u, f.edge.v)) return f.edge.kind === 'better' ? 'active' : 'bad';
+      if (f.fresh && same(e, f.fresh.u, f.fresh.v)) return 'active';
+      const a = f.inT[e.u], b = f.inT[e.v];
+      if (a && b) return f.from[e.u] === e.v || f.from[e.v] === e.u ? 'tree' : 'dim';
+      if (a !== b) {
+        const out = a ? e.v : e.u;
+        return f.from[out] && same(e, f.from[out], out) ? 'visited' : 'cross';
+      }
+      return '';
+    };
+    const svg = K.graph({ nodes: NODES, edges: EDGES.map(([u, v, w]) => ({ u, v, w })) }, {
+      nodeCls: id => {
+        if (id === f.cur) return 'active';
+        if (f.inT[id]) return 'done';
+        if (inPq.has(id)) return 'visited';
+        return '';
+      },
+      edgeCls: e => edgeState(e),
+      weightCls: e => {
+        const c = edgeState(e);
+        return c === 'active' ? 'active' : c === 'tree' ? 'done' : c === 'bad' ? 'bad' : c === 'visited' ? 'cand' : '';
+      },
+      badge: id => fmt(f.key[id]),
+    });
+
+    const sorted = f.pq.slice().sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1));
+    const pqHtml = sorted.length
+      ? sorted.map((p, k) => `<span class="chip${k === 0 ? ' min' : ''}">${K.esc(p[0] + p[1])}</span>`).join('')
+      : '<span class="empty">（空）</span>';
+
+    const table = K.cells(f.ids.map(v => fmt(f.key[v])), {
+      idx: f.ids,
+      ptr: k => {
+        const v = f.ids[k];
+        if (v === MODES[current].start) return '起点';
+        return f.from[v] ? '←' + f.from[v] : '';
+      },
+      cls: (val, k) => {
+        const v = f.ids[k];
+        if (v === f.cur) return 'active';
+        if (v === f.changed) return 'warn';
+        if (f.inT[v]) return 'done';
+        return '';
+      },
+    });
+
+    const total = f.added.reduce((t, e) => t + e[2], 0);
+    const treeHtml = f.added.length
+      ? (f.prim ? 'MST 边：' : '最短路径树边：') + f.added.map(([a, b, w]) => K.esc(`${a}–${b} ${w}`)).join(' · ') + `，合计 <b>${total}</b>`
+      : (f.prim ? 'MST 边：（暂无）' : '最短路径树边：（暂无）');
+
+    stage.innerHTML =
+      '<div class="pm">' +
+        `<div class="pm-graph">${svg}</div>` +
+        '<div class="pm-info">' +
+          `<div class="pm-pq"><span>PQ：</span>${pqHtml}</div>` +
+          `<div class="pm-row"><span class="lab">${f.prim ? 'cost' : 'dist'}</span>${table}</div>` +
+          `<div class="pm-tree">${treeHtml}</div>` +
+        '</div>' +
+      '</div>';
+  }
+
+  // mode switcher goes in front of the player's own buttons
+  let current = 'primA';
+  const controls = document.getElementById('controls');
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = {};
+  Object.keys(MODES).forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = MODES[k].label;
+    if (k === current) b.classList.add('active');
+    b.addEventListener('click', () => {
+      if (k === current) return;
+      current = k;
+      Object.keys(buttons).forEach(x => buttons[x].classList.toggle('active', x === k));
+      player.load(build(MODES[k]));
+    });
+    buttons[k] = b;
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: build(MODES[current]), render, interval: 1400 });
+})();
+</script>
+</body>
+</html>

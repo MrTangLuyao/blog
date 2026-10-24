@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插入排序与选择排序的稳定性</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .duo { width: 100%; display: flex; flex-direction: column; gap: 2px; }
+  .row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; padding: 0 4px; }
+  .row-head .name { font-weight: 600; }
+  .row-head .st { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .row-head .st.ok { color: var(--green); }
+  .row-head .st.bad { color: var(--red); }
+  .duo .cells { flex-wrap: nowrap; padding: 18px 4px 22px; }
+  .cell.t1 { background: rgba(56, 189, 248, 0.20); border-color: var(--blue); color: #d6f2ff; }
+  .cell.t2 { background: rgba(251, 191, 36, 0.20); border-color: var(--yellow); color: #fef3c7; }
+  .cell.mv { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-3px); }
+  .cell .ptr { color: var(--accent); }
+  .sep { flex: 0 0 auto; width: 3px; height: 38px; margin: 0 3px; border-radius: 2px; background: var(--green); }
+  .legend .bar { width: 3px; height: 11px; border-radius: 2px; }
+  .legend .ring { background: transparent; box-shadow: 0 0 0 2px var(--accent) inset; }
+  @media (max-width: 600px) {
+    .duo .cells { gap: 3px; padding: 15px 2px 19px; }
+    .duo .cell { min-width: 0; flex: 1 1 0; padding: 0; height: 32px; font-size: 13px; border-radius: 6px; }
+    .duo .cell .idx { font-size: 9px; top: -15px; }
+    .duo .cell .ptr { font-size: 9px; bottom: -17px; }
+    .sep { height: 32px; margin: 0 1px; }
+  }
+  @media (max-width: 420px) {
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">稳定 vs 不稳定：插入排序与选择排序</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: rgba(56,189,248,0.45)"></i>相等键中原来在前（₁）</span>
+  <span><i style="background: rgba(251,191,36,0.45)"></i>原来在后（₂）</span>
+  <span><i class="ring"></i>本轮移动的元素</span>
+  <span><i class="bar" style="background: var(--green)"></i>左边已排好</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+  const SUB = ['', '₁', '₂', '₃', '₄'];
+
+  const INPUTS = [
+    { label: '课上例子', keys: [5, 2, 4, 2, 8, 8] },
+    { label: '反例 2₁ 2₂ 1', keys: [2, 2, 1] },
+    { label: '两对相等键', keys: [2, 5, 2, 3, 5, 1] },
+  ];
+
+  // tag equal keys with their occurrence number (1, 2, ...); unique keys get 0
+  function tagged(keys) {
+    const total = {}, seen = {};
+    keys.forEach(k => { total[k] = (total[k] || 0) + 1; });
+    return keys.map(k => { seen[k] = (seen[k] || 0) + 1; return { k, t: total[k] > 1 ? seen[k] : 0 }; });
+  }
+  const name = x => x.k + SUB[x.t];
+  const list = arr => arr.map(name).join(' ');
+
+  // <algo>
+  // insertion sort: round i inserts A[i]; it only moves past keys STRICTLY greater than it
+  function insertionRounds(a0) {
+    const a = a0.slice(), rounds = [];
+    for (let i = 1; i < a.length; i++) {
+      const val = a[i];
+      const passed = [];
+      let j = i - 1;
+      while (j >= 0 && a[j].k > val.k) { passed.push(a[j]); a[j + 1] = a[j]; j--; }
+      a[j + 1] = val;
+      rounds.push({ arr: a.slice(), sorted: i + 1, val, pos: j + 1, passed, stopAt: j >= 0 ? a[j] : null });
+    }
+    return rounds;
+  }
+  // selection sort: round i finds the FIRST minimum of A[i..n-1] and swaps it with A[i] (always swaps)
+  function selectionRounds(a0) {
+    const a = a0.slice(), rounds = [];
+    for (let i = 0; i < a.length - 1; i++) {
+      let m = i;
+      for (let j = i + 1; j < a.length; j++) if (a[j].k < a[m].k) m = j;
+      const front = a[i], min = a[m];
+      const jumped = a.slice(i + 1, m).filter(x => x.k === front.k);   // equal keys the front element leaps over
+      a[i] = min; a[m] = front;
+      rounds.push({ arr: a.slice(), sorted: i === a.length - 2 ? a.length : i + 1, i, m, front, min, jumped });
+    }
+    return rounds;
+  }
+  // pairs of equal keys that ended up in the wrong relative order
+  function inversions(arr) {
+    const bad = [];
+    for (let p = 0; p < arr.length; p++)
+      for (let q = p + 1; q < arr.length; q++)
+        if (arr[p].k === arr[q].k && arr[p].t > arr[q].t) bad.push([arr[p], arr[q]]);
+    return bad;
+  }
+  // </algo>
+
+  function insNote(r) {
+    const v = '<b>' + name(r.val) + '</b>';
+    if (!r.passed.length) {
+      const y = r.stopAt;
+      return '插入：取出 ' + v + '，前一个 ' + name(y) + (y.k === r.val.k ? ' 与它相等，不越过，原地不动' : ' 不比它大，原地不动');
+    }
+    let s = '插入：取出 ' + v + '，越过比它大的 ' + r.passed.map(name).join('、') + '，放到下标 ' + r.pos;
+    if (r.stopAt && r.stopAt.k === r.val.k) s += '，<span class="ok">遇到相等的 ' + name(r.stopAt) + ' 停下</span>';
+    return s;
+  }
+  function selNote(r) {
+    const mn = '<b>' + name(r.min) + '</b>';
+    if (r.m === r.i) return '选择：剩余部分最小是 ' + mn + '，已在下标 ' + r.i + '，与自己交换';
+    let s = '选择：剩余部分最小是 ' + mn + '（下标 ' + r.m + '），与下标 ' + r.i + ' 的 ' + name(r.front) + ' 交换';
+    if (r.jumped.length) s += '，<span class="bad">' + name(r.front) + ' 越过了 ' + r.jumped.map(name).join('、') + '</span>';
+    return s;
+  }
+  function badText(bad) {
+    return bad.map(p => name(p[0]) + ' 跑到了 ' + name(p[1]) + ' 前面').join('，');   // p[0] now sits before p[1]
+  }
+
+  function build(keys) {
+    const a0 = tagged(keys);
+    const n = a0.length;
+    const ins = insertionRounds(a0), sel = selectionRounds(a0);
+    const stable = ins[ins.length - 1].arr;
+    const frames = [];
+    const none = {};
+    frames.push({
+      ins: { arr: a0, sorted: 0, marks: none }, sel: { arr: a0, sorted: 0, marks: none },
+      insSt: '', selSt: '',
+      note: '输入 ' + list(a0) + '。稳定排序的结果必须是 <b>' + list(stable) + '</b>：同色的格子按 ₁、₂ 的先后。',
+    });
+    for (let r = 1; r < n; r++) {
+      const a = ins[r - 1], b = sel[r - 1];
+      const bm = {};
+      bm[b.i] = '↔'; bm[b.m] = '↔';
+      frames.push({
+        ins: { arr: a.arr, sorted: a.sorted, marks: { [a.pos]: '插入' } },
+        sel: { arr: b.arr, sorted: b.sorted, marks: bm },
+        insSt: '第 ' + r + ' / ' + (n - 1) + ' 轮', selSt: '第 ' + r + ' / ' + (n - 1) + ' 轮',
+        note: insNote(a) + '<br>' + selNote(b),
+      });
+    }
+    const fi = ins[ins.length - 1].arr, fs = sel[sel.length - 1].arr;
+    const bi = inversions(fi), bs = inversions(fs);
+    let note = '插入排序：' + (bi.length ? '<span class="bad">' + badText(bi) + '</span>' : '<span class="ok">相等键的次序全部保持</span>') + '<br>';
+    note += '选择排序：' + (bs.length
+      ? '<span class="bad">' + badText(bs) + '</span>，所以选择排序不稳定'
+      : '<span class="ok">这次也保持了</span>，但只是碰巧，算法仍不稳定，换一个输入试试');
+    frames.push({
+      ins: { arr: fi, sorted: n, marks: none }, sel: { arr: fs, sorted: n, marks: none },
+      insSt: bi.length ? '✗ 次序被打乱' : '✓ 次序保持', selSt: bs.length ? '✗ 次序被打乱' : '✓ 这次保持',
+      insCls: bi.length ? 'bad' : 'ok', selCls: bs.length ? 'bad' : 'ok',
+      note,
+    });
+    return frames;
+  }
+
+  function rowHtml(row) {
+    const n = row.arr.length;
+    let s = '<div class="cells">';
+    row.arr.forEach((x, k) => {
+      if (k === row.sorted && row.sorted > 0 && row.sorted < n) s += '<span class="sep" aria-hidden="true"></span>';
+      const mark = row.marks[k];
+      const cls = ['cell', x.t ? 't' + x.t : '', mark ? 'mv' : ''].filter(Boolean).join(' ');
+      s += '<span class="' + cls + '"><span class="idx">' + k + '</span>' + K.esc(name(x)) +
+        (mark ? '<span class="ptr">' + K.esc(mark) + '</span>' : '') + '</span>';
+    });
+    return s + '</div>';
+  }
+
+  function render(f) {
+    stage.innerHTML = '<div class="duo">' +
+      '<div class="row-head"><span class="name">插入排序（稳定）</span><span class="st ' + (f.insCls || '') + '">' + f.insSt + '</span></div>' +
+      rowHtml(f.ins) +
+      '<div class="row-head"><span class="name">选择排序（不稳定）</span><span class="st ' + (f.selCls || '') + '">' + f.selSt + '</span></div>' +
+      rowHtml(f.sel) +
+      '</div>';
+  }
+
+  // input picker, placed before the player's own buttons
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const btns = INPUTS.map((inp, k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = inp.label;
+    if (k === 0) b.className = 'active';
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(group);
+
+  const player = AnimKit.player({ frames: build(INPUTS[0].keys), render, interval: 1600 });
+  btns.forEach((b, k) => b.addEventListener('click', () => {
+    btns.forEach((o, j) => o.classList.toggle('active', j === k));
+    player.load(build(INPUTS[k].keys));
+  }));
+})();
+</script>
+</body>
+</html>

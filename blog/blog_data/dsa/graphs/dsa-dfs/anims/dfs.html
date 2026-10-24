@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DFS 逐步演示</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .df { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .df-graph { flex: 1 1 auto; min-height: 0; position: relative; }
+  .df-graph > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .df-row { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; }
+  .df-row .lab { flex: 0 0 auto; width: 84px; font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+  .df-row .cells { flex: 0 1 auto; padding: 2px; gap: 4px; justify-content: flex-start; flex-wrap: nowrap; }
+  .df-row .cell { min-width: 30px; height: 30px; padding: 0 4px; font-size: 13px; }
+  .df-row .cell.active { transform: none; }
+  .df-row .none { width: 30px; font-size: 12px; color: var(--muted); font-style: italic; white-space: nowrap; }
+  .df-row .slot { width: 214px; display: flex; }
+  @media (max-width: 420px) {
+    .df-row .lab { width: 76px; }
+    .df-row .slot { width: 200px; }
+    .df-row .cell { min-width: 28px; height: 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">DFS 逐步演示（递归版）</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前调用（栈顶）</span>
+  <span><i style="background: var(--blue)"></i>在调用栈中</span>
+  <span><i style="background: var(--green)"></i>调用已结束</span>
+  <span><i style="background: #343433; border: 1px solid #5a5a59"></i>未访问（标记 0）</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+
+  const SCENARIOS = {
+    lecture: {
+      label: '课上的例子',
+      nodes: [
+        { id: 'A', x: 40, y: 110 }, { id: 'C', x: 160, y: 110 }, { id: 'B', x: 280, y: 40 },
+        { id: 'D', x: 280, y: 180 }, { id: 'E', x: 400, y: 110 },
+      ],
+      edges: [['A', 'C'], ['B', 'C'], ['B', 'D'], ['C', 'D']],
+      extra: '',
+    },
+    bfs: {
+      label: '对照 BFS 的图',
+      nodes: [
+        { id: 'A', x: 180, y: 30 }, { id: 'B', x: 70, y: 120 }, { id: 'C', x: 180, y: 120 },
+        { id: 'D', x: 320, y: 120 }, { id: 'E', x: 125, y: 210 }, { id: 'F', x: 320, y: 210 },
+      ],
+      edges: [['A', 'B'], ['A', 'C'], ['A', 'D'], ['B', 'C'], ['B', 'E'], ['C', 'E'], ['D', 'F']],
+      extra: '同一张图上 BFS 的顺序是 A, B, C, D, E, F（逐层）；DFS 先沿 A → B → C → E 走到底，再回溯到 A 去 D。',
+    },
+  };
+
+  // Run DFS exactly as taught (outer loop + recursive DFSExplore, neighbours in
+  // alphabetical order) and record a frame at every step.
+  function build(sc) {
+    const ids = sc.nodes.map(n => n.id).slice().sort();
+    const adj = new Map(ids.map(v => [v, []]));
+    sc.edges.forEach(([u, v]) => { adj.get(u).push(v); adj.get(v).push(u); });
+    adj.forEach(list => list.sort());
+
+    const mark = {}, parent = {}, finished = {};
+    ids.forEach(v => { mark[v] = 0; parent[v] = null; finished[v] = false; });
+    const stack = [], order = [], frames = [];
+
+    function snap(note, extra) {
+      frames.push(Object.assign({
+        mark: Object.assign({}, mark),
+        parent: Object.assign({}, parent),
+        finished: Object.assign({}, finished),
+        stack: stack.slice(),
+        order: order.slice(),
+        edge: null, note,
+      }, extra));
+    }
+    const nbText = v => adj.get(v).length ? `${v} 的邻居：${adj.get(v).join('、')}。` : `${v} 没有邻居。`;
+
+    function explore(v, intro, caller) {
+      mark[v] = 1;
+      stack.push(v);
+      order.push(v);
+      const keep = caller ? `（DFSExplore(${caller}) 还没结束，留在栈里）` : '';
+      snap(`${intro}调用 <b>DFSExplore(${v})</b>${keep}：标记 ${v} = 1，第 ${order.length} 个被访问。${nbText(v)}`,
+        { edge: caller ? { u: caller, v } : null });
+      adj.get(v).forEach(w => {
+        if (mark[w]) {
+          snap(`${v} 的邻居 ${w} 已标记 1 → 跳过。`, { edge: { u: v, v: w } });
+        } else {
+          parent[w] = v;
+          explore(w, `${v} 的邻居 ${w} 标记为 0 → `, v);
+        }
+      });
+      stack.pop();
+      finished[v] = true;
+      const back = stack.length ? `回到 DFSExplore(${stack[stack.length - 1]})` : '回到外层循环';
+      const done = adj.get(v).length ? `${v} 的邻居都看完了` : `${v} 没有邻居`;
+      snap(`${done} → <b>DFSExplore(${v}) 结束</b>，出栈，${back}。`);
+    }
+
+    snap(`DFS(G)：所有顶点标记为 0（未访问）。外层循环按 ${ids.join('、')} 的顺序检查每个顶点。`);
+    let calls = 0, skipped = [];
+    ids.forEach(v => {
+      if (mark[v]) { skipped.push(v); return; }
+      calls++;
+      const pre = skipped.length ? `外层循环：${skipped.join('、')} 已标记 1，跳过；${v} 标记为 0 → ` : `外层循环：${v} 标记为 0 → `;
+      skipped = [];
+      explore(v, pre, null);
+    });
+    const tail = skipped.length ? `外层循环：${skipped.join('、')} 已标记 1，跳过。` : '';
+    snap(`${tail}<span class="ok">结束。</span>访问顺序 <b>${order.join(', ')}</b>；外层循环共调用 DFSExplore ${calls} 次 → ${calls} 个连通分量。${sc.extra}`,
+      { final: true });
+    return frames;
+  }
+
+  function render(f) {
+    const sc = SCENARIOS[current];
+    const same = (e, a, b) => (e.u === a && e.v === b) || (e.u === b && e.v === a);
+    const top = f.stack.length ? f.stack[f.stack.length - 1] : null;
+    const onStack = new Set(f.stack);
+    // one colour rule for vertices, stack cells and order cells
+    const state = id => {
+      if (id === top) return 'active';
+      if (onStack.has(id)) return 'visited';
+      if (f.finished[id]) return 'done';
+      return '';
+    };
+
+    const svg = K.graph({ nodes: sc.nodes, edges: sc.edges.map(([u, v]) => ({ u, v })) }, {
+      nodeCls: state,
+      edgeCls: e => {
+        if (f.edge && same(e, f.edge.u, f.edge.v)) return 'active';
+        // the edge a vertex was discovered through: blue while that call is on the stack, green once it returns
+        const child = [e.u, e.v].find(x => f.parent[x] && same(e, f.parent[x], x) && f.mark[x]);
+        if (child) return f.finished[child] ? 'tree' : 'visited';
+        return '';
+      },
+    });
+
+    const stackHtml = f.stack.length
+      ? K.cells(f.stack, { cls: v => state(v) })
+      : '<span class="none">（空）</span>';
+    const orderHtml = f.order.length
+      ? K.cells(f.order, { cls: v => state(v) })
+      : '<span class="none">（空）</span>';
+
+    stage.innerHTML =
+      '<div class="df">' +
+        `<div class="df-graph">${svg}</div>` +
+        `<div class="df-row"><span class="lab">调用栈 底→顶</span><span class="slot">${stackHtml}</span></div>` +
+        `<div class="df-row"><span class="lab">访问顺序</span><span class="slot">${orderHtml}</span></div>` +
+      '</div>';
+  }
+
+  // scenario switcher goes in front of the player's own buttons
+  let current = 'lecture';
+  const controls = document.getElementById('controls');
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = {};
+  Object.keys(SCENARIOS).forEach(key => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = SCENARIOS[key].label;
+    if (key === current) b.classList.add('active');
+    b.addEventListener('click', () => {
+      if (key === current) return;
+      current = key;
+      Object.keys(buttons).forEach(k => buttons[k].classList.toggle('active', k === key));
+      player.load(build(SCENARIOS[key]));
+    });
+    buttons[key] = b;
+    group.appendChild(b);
+  });
+  controls.appendChild(group);
+
+  const player = window.AnimKit.player({ frames: build(SCENARIOS[current]), render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

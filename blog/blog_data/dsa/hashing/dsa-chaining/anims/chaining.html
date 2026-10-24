@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拉链法</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .hd { fill: var(--text); font-size: 14px; font-weight: 600; dominant-baseline: central; }
+  .lab { fill: var(--muted); font-size: 12px; font-weight: 600; text-anchor: end; dominant-baseline: central; }
+  .ix { fill: var(--muted); font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .k-node .nm { fill: var(--muted); font-size: 11px; }
+  .k-node.active .nm { fill: #ffe3d8; }
+  .k-node.found .nm { fill: #1f3d2a; }
+  .k-node.freed rect { fill: transparent; stroke: var(--red); stroke-dasharray: 5 4; }
+  .k-node.freed text, .k-node.freed .nm { fill: var(--muted); }
+  .v-edge { stroke: var(--blue); stroke-width: 2; fill: none; }
+  .v-edge.active { stroke: var(--accent); stroke-width: 2.5; }
+  .dot { fill: var(--text); }
+  .null-slash { stroke: var(--muted); stroke-width: 1.5; }
+  @media (max-width: 420px) {
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">拉链法：h(k) = k mod 10，10 个槽</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>当前槽 / 新结点</span>
+  <span><i style="background: rgba(217, 119, 87, 0.30); border: 1px solid var(--accent)"></i>正在比较</span>
+  <span><i style="background: rgba(56, 189, 248, 0.22); border: 1px solid var(--blue)"></i>已比较，不等</span>
+  <span><i style="background: var(--green)"></i>命中</span>
+  <span><i style="background: rgba(248, 113, 113, 0.25); border: 1px solid var(--red)"></i>被删除</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const esc = K.esc;
+  const stage = document.getElementById('stage');
+
+  /* ── the hash table, run for real ── */
+  const M = 10;
+  const KEYS = [['A', 351], ['B', 641], ['C', 202], ['D', 972], ['E', 433],
+                ['F', 812], ['G', 560], ['H', 721], ['I', 189], ['J', 905]];
+  const NAME = {};
+  KEYS.forEach(([n, id]) => { NAME[id] = n; });
+  const hash = id => id % M;
+  const label = id => (NAME[id] ? NAME[id] + ' ' : '') + id;
+
+  function chainOf(head) {
+    const out = [];
+    for (let p = head; p; p = p.next) out.push(p.id);
+    return out;
+  }
+  const chainText = head => chainOf(head).map(label).join(' → ');
+
+  function snap(F, table, extra) {
+    F.push(Object.assign({
+      chains: table.map(chainOf),
+      slot: -1,        // highlighted slot
+      hiSlot: -1,      // slot whose pointer was just changed
+      hiNext: null,    // node whose next pointer was just changed
+      cls: {},         // id → state class
+      pending: null,   // { id, cls, text } node drawn in the top area
+      head: '',
+      note: '',
+    }, extra));
+  }
+
+  function insertNode(table, id) {
+    const i = hash(id);
+    const node = { id, next: null };
+    node.next = table[i];      // new->next = table[i];
+    table[i] = node;           // table[i] = new;
+    return node;
+  }
+  function builtTable() {
+    const table = new Array(M).fill(null);
+    KEYS.forEach(([, id]) => insertNode(table, id));
+    return table;
+  }
+
+  function buildInsert() {
+    const table = new Array(M).fill(null);
+    const F = [];
+    snap(F, table, {
+      head: '空表：n = 0，m = 10',
+      note: '10 个槽都是 NULL（空链）。依次插入 A–J，<code>h(k) = k mod 10</code>，新结点总是放在所在链的<b>链头</b>。',
+    });
+    KEYS.forEach(([name, id], k) => {
+      const i = hash(id);
+      const old = table[i];
+      snap(F, table, {
+        slot: i,
+        pending: { id, cls: 'active', text: '新结点' },
+        head: '插入 ' + name + ' ' + id + '：h = ' + i,
+        note: '<code>h(' + id + ') = ' + id + ' mod 10 = ' + i + '</code>，' + name + ' 进槽 ' + i + '。' +
+          (old ? '槽 ' + i + ' 已有 ' + chainText(old) + '，<b>冲突</b>。' : '槽 ' + i + ' 目前是 NULL。'),
+      });
+      insertNode(table, id);
+      snap(F, table, {
+        slot: i, hiSlot: i, hiNext: old ? id : null,
+        cls: { [id]: 'active' },
+        head: '插入 ' + name + ' ' + id + '：h = ' + i + '（n = ' + (k + 1) + '）',
+        note: '<code>new-&gt;next = table[' + i + ']; table[' + i + '] = new;</code> ' +
+          (old ? name + ' 接在原链头 ' + NAME[old.id] + ' 前面：' + chainText(table[i]) + '。'
+               : name + ' 是槽 ' + i + ' 唯一的结点。') +
+          '两次赋值，与链长无关：<b>O(1)</b>。',
+      });
+    });
+    const lens = table.map(h => chainOf(h).length);
+    snap(F, table, {
+      head: '完成：n = 10，m = 10，α = 1',
+      note: '链长依次为 ' + lens.join('、') + '，平均正好是 α = n/m = 1；最长的链有 ' + Math.max(...lens) +
+        ' 个结点。同一条链上越晚插入越靠前。',
+    });
+    return F;
+  }
+
+  function buildSearch(target) {
+    const table = builtTable();
+    const F = [];
+    const i = hash(target);
+    let cmp = 0;
+    const cls = {};
+    const head = () => '查找 ' + target + '：h = ' + i + '，比较 ' + cmp + ' 次';
+    snap(F, table, {
+      head: '查找 ' + target,
+      note: '在插入 A–J 之后的表中查找 <b>' + target + '</b>。',
+    });
+    snap(F, table, {
+      slot: i, head: head(),
+      note: '<code>h(' + target + ') = ' + i + '</code>：只在槽 ' + i + ' 这一条链上找，其余 9 条链一次也不看。',
+    });
+    let p = table[i];
+    while (p !== null && p.id !== target) {
+      cmp++;
+      snap(F, table, {
+        slot: i, head: head(), cls: Object.assign({}, cls, { [p.id]: 'compare' }),
+        note: '比较 ' + p.id + ' ≠ ' + target + '，<code>p = p-&gt;next</code>。',
+      });
+      cls[p.id] = 'visited';
+      p = p.next;
+    }
+    if (p !== null) {
+      cmp++;
+      snap(F, table, {
+        slot: i, head: head(), cls: Object.assign({}, cls, { [p.id]: 'found' }),
+        note: '比较 ' + p.id + ' = ' + target + '，<span class="ok">命中 ' + NAME[p.id] + '</span>，共比较 <b>' + cmp + '</b> 次。',
+      });
+    } else {
+      snap(F, table, {
+        slot: i, head: head(), cls: Object.assign({}, cls),
+        note: 'p 走到 NULL：<span class="bad">' + target + ' 不在表中</span>。整条链都比较过了，共 <b>' + cmp + '</b> 次。',
+      });
+    }
+    return F;
+  }
+
+  function buildDelete(target) {
+    const table = builtTable();
+    const F = [];
+    const i = hash(target);
+    const cls = {};
+    snap(F, table, {
+      head: '删除 ' + target,
+      note: '在插入 A–J 之后的表中删除 <b>' + target + '</b>：在一条链上做单链表的按键删除。',
+    });
+    snap(F, table, {
+      slot: i, head: '删除 ' + target + '：h = ' + i,
+      note: '<code>h(' + target + ') = ' + i + '</code>。<code>prev = NULL, p = table[' + i + ']</code>。',
+    });
+    let prev = null, p = table[i];
+    while (p !== null && p.id !== target) {
+      snap(F, table, {
+        slot: i, head: '删除 ' + target + '：h = ' + i, cls: Object.assign({}, cls, { [p.id]: 'compare' }),
+        note: 'p = ' + p.id + ' ≠ ' + target + '：<code>prev = p; p = p-&gt;next;</code>',
+      });
+      cls[p.id] = 'visited';
+      prev = p;
+      p = p.next;
+    }
+    if (p === null) {
+      snap(F, table, { slot: i, head: '删除 ' + target, cls, note: target + ' 不在表中，什么也不改。' });
+      return F;
+    }
+    snap(F, table, {
+      slot: i, head: '删除 ' + target + '：h = ' + i, cls: Object.assign({}, cls, { [p.id]: 'bad' }),
+      note: '找到 ' + target + '（' + NAME[target] + '）。' + (prev ? 'prev 停在 ' + prev.id + '。' : '它是链头，prev = NULL。'),
+    });
+    let what;
+    if (prev === null) { table[i] = p.next; what = '<code>table[' + i + '] = p-&gt;next;</code> 槽直接指向下一个结点'; }
+    else { prev.next = p.next; what = '<code>prev-&gt;next = p-&gt;next;</code> ' + prev.id + ' 绕过 ' + target; }
+    snap(F, table, {
+      slot: i, hiSlot: prev ? -1 : i, hiNext: prev ? prev.id : null, cls,
+      pending: { id: target, cls: 'bad', text: 'p（已摘下）' },
+      head: '删除 ' + target + '：h = ' + i,
+      note: what + '，链变为 ' + chainText(table[i]) + '。',
+    });
+    snap(F, table, {
+      slot: i, cls,
+      pending: { id: target, cls: 'freed', text: '已 free' },
+      head: '删除 ' + target + '：h = ' + i,
+      note: '<code>free(p);</code> 只改了槽 ' + i + ' 这条链上的一个指针，其他键的位置都不变。',
+    });
+    return F;
+  }
+
+  const BUILD = {
+    insert: buildInsert,
+    find351: () => buildSearch(351),
+    find401: () => buildSearch(401),
+    del641: () => buildDelete(641),
+  };
+
+  /* ── drawing ── */
+  const W = 400, TOP = 46, RH = 30, BH = 24;
+  const SX = 28, SW = 40;                  // slot cell
+  const NX0 = 98, KW = 58, PW = 20, GAP = 102;
+  const H = TOP + M * RH + 6;
+
+  function nodeBox(x, y, id, cls, hasNext) {
+    const nm = NAME[id] ? '<tspan class="nm">' + esc(NAME[id]) + '</tspan> ' : '';
+    let s = '<g class="k-node ' + (cls || '') + '">' +
+      '<rect x="' + x + '" y="' + y + '" width="' + KW + '" height="' + BH + '" rx="5"/>' +
+      '<rect x="' + (x + KW) + '" y="' + y + '" width="' + PW + '" height="' + BH + '" rx="5"/>' +
+      '<text x="' + (x + KW / 2) + '" y="' + (y + BH / 2) + '">' + nm + esc(id) + '</text></g>';
+    if (!hasNext) s += slash(x + KW, y, PW);
+    return s;
+  }
+  function slash(x, y, w) {
+    return '<line class="null-slash" x1="' + (x + 5) + '" y1="' + (y + BH - 5) + '" x2="' + (x + w - 5) + '" y2="' + (y + 5) + '"/>';
+  }
+  function arrow(x1, x2, y, hot) {
+    return '<circle class="dot" cx="' + x1 + '" cy="' + y + '" r="3"/>' +
+      '<line class="v-edge' + (hot ? ' active' : '') + '" x1="' + x1 + '" y1="' + y + '" x2="' + (x2 - 2) + '" y2="' + y + '" marker-end="url(#' + (hot ? 'ah' : 'a') + ')"/>';
+  }
+
+  function render(f) {
+    let s = '<defs>' +
+      '<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--blue)"/></marker>' +
+      '<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--accent)"/></marker>' +
+      '</defs>';
+    s += '<text class="hd" x="4" y="' + (TOP / 2 - 2) + '">' + esc(f.head) + '</text>';
+    if (f.pending) {
+      const x = W - KW - PW - 4, y = TOP / 2 - 2 - BH / 2;
+      s += '<text class="lab" x="' + (x - 6) + '" y="' + (TOP / 2 - 2) + '">' + esc(f.pending.text) + '</text>';
+      s += nodeBox(x, y, f.pending.id, f.pending.cls, true);   // next not drawn: unset / irrelevant
+    }
+    for (let k = 0; k < M; k++) {
+      const cy = TOP + k * RH + RH / 2, y = cy - BH / 2;
+      const chain = f.chains[k];
+      s += '<text class="ix" x="12" y="' + cy + '">' + k + '</text>';
+      s += '<g class="k-node ' + (f.slot === k ? 'active' : '') + '"><rect x="' + SX + '" y="' + y + '" width="' + SW + '" height="' + BH + '" rx="5"/></g>';
+      if (!chain.length) { s += slash(SX + 6, y, SW - 12); continue; }
+      s += arrow(SX + SW / 2, NX0, cy, f.hiSlot === k);
+      chain.forEach((id, j) => {
+        const x = NX0 + j * GAP;
+        const more = j < chain.length - 1;
+        s += nodeBox(x, y, id, f.cls[id], more);
+        if (more) s += arrow(x + KW + PW / 2, x + GAP, cy, f.hiNext === id);
+      });
+    }
+    stage.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' + s + '</svg>';
+  }
+
+  /* ── controls: scenario buttons first, then the kit's player buttons ── */
+  const MODES = [['insert', '插入 A–J'], ['find351', '查找 351'], ['find401', '查找 401'], ['del641', '删除 641']];
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = MODES.map(([mode, text], k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    if (k === 0) b.className = 'active';
+    b.addEventListener('click', () => {
+      buttons.forEach(x => x.classList.toggle('active', x === b));
+      player.load(BUILD[mode]());
+    });
+    group.appendChild(b);
+    return b;
+  });
+  document.getElementById('controls').appendChild(group);
+  const player = AnimKit.player({ frames: BUILD.insert(), render, interval: 1300 });
+})();
+</script>
+</body>
+</html>

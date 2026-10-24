@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>顺序查找 vs 二分查找</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .race { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+  .row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; padding: 0 4px; }
+  .row-head .name { font-weight: 600; }
+  .row-head .cnt { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row-head .cnt b { color: var(--accent); font-size: 15px; }
+  .race .cells { flex-wrap: nowrap; gap: 3px; padding: 18px 2px 22px; }
+  .race .cell { min-width: 32px; height: 32px; padding: 0 4px; font-size: 13px; }
+  .pick .tgt { font-variant-numeric: tabular-nums; color: var(--text); font-size: 13px; }
+  @media (max-width: 600px) {
+    .race .cells { gap: 2px; padding: 15px 2px 18px; }
+    .race .cell { min-width: 0; flex: 1 1 0; padding: 0; height: 28px; font-size: 11px; border-radius: 5px; }
+    .race .cell .idx { font-size: 9px; top: -15px; }
+    .race .cell .ptr { font-size: 9px; bottom: -17px; }
+  }
+  @media (max-width: 420px) {
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">顺序查找 vs 二分查找</div>
+<div class="controls pick" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>这一步正在比较</span>
+  <span><i style="background: var(--blue)"></i>比较过、不相等</span>
+  <span><i style="background: var(--green)"></i>找到</span>
+  <span><i style="background: rgba(255,255,255,0.12)"></i>二分已排除</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  const N = 15;
+  const A = Array.from({ length: N }, (_, i) => 2 * (i + 1));   // 2, 4, ..., 30
+
+  // <algo> sequential search: one comparison per element looked at
+  function linearTrace(key) {
+    const steps = [];
+    for (let i = 0; i < N; i++) {
+      const eq = A[i] === key;
+      steps.push({ i, eq });
+      if (eq) break;
+    }
+    return steps;
+  }
+  // binary search as in the course: mid rounds up, one comparison per A[mid] looked at
+  function binaryTrace(key) {
+    const steps = [];
+    let lo = 0, hi = N - 1;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi + 1) / 2);
+      const rel = key === A[mid] ? '=' : key < A[mid] ? '<' : '>';
+      steps.push({ lo, hi, mid, rel });
+      if (rel === '=') break;
+      if (rel === '<') hi = mid - 1; else lo = mid + 1;
+    }
+    return { steps, lo, hi };
+  }
+  // </algo>
+
+  function linText(lin, t, key) {
+    const L = lin.length;
+    if (t > L) return '顺序：已结束（' + L + ' 次）';
+    const s = lin[t - 1];
+    let txt = '顺序：A[' + s.i + '] = ' + A[s.i];
+    if (s.eq) return txt + ' = ' + key + '，<span class="ok">找到</span>';
+    txt += ' ≠ ' + key;
+    return txt + (s.i === N - 1 ? '，' + N + ' 个都看完，<span class="bad">不在</span>' : '，看下一个');
+  }
+  function binText(bin, t, key) {
+    const B = bin.steps.length;
+    if (t > B) return '二分：已结束（' + B + ' 次）';
+    const s = bin.steps[t - 1];
+    let txt = '二分：范围 [' + s.lo + ', ' + s.hi + ']，A[' + s.mid + '] = ' + A[s.mid];
+    if (s.rel === '=') return txt + ' = ' + key + '，<span class="ok">找到</span>';
+    const nlo = s.rel === '<' ? s.lo : s.mid + 1;
+    const nhi = s.rel === '<' ? s.mid - 1 : s.hi;
+    txt += s.rel === '<' ? '，' + key + ' &lt; ' + A[s.mid] + '，留左半' : '，' + key + ' &gt; ' + A[s.mid] + '，留右半';
+    return txt + (nlo > nhi ? '，范围空了，<span class="bad">不在</span>' : ' [' + nlo + ', ' + nhi + ']');
+  }
+
+  function build(present, pos) {
+    const key = present ? A[pos] : 2 * pos + 1;
+    const lin = linearTrace(key);
+    const bin = binaryTrace(key);
+    const L = lin.length, B = bin.steps.length;
+    const T = Math.max(L, B);
+    const frames = [];
+    const where = present ? '（A[' + pos + ']）' : '（不在数组里）';
+    frames.push({ key, lin, bin, t: 0,
+      note: '目标 key = <b>' + key + '</b>' + where + '。两边同时开始，每一帧各做一次比较。' });
+    for (let t = 1; t <= T; t++) {
+      frames.push({ key, lin, bin, t, note: linText(lin, t, key) + '<br>' + binText(bin, t, key) });
+    }
+    const verdict = L < B ? '这一次<b>顺序查找更少</b>。' : L > B ? '这一次二分查找更少。' : '两边一样多。';
+    frames.push({ key, lin, bin, t: T + 1, final: true,
+      note: '顺序 <b>' + L + '</b> 次，二分 <b>' + B + '</b> 次：' + verdict +
+        (present ? '' : '目标不在时，顺序查找总要比完 ' + N + ' 个。') });
+    return frames;
+  }
+
+  function linCls(f) {
+    const L = f.lin.length;
+    const done = f.lin.slice(0, Math.min(f.t, L));
+    const cur = done[done.length - 1];
+    const live = f.t >= 1 && f.t <= L;
+    return (v, k) => {
+      if (cur && cur.i === k) return cur.eq ? 'found' : live ? 'active' : 'visited';
+      if (done.some(s => s.i === k)) return 'visited';
+      return '';
+    };
+  }
+  function binState(f) {
+    const B = f.bin.steps.length;
+    const done = f.bin.steps.slice(0, Math.min(f.t, B));
+    const cur = done[done.length - 1];
+    const live = f.t >= 1 && f.t <= B;
+    let lo, hi;
+    if (!cur) { lo = 0; hi = N - 1; }
+    else if (live) { lo = cur.lo; hi = cur.hi; }
+    else if (cur.rel === '=') { lo = cur.mid; hi = cur.mid; }
+    else { lo = f.bin.lo; hi = f.bin.hi; }
+    const cls = (v, k) => {
+      if (cur && cur.mid === k) return cur.rel === '=' ? 'found' : live ? 'active' : 'visited';
+      if (done.some(s => s.mid === k)) return 'visited';
+      if (k < lo || k > hi) return 'dim';
+      return '';
+    };
+    return { cls, lo, hi, count: done.length, cur, live };
+  }
+
+  function render(f) {
+    const L = f.lin.length;
+    const lc = Math.min(f.t, L);
+    const linCur = f.t >= 1 && f.t <= L ? f.lin[f.t - 1].i : -1;
+    const bs = binState(f);
+    const range = bs.lo > bs.hi ? '范围空' : '范围 [' + bs.lo + ', ' + bs.hi + ']';
+    stage.innerHTML = '<div class="race">' +
+      '<div class="row-head"><span class="name">顺序查找</span><span class="cnt">比较 <b>' + lc + '</b> 次</span></div>' +
+      K.cells(A, { idx: true, cls: linCls(f), ptr: k => (k === linCur ? 'i' : '') }) +
+      '<div class="row-head"><span class="name">二分查找</span><span class="cnt">' + range + ' · 比较 <b>' + bs.count + '</b> 次</span></div>' +
+      K.cells(A, { idx: true, cls: bs.cls, ptr: k => (bs.live && bs.cur && bs.cur.mid === k ? 'mid' : '') }) +
+      '</div>';
+  }
+
+  // target picker (its own row above the player controls)
+  let present = true;
+  let pos = 0;
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const inBtn = document.createElement('button');
+  inBtn.type = 'button'; inBtn.textContent = '在数组里'; inBtn.className = 'active';
+  const outBtn = document.createElement('button');
+  outBtn.type = 'button'; outBtn.textContent = '不在数组里';
+  group.appendChild(inBtn); group.appendChild(outBtn);
+  const lab = document.createElement('span');
+  lab.className = 'label'; lab.textContent = '位置';
+  const slider = document.createElement('input');
+  slider.type = 'range'; slider.min = '0'; slider.max = String(N - 1); slider.value = '0';
+  slider.setAttribute('aria-label', '目标位置');
+  const tgt = document.createElement('span');
+  tgt.className = 'tgt';
+  [group, lab, slider, tgt].forEach(el => pick.appendChild(el));
+
+  function label() {
+    const key = present ? A[pos] : 2 * pos + 1;
+    tgt.innerHTML = 'key = <b>' + key + '</b>';
+  }
+
+  const player = AnimKit.player({ frames: build(present, pos), render, interval: 1100 });
+  label();
+
+  function reload() { label(); player.load(build(present, pos)); }
+  slider.addEventListener('input', () => { pos = +slider.value; reload(); });
+  function setMode(p) {
+    present = p;
+    inBtn.classList.toggle('active', p);
+    outBtn.classList.toggle('active', !p);
+    slider.max = String(p ? N - 1 : N);
+    if (pos > +slider.max) pos = +slider.max;
+    slider.value = String(pos);
+    reload();
+  }
+  inBtn.addEventListener('click', () => setMode(true));
+  outBtn.addEventListener('click', () => setMode(false));
+})();
+</script>
+</body>
+</html>

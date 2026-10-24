@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>二分查找步进</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .wrap { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .wrap .cells { flex-wrap: nowrap; }
+  .status { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .status b { color: var(--text); }
+  .status .cnt b { color: var(--accent); font-size: 15px; }
+  select {
+    font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: #333332; color: var(--text);
+  }
+  @media (max-width: 560px) {
+    .wrap .cells { gap: 2px; width: 100%; padding-left: 0; padding-right: 0; }
+    .wrap .cell { min-width: 0; flex: 1 1 0; padding: 0; height: 32px; font-size: 11px; border-radius: 5px; }
+    .wrap .cell .idx { font-size: 9px; top: -15px; }
+    .wrap .cell .ptr { font-size: 9px; bottom: -17px; }
+  }
+  @media (max-width: 420px) {
+    .legend { display: none; }
+    #controls .label, #controls input[type="range"] { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="title">二分查找：lo、mid、hi 每一步怎么动</div>
+<div class="controls" id="pick"></div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>mid：正在比较</span>
+  <span><i style="background: var(--green)"></i>找到</span>
+  <span><i style="background: rgba(255,255,255,0.10)"></i>已排除</span>
+  <span><i style="background: var(--blue)"></i>lo / hi：候选范围两端</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const pick = document.getElementById('pick');
+
+  // target picker + rounding switch, built here so the markup stays minimal
+  const lab = document.createElement('span');
+  lab.className = 'label';
+  lab.textContent = '查找';
+  const sel = document.createElement('select');
+  sel.setAttribute('aria-label', '要查找的键');
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const roundBtns = [['1', '偶数个取右（课上）'], ['0', '偶数个取左']].map(([v, text]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.up = v;
+    b.textContent = text;
+    if (v === '1') b.classList.add('active');
+    group.appendChild(b);
+    return b;
+  });
+  pick.appendChild(lab);
+  pick.appendChild(sel);
+  pick.appendChild(group);
+
+  const W = ['ant', 'boat', 'cat', 'dog', 'fly', 'goat', 'hat', 'lamp', 'pig'];
+  const ABSENT = ['air', 'cow', 'hen', 'zoo'];
+
+  // <algo> binary search on W, one frame per probe and one per cut
+  function binaryFrames(W, key, up) {
+    const n = W.length;
+    const frames = [];
+    const rule = up ? 'lo + (hi − lo + 1) / 2' : 'lo + (hi − lo) / 2';
+    let lo = 0, hi = n - 1, cnt = 0;
+    frames.push({ lo, hi, mid: null, cnt, state: 'init',
+      note: '在 ' + n + ' 个已排序的单词里找 <b>' + key + '</b>。开始时 lo = 0，hi = ' + hi + '，整个数组都是候选范围。' });
+    while (lo <= hi) {
+      const size = hi - lo + 1;
+      const mid = up ? lo + Math.floor((hi - lo + 1) / 2) : lo + Math.floor((hi - lo) / 2);
+      cnt++;
+      const head = '范围 [' + lo + ', ' + hi + '] 有 ' + size + ' 个' +
+        (size % 2 === 0 ? '（偶数，取' + (up ? '靠右' : '靠左') + '的中间）' : '') +
+        '，mid = ' + rule + ' = ' + mid + '。';
+      if (key === W[mid]) {
+        frames.push({ lo, hi, mid, cnt, state: 'found',
+          note: head + key + ' = A[' + mid + ']，<span class="ok">找到</span>，共比较 <b>' + cnt + '</b> 次。' });
+        return frames;
+      }
+      const less = key < W[mid];
+      frames.push({ lo, hi, mid, cnt, state: 'probe',
+        note: head + '比较 ' + key + ' 与 A[' + mid + '] = ' + W[mid] + '：' + key + (less ? ' &lt; ' : ' &gt; ') + W[mid] + '。' });
+      const rng = (a, b) => a === b ? 'A[' + a + '] ' : 'A[' + a + '..' + b + '] 都';
+      let cut;
+      if (less) {
+        cut = rng(mid, hi) + '比 ' + key + ' 大，丢掉，hi = mid − 1 = ' + (mid - 1) + '。';
+        hi = mid - 1;
+      } else {
+        cut = rng(lo, mid) + '比 ' + key + ' 小，丢掉，lo = mid + 1 = ' + (mid + 1) + '。';
+        lo = mid + 1;
+      }
+      if (lo <= hi) {
+        frames.push({ lo, hi, mid: null, cnt, state: 'cut',
+          note: cut + '剩 ' + (hi - lo + 1) + ' 个' + (lo === hi ? '，只剩一个也要比。' : '。') });
+      } else {
+        const where = lo === 0 ? '最前面' : lo === n ? '最后面' : W[lo - 1] + ' 和 ' + W[lo] + ' 之间';
+        frames.push({ lo, hi, mid: null, cnt, state: 'empty',
+          note: cut + 'lo = ' + lo + ' &gt; hi = ' + hi + '，范围空了：<span class="bad">' + key + ' 不在数组里</span>，共比较 <b>' + cnt + '</b> 次。' +
+            '此时 lo = ' + lo + ' 正是它该插入的位置（' + where + '）。' });
+      }
+    }
+    return frames;
+  }
+  // </algo>
+
+  function render(f) {
+    const n = W.length;
+    const cls = (v, k) => {
+      if (f.mid === k) return f.state === 'found' ? 'found' : 'active';
+      if (f.state === 'empty' || k < f.lo || k > f.hi) return 'dim';
+      return '';
+    };
+    const ptr = k => {
+      const tags = [];
+      if (k === f.lo) tags.push('lo');
+      if (k === f.mid) tags.push('mid');
+      if (k === f.hi) tags.push('hi');
+      return tags.join('/');
+    };
+    const loTxt = f.lo >= n ? f.lo + '（越过末尾）' : String(f.lo);
+    const hiTxt = f.hi < 0 ? f.hi + '（在开头之前）' : String(f.hi);
+    stage.innerHTML = '<div class="wrap">' +
+      K.cells(W, { idx: true, cls, ptr }) +
+      '<div class="status"><span>lo = <b>' + loTxt + '</b></span><span>hi = <b>' + hiTxt + '</b></span>' +
+      '<span>mid = <b>' + (f.mid == null ? '–' : f.mid) + '</b></span>' +
+      '<span class="cnt">比较 <b>' + f.cnt + '</b> 次</span></div></div>';
+  }
+
+  // target picker: present keys and absent keys
+  const g1 = document.createElement('optgroup'); g1.label = '在数组里';
+  W.forEach(w => { const o = document.createElement('option'); o.value = w; o.textContent = w; g1.appendChild(o); });
+  const g2 = document.createElement('optgroup'); g2.label = '不在数组里';
+  ABSENT.forEach(w => { const o = document.createElement('option'); o.value = w; o.textContent = w; g2.appendChild(o); });
+  sel.appendChild(g1); sel.appendChild(g2);
+  sel.value = 'dog';
+
+  let up = true;
+  const player = AnimKit.player({ frames: binaryFrames(W, sel.value, up), render, interval: 1500 });
+  function reload() { player.load(binaryFrames(W, sel.value, up)); }
+  sel.addEventListener('change', reload);
+  roundBtns.forEach(b => b.addEventListener('click', () => {
+    up = b.dataset.up === '1';
+    roundBtns.forEach(x => x.classList.toggle('active', x === b));
+    reload();
+  }));
+})();
+</script>
+</body>
+</html>

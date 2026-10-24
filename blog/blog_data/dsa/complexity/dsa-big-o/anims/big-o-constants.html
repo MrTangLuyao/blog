@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大 O：找 c₀ 和 n₀</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .presets { flex-wrap: wrap; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; width: 100%; }
+  .slider { display: inline-flex; align-items: center; gap: 6px; }
+  .slider input[type="range"] { width: 130px; }
+  .slider .val { min-width: 40px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .title b { color: var(--accent); }
+  .note .tip { display: block; font-size: 12px; }
+  .ax { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1; }
+  .grid { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; }
+  .tick { fill: var(--muted); font-size: 11px; }
+  .n0line { stroke: var(--text); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.75; }
+  .n0lab { fill: var(--text); font-size: 12px; font-weight: 700; }
+  .ignore { fill: rgba(255, 255, 255, 0.06); }
+  .ignlab { fill: var(--muted); font-size: 11px; }
+  @media (max-width: 420px) {
+    .slider input[type="range"] { width: 96px; }
+    .note .tip { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<div class="title" id="title">大 O</div>
+<div class="controls" id="controls">
+  <div class="btn-group presets" id="presets"></div>
+  <div class="row" id="row"></div>
+</div>
+<div class="legend">
+  <span><i style="background: var(--accent)"></i>f(n)</span>
+  <span><i style="background: var(--blue)"></i>c₀·g(n)</span>
+  <span><i style="background: rgba(248, 113, 113, 0.6)"></i>n &gt; n₀ 处 f 超出：不允许</span>
+  <span><i style="background: rgba(251, 191, 36, 0.45)"></i>n ≤ n₀ 处 f 超出：不管</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), noteEl = $('note'), titleEl = $('title');
+
+  // slider row: [c₀ ——] [n₀ ——] [取最小 n₀]
+  function mk(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function slider(name) {
+    const wrap = mk('label', 'slider');
+    const input = mk('input');
+    input.type = 'range';
+    input.setAttribute('aria-label', name);
+    const val = mk('span', 'val');
+    wrap.appendChild(mk('span', 'label', name));
+    wrap.appendChild(input);
+    wrap.appendChild(val);
+    $('row').appendChild(wrap);
+    return [input, val];
+  }
+  const [c0In, c0V] = slider('c₀');
+  const [n0In, n0V] = slider('n₀');
+  const autoBtn = mk('button', '', '取最小 n₀');
+  autoBtn.type = 'button';
+  $('row').appendChild(autoBtn);
+
+  // c: [min, max, step, default c0]   m: [min, max, step, default n0]
+  const PRESETS = [
+    { label: '4n²', claim: '要证 <b>4n² ∈ O(n²)</b>', f: n => 4 * n * n, g: n => n * n,
+      xMin: 0, xMax: 8, yMax: 300, c: [0.5, 10, 0.5, 5], m: [0, 8, 0.5, 0],
+      tip: 'c₀ ≥ 4 时对所有 n 都成立；c₀ &lt; 4 时只要 n &gt; 0，4n² 就大于 c₀·n²，n₀ 取多大都没用。' },
+    { label: 'n²+2n+8', claim: '要证 <b>n² + 2n + 8 ∈ O(n²)</b>', f: n => n * n + 2 * n + 8, g: n => n * n,
+      xMin: 0, xMax: 8, yMax: 100, c: [0.5, 12, 0.5, 11], m: [0, 8, 0.5, 1],
+      tip: 'f(n)/n² = 1 + 2/n + 8/n² 从上方趋近 1：任何 c₀ &gt; 1 都找得到 n₀，c₀ 越小 n₀ 越大；c₀ ≤ 1 找不到。' },
+    { label: '100·log₂n', claim: '要证 <b>100·log₂ n ∈ O(n)</b>', f: n => 100 * Math.log2(n), g: n => n,
+      xMin: 1, xMax: 1500, yMax: 1600, c: [0.5, 12, 0.1, 1], m: [1, 1500, 1, 1000],
+      tip: 'log₂ n 比 n 长得慢，但系数 100 让 c₀ = 1 时的交点推迟到 n ≈ 996；c₀ 调大，所需的 n₀ 就变小。' },
+    { label: 'n² 与 n³', claim: '要证 <b>n² ∈ O(n³)</b>', f: n => n * n, g: n => n * n * n,
+      xMin: 0, xMax: 4, yMax: 20, c: [0.1, 4, 0.1, 1], m: [0, 4, 0.25, 1],
+      tip: 'n ≥ 1 时 n² ≤ n³，所以 n² ∈ O(n³) 成立，只是上界不紧；最紧的是 O(n²)。' },
+    { label: 'n² 与 n', claim: '<b>n² ∈ O(n)</b> 成立吗？', f: n => n * n, g: n => n,
+      xMin: 0, xMax: 50, yMax: 2600, c: [1, 40, 1, 10], m: [0, 50, 1, 5],
+      tip: 'n²/n = n 没有上界：c₀ 取多大，n &gt; c₀ 之后 f 都在 c₀·g 上方，所以 n² ∉ O(n)。' },
+  ];
+
+  const FAR = 1e9;            // the "for all n" check runs out to here
+  const fmt = x => !isFinite(x) ? '∞' : Math.abs(x) >= 10000 ? String(Math.round(x)) : String(+x.toFixed(2));
+  // rounded up: used where the number is a threshold n0 must reach
+  const fmtUp = x => !isFinite(x) ? '∞' : x >= 100 ? String(Math.ceil(x)) : String(Math.ceil(x * 100 - 1e-9) / 100);
+
+  // f(n) > c0·g(n), with a little slack so exact equality (4n² vs 4·n²) is not a violation
+  function viol(p, c, x) {
+    const fx = p.f(x), gx = c * p.g(x);
+    return fx > gx + 1e-12 * Math.max(1, Math.abs(gx));
+  }
+
+  // sample points for the check: dense on the plotted range, log-spaced beyond it
+  function checkPoints(p) {
+    const xs = [];
+    const N = 4000;
+    for (let i = 0; i <= N; i++) xs.push(p.xMin + (p.xMax - p.xMin) * i / N);
+    const a = Math.log(p.xMax), b = Math.log(FAR);
+    for (let i = 1; i <= 800; i++) xs.push(Math.exp(a + (b - a) * i / 800));
+    return xs;
+  }
+
+  // boundary between a violating point v and a fine point o (either order)
+  function bisect(p, c, v, o) {
+    for (let k = 0; k < 60; k++) {
+      const m = (v + o) / 2;
+      if (viol(p, c, m)) v = m; else o = m;
+    }
+    return v;
+  }
+
+  // sup of the violating n: null = never violated, Infinity = still violated far out
+  function lastViolation(p, c) {
+    const xs = p.xs;
+    for (let i = xs.length - 1; i >= 0; i--) {
+      if (!viol(p, c, xs[i])) continue;
+      if (i === xs.length - 1) return Infinity;
+      return bisect(p, c, xs[i], xs[i + 1]);
+    }
+    return null;
+  }
+
+  // first stretch (a, b) to the right of n0 where f > c0·g
+  function firstBadRight(p, c, n0, lv) {
+    const xs = p.xs;
+    let i = 0;
+    while (i < xs.length && xs[i] <= n0) i++;
+    let j = i;
+    while (j < xs.length && !viol(p, c, xs[j])) j++;
+    if (j >= xs.length) return { a: Math.max(n0, p.xMin), b: lv };   // only between samples
+    const a = (j === i) ? Math.max(n0, p.xMin) : bisect(p, c, xs[j], xs[j - 1]);
+    let k = j;
+    while (k < xs.length && viol(p, c, xs[k])) k++;
+    const b = (k >= xs.length) ? Infinity : bisect(p, c, xs[k - 1], xs[k]);
+    return { a, b };
+  }
+
+  let cur = null;
+  let autoMsg = '';
+
+  const group = $('presets');
+  const btns = PRESETS.map((p, k) => {
+    p.xs = checkPoints(p);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = p.label;
+    b.addEventListener('click', () => load(k));
+    group.appendChild(b);
+    return b;
+  });
+
+  function setRange(el, r) {
+    el.min = String(r[0]); el.max = String(r[1]); el.step = String(r[2]); el.value = String(r[3]);
+  }
+
+  function load(k) {
+    cur = PRESETS[k];
+    btns.forEach((b, i) => b.classList.toggle('active', i === k));
+    setRange(c0In, cur.c);
+    setRange(n0In, cur.m);
+    titleEl.innerHTML = '大 O 证明 · ' + cur.claim;
+    autoMsg = '';
+    render();
+  }
+
+  c0In.addEventListener('input', () => { autoMsg = ''; render(); });
+  n0In.addEventListener('input', () => { autoMsg = ''; render(); });
+  autoBtn.addEventListener('click', () => {
+    const p = cur, c = +c0In.value;
+    const lv = lastViolation(p, c);
+    if (lv === Infinity) {
+      autoMsg = 'c₀ = ' + fmt(c) + ' 时不存在可用的 n₀。';
+    } else {
+      const step = p.m[2];
+      const need = lv === null ? p.m[0] : Math.max(p.m[0], Math.ceil(lv / step) * step);
+      if (need > p.m[1]) {
+        n0In.value = String(p.m[1]);
+        autoMsg = '需要 n₀ ≥ ' + fmtUp(lv) + '，超出了图的范围。';
+      } else {
+        n0In.value = String(need);
+        autoMsg = lv === null
+          ? '这个 c₀ 在所有 n 上都成立，n₀ 取最小值即可。'
+          : 'f(n) 与 c₀·g(n) 最后一次相交在 n ≈ ' + fmt(lv) + '，所以 n₀ 至少取到这里。';
+      }
+    }
+    render();
+  });
+
+  function niceStep(span, count) {
+    const raw = span / count, pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const m = raw / pow;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * pow;
+  }
+
+  function render() {
+    const p = cur, c = +c0In.value, n0 = +n0In.value;
+    c0V.textContent = fmt(c);
+    n0V.textContent = fmt(n0);
+
+    const W = stage.clientWidth || 600, H = stage.clientHeight || 260;
+    const L = 44, R = 12, T = 18, B = 24;
+    const pw = Math.max(40, W - L - R), ph = Math.max(40, H - T - B);
+    const X = x => L + (Math.min(Math.max(x, p.xMin), p.xMax) - p.xMin) / (p.xMax - p.xMin) * pw;
+    const Y = y => {
+      const v = T + ph - y / p.yMax * ph;
+      return Math.min(Math.max(v, T - ph), T + 2 * ph);   // keep huge values sane; clipped anyway
+    };
+    const pt = (x, y) => X(x).toFixed(1) + ',' + Y(y).toFixed(1);
+
+    // drawing samples, with n0 inserted so the coloured regions split exactly there
+    const M = 600, xs = [];
+    for (let i = 0; i <= M; i++) xs.push(p.xMin + (p.xMax - p.xMin) * i / M);
+    if (n0 > p.xMin && n0 < p.xMax) { xs.push(n0); xs.sort((a, b) => a - b); }
+
+    let svg = '<defs><clipPath id="pc"><rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '"/></clipPath></defs>';
+
+    // grid + ticks
+    const sx = niceStep(p.xMax - p.xMin, Math.max(3, Math.floor(pw / 80)));
+    const sy = niceStep(p.yMax, Math.max(2, Math.floor(ph / 50)));
+    for (let v = Math.ceil(p.xMin / sx) * sx; v <= p.xMax + 1e-9; v += sx) {
+      svg += '<line class="grid" x1="' + X(v) + '" y1="' + T + '" x2="' + X(v) + '" y2="' + (T + ph) + '"/>';
+      svg += '<text class="tick" x="' + X(v) + '" y="' + (T + ph + 15) + '" text-anchor="middle">' + fmt(v) + '</text>';
+    }
+    for (let v = 0; v <= p.yMax + 1e-9; v += sy) {
+      svg += '<line class="grid" x1="' + L + '" y1="' + Y(v) + '" x2="' + (L + pw) + '" y2="' + Y(v) + '"/>';
+      svg += '<text class="tick" x="' + (L - 6) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + fmt(v) + '</text>';
+    }
+
+    // n ≤ n0 band: no requirement there
+    if (n0 > p.xMin) {
+      svg += '<rect class="ignore" x="' + L + '" y="' + T + '" width="' + (X(n0) - L) + '" height="' + ph + '"/>';
+    }
+
+    // regions where f > c0·g: polygon between max(f, c0·g) and c0·g
+    function band(sel, fill) {
+      const pts = xs.filter(sel);
+      if (pts.length < 2) return '';
+      const top = pts.map(x => pt(x, Math.max(p.f(x), c * p.g(x))));
+      const bot = pts.slice().reverse().map(x => pt(x, c * p.g(x)));
+      return '<polygon points="' + top.concat(bot).join(' ') + '" style="fill:' + fill + '"/>';
+    }
+    let body = '';
+    body += band(x => x <= n0, 'rgba(251,191,36,0.38)');
+    body += band(x => x >= n0, 'rgba(248,113,113,0.55)');
+    body += '<polyline points="' + xs.map(x => pt(x, c * p.g(x))).join(' ') + '" style="fill:none;stroke:var(--blue);stroke-width:2.5"/>';
+    body += '<polyline points="' + xs.map(x => pt(x, p.f(x))).join(' ') + '" style="fill:none;stroke:var(--accent);stroke-width:2.5"/>';
+    svg += '<g clip-path="url(#pc)">' + body + '</g>';
+
+    // axes
+    svg += '<line class="ax" x1="' + L + '" y1="' + (T + ph) + '" x2="' + (L + pw) + '" y2="' + (T + ph) + '"/>';
+    svg += '<line class="ax" x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (T + ph) + '"/>';
+
+    // n0 marker
+    if (n0 >= p.xMin) {
+      const xn = X(n0), right = xn > L + pw * 0.7;
+      svg += '<line class="n0line" x1="' + xn + '" y1="' + T + '" x2="' + xn + '" y2="' + (T + ph) + '"/>';
+      svg += '<text class="n0lab" x="' + (xn + (right ? -6 : 6)) + '" y="' + (T - 5) + '" text-anchor="' + (right ? 'end' : 'start') + '">n₀ = ' + fmt(n0) + '</text>';
+      if (X(n0) - L > 70) svg += '<text class="ignlab" x="' + (L + 6) + '" y="' + (T + 14) + '">n ≤ n₀：不要求</text>';
+    }
+
+    stage.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' + svg + '</svg>';
+
+    // verdict for "for all n > n0: f(n) ≤ c0·g(n)"
+    const lv = lastViolation(p, c);
+    const ok = lv === null || lv <= n0;
+    let msg;
+    if (ok) {
+      msg = '<span class="ok">✓ (c₀, n₀) = (' + fmt(c) + ', ' + fmt(n0) + ') 有效</span>：对所有 n &gt; ' + fmt(n0) +
+        ' 都有 f(n) ≤ ' + fmt(c) + '·g(n)。';
+    } else {
+      const r = firstBadRight(p, c, n0, lv);
+      if (r.b === Infinity) {
+        msg = '<span class="bad">✗ c₀ = ' + fmt(c) + ' 不行</span>：n &gt; ' + fmt(r.a) + ' 之后 f(n) 一直大于 ' + fmt(c) +
+          '·g(n)，n₀ 取多大都没用。';
+      } else {
+        msg = '<span class="bad">✗ 这组常数无效</span>：n 在 (' + fmt(r.a) + ', ' + fmt(r.b) + ') 内 f(n) &gt; ' + fmt(c) +
+          '·g(n)。把 n₀ 调到 ≥ ' + fmtUp(r.b) + '，或调大 c₀。';
+      }
+    }
+    noteEl.innerHTML = msg + (autoMsg ? ' ' + autoMsg : '') + '<span class="tip">' + p.tip + '</span>';
+  }
+
+  let pending = false;
+  window.addEventListener('resize', () => {
+    if (pending || !cur) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; render(); });
+  });
+
+  load(1);
+})();
+</script>
+</body>
+</html>

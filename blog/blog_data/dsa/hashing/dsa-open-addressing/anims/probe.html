@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开放寻址的探测路径</title>
+<link rel="stylesheet" href="/blog/blog_data/dsa/anim.css">
+<style>
+  .btn-group { flex-wrap: wrap; }
+  .oa { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 2px; }
+  .oa-ring { flex: 1 1 auto; min-height: 0; position: relative; }
+  .oa-ring > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .oa-strip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; }
+  .oa-strip .cells { padding: 4px 2px 18px; gap: 4px; }
+  .oa-strip .cell { min-width: 32px; height: 30px; font-size: 13px; }
+  .seg { stroke: #5a5a59; stroke-width: 1.5; fill: rgba(255, 255, 255, 0.03); transition: fill 0.25s, stroke 0.25s; }
+  .seg.occ { fill: #3a3a39; }
+  .seg.path { fill: rgba(56, 189, 248, 0.20); stroke: var(--blue); }
+  .seg.hit { fill: rgba(248, 113, 113, 0.30); stroke: var(--red); }
+  .seg.put { fill: var(--accent); stroke: var(--accent); }
+  .seg.warn { fill: rgba(251, 191, 36, 0.22); stroke: var(--yellow); }
+  .sv { font-size: 15px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: central; }
+  .sv.on { fill: #fff; }
+  .si { font-size: 11px; fill: var(--muted); text-anchor: middle; dominant-baseline: central; }
+  .arc { fill: none; stroke: var(--blue); stroke-width: 2.2; stroke-linecap: round; }
+  .arc.now { stroke: var(--accent); stroke-width: 2.8; }
+  .arc.fail { stroke: var(--red); stroke-dasharray: 5 4; }
+  .ck { font-size: 24px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: central; }
+  .cl { font-size: 11.5px; fill: var(--muted); text-anchor: middle; dominant-baseline: central; }
+  .cl b, .cl.em { fill: var(--text); font-weight: 700; }
+  .oa-cap { font-size: 11px; color: var(--muted); }
+  @media (max-width: 420px) {
+    .oa-strip .cells { gap: 3px; }
+    .oa-strip .cell { min-width: 26px; height: 26px; padding: 0 3px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="title">开放寻址：逐个插入，看每个 key 的探测路径</div>
+<div class="controls" id="controls"></div>
+<div class="legend">
+  <span><i style="background: #3a3a39; border: 1px solid #5a5a59"></i>已占用</span>
+  <span><i style="background: var(--red)"></i>冲突</span>
+  <span><i style="background: var(--blue)"></i>本次走过</span>
+  <span><i style="background: var(--accent)"></i>放入</span>
+  <span><i style="background: var(--yellow)"></i>到不了的空槽</span>
+</div>
+<div class="stage" id="stage"></div>
+<div class="note" id="note"></div>
+<script src="/blog/blog_data/dsa/anim.js"></script>
+<script>
+(function () {
+  'use strict';
+  const K = window.AnimKit;
+  const stage = document.getElementById('stage');
+  const controls = document.getElementById('controls');
+
+  // ---------- scenarios ----------
+  const DIGITS = [1, 1, 2, 2, 3, 2, 0, 1, 9, 5];
+  const LETTERS = 'ABCDEFGHIJ'.split('');
+  const NUMS = [25, 36, 4, 91, 47, 15, 58];
+
+  function lecture(mult) {
+    return LETTERS.map((name, j) => {
+      const d = DIGITS[j];
+      const h = (mult * d) % 10;
+      return {
+        label: name, h1: h, step: 1,
+        hText: mult === 1 ? 'h(' + name + ') = 学号末位 ' + d : 'h(' + name + ') = 7 × ' + d + ' mod 10 = ' + h,
+      };
+    });
+  }
+  function numeric(q) {
+    return NUMS.map(k => {
+      const h = k % 11;
+      if (!q) return { label: String(k), h1: h, step: 1, hText: 'h(' + k + ') = ' + k + ' mod 11 = ' + h };
+      const s = (k % q) + 1;
+      let st = '步长 h₂ = ' + k + ' mod ' + q + ' + 1 = ' + s;
+      if (k % q === 0) st += '（' + k + ' mod ' + q + ' = 0，靠 +1 步长才不是 0）';
+      return { label: String(k), h1: h, step: s, hText: 'h₁(' + k + ') = ' + k + ' mod 11 = ' + h, stepText: st };
+    });
+  }
+
+  const SCENARIOS = [
+    {
+      label: 'k mod 10', m: 10, keys: lecture(1),
+      intro: '课上的例子：m = 10，h(k) = k mod 10，即学号末位；A…J 的末位依次是 1 1 2 2 3 2 0 1 9 5。线性探测：槽被占就看下一个槽。',
+    },
+    {
+      label: '7k mod 10', m: 10, keys: lecture(7),
+      intro: '同一组学号改用 h(k) = 7k mod 10：末位 1 → 7，2 → 4，3 → 1，0 → 0，9 → 3，5 → 5。仍是线性探测。',
+    },
+    {
+      label: '线性 m=11', m: 11, keys: numeric(0),
+      intro: 'm = 11，h(k) = k mod 11，线性探测。7 个 key 中 25、36、91、47、58 的 h 都是 3，4 和 15 的 h 是 4。',
+    },
+    {
+      label: '双重 m=11', m: 11, keys: numeric(7),
+      intro: '同一组 key 改用双重哈希：起点 h₁(k) = k mod 11，步长 h₂(k) = (k mod 7) + 1，每次跳 h₂(k) 格。',
+    },
+    {
+      label: '步长 2', m: 10,
+      prefill: [10, 31, 52, 13, 65, 76, 97, 38, 59],
+      keys: [25, 35].map(k => ({
+        label: String(k), h1: k % 10, step: (k % 3) + 1,
+        hText: 'h₁(' + k + ') = ' + (k % 10), stepText: '步长 h₂ = ' + k + ' mod 3 + 1 = ' + ((k % 3) + 1),
+      })),
+      intro: 'm = 10，步长 h₂(k) = (k mod 3) + 1，可能是 1、2、3。表里已有 9 个 key，只剩槽 4 空着。',
+    },
+  ];
+
+  // <algo> run the probing for real and record a frame per examined slot
+  function build(si) {
+    const sc = SCENARIOS[si];
+    const m = sc.m;
+    const table = new Array(m).fill(null);
+    (sc.prefill || []).forEach(k => { table[k % m] = String(k); });
+    const results = [];
+    let total = 0;
+    const frames = [];
+    const snap = (o) => frames.push(Object.assign({
+      m, table: table.slice(), results: results.slice(), total, cur: null, path: [], state: '', at: -1, probes: 0,
+    }, o));
+
+    snap({ note: sc.intro });
+
+    sc.keys.forEach((key, j) => {
+      const path = [];
+      const seen = new Set();
+      let idx = key.h1;
+      const head = '插入 <b>' + key.label + '</b>：' + key.hText + (key.stepText ? '，' + key.stepText : '') + '。';
+      for (let i = 0; ; i++) {
+        path.push(idx);
+        const pre = i === 0 ? head : '';
+        if (table[idx] === null) {
+          table[idx] = key.label;
+          results[j] = i;
+          total += i;
+          let note = pre + (i === 0 ? '槽 ' + idx + ' 空，直接放入，探测 0 次。' : '槽 ' + idx + ' 空，放入 <b>' + key.label + '</b>，共探测 ' + i + ' 次。');
+          note += remark(si, key, path, i);
+          snap({ cur: j, path: path.slice(), state: 'put', at: idx, probes: i, step: key.step, note });
+          return;
+        }
+        seen.add(idx);
+        const nxt = (idx + key.step) % m;
+        const wrap = idx + key.step >= m;
+        if (seen.has(nxt)) {
+          results[j] = 'fail';
+          const cyc = path.slice(path.indexOf(nxt)).join('、');
+          snap({
+            cur: j, path: path.concat([nxt]), state: 'fail', at: idx, probes: i, step: key.step,
+            note: pre + '槽 ' + idx + ' 已有 ' + table[idx] + '；下一个 (' + idx + ' + ' + key.step + ') mod ' + m + ' = ' + nxt +
+              '，<b>回到起点</b>。之后只会重复 ' + cyc + '，空槽 4 永远探测不到：<span class="bad">插入失败</span>。步长 2 与 m = 10 有公因子 2。',
+          });
+          return;
+        }
+        snap({
+          cur: j, path: path.slice(), state: 'hit', at: idx, probes: i, step: key.step,
+          note: pre + '槽 ' + idx + ' 已有 ' + table[idx] + '：<span class="bad">冲突</span>；下一个看 (' + idx + ' + ' + key.step + ') mod ' + m + ' = ' + nxt +
+            (wrap ? '，<b>绕回开头</b>' : '') + '。',
+        });
+        idx = nxt;
+      }
+    });
+
+    snap({ note: summary(si, results, total), done: true });
+    return { frames, total, results };
+  }
+
+  function remark(si, key, path, i) {
+    if ((si === 0 || si === 2) && i >= 6) {
+      return '<br>槽 ' + path[0] + '–' + path[path.length - 2] + ' 已连成一整段，' + key.label + ' 只能从段头走到段尾：这就是<b>聚集</b>（clustering）。';
+    }
+    if (si === 1 && i >= 6) {
+      return '<br>插入 ' + key.label + ' 前 10 个槽已占 9 个，只剩这一个空槽：表越满，探测越长。';
+    }
+    if (si === 4 && i > 0) {
+      return '<br>步长 3 与 10 互质，探测序列能走遍所有槽，所以找得到槽 4。';
+    }
+    return '';
+  }
+
+  let TOTALS = [];
+  function summary(si, results, total) {
+    const keys = SCENARIOS[si].keys;
+    const nums = results.filter(r => typeof r === 'number');
+    const mx = Math.max(...nums);
+    const who = keys.filter((k, j) => results[j] === mx).map(k => k.label).join('、');
+    const base = '全部插入完成，总探测 <b>' + total + '</b> 次，最多的是 ' + who + '（' + mx + ' 次）。';
+    if (si === 0) return base + '末位是 1、2 的 key 多，后来的 key 都要穿过从槽 1 开始的那一长段。';
+    if (si === 1) return base + 'h = k mod 10 时是 ' + TOTALS[0] + ' 次：乘 7 把末位 1 和 2 的起点拉开（7 和 4），中间留出空位。';
+    if (si === 2) return base + '槽 3–9 连成一整段。';
+    if (si === 3) {
+      return base + '同一组 key 用线性探测是 ' + TOTALS[2] + ' 次。h₁ 相同的 key 步长不同，各走各的路，不再排在同一段后面。';
+    }
+    return '25 插入失败，35 放进槽 4。步长必须与 m 互质；m 取素数（如 11）时，1…m − 1 的任何步长都满足。';
+  }
+
+  // ---------- render ----------
+  const P = (cx, cy, rad, deg) => [cx + rad * Math.cos(deg * Math.PI / 180), cy + rad * Math.sin(deg * Math.PI / 180)];
+  const f1 = v => Math.round(v * 10) / 10;
+
+  function ring(f) {
+    const m = f.m, cx = 150, cy = 135, R = 110, r = 76, slice = 360 / m, gap = 1.2;
+    const mid = k => -90 + (k + 0.5) * slice;
+    let segs = '', texts = '';
+    const onPath = new Set(f.path);
+    for (let k = 0; k < m; k++) {
+      const a0 = -90 + k * slice + gap, a1 = -90 + (k + 1) * slice - gap;
+      const [x1, y1] = P(cx, cy, R, a0), [x2, y2] = P(cx, cy, R, a1), [x3, y3] = P(cx, cy, r, a1), [x4, y4] = P(cx, cy, r, a0);
+      const d = 'M' + f1(x1) + ',' + f1(y1) + ' A' + R + ',' + R + ' 0 0 1 ' + f1(x2) + ',' + f1(y2) +
+        ' L' + f1(x3) + ',' + f1(y3) + ' A' + r + ',' + r + ' 0 0 0 ' + f1(x4) + ',' + f1(y4) + ' Z';
+      let cls = f.table[k] !== null ? 'occ' : '';
+      if (f.state === 'fail') {
+        if (onPath.has(k)) cls = 'hit';
+        else if (f.table[k] === null) cls = 'warn';
+      } else {
+        if (onPath.has(k)) cls = 'path';
+        if (k === f.at) cls = f.state === 'put' ? 'put' : 'hit';
+      }
+      segs += '<path class="seg ' + cls + '" d="' + d + '"/>';
+      const [vx, vy] = P(cx, cy, (R + r) / 2, mid(k));
+      if (f.table[k] !== null) texts += '<text class="sv' + (cls === 'put' ? ' on' : '') + '" x="' + f1(vx) + '" y="' + f1(vy) + '">' + K.esc(f.table[k]) + '</text>';
+      const [ix, iy] = P(cx, cy, R + 12, mid(k));
+      texts += '<text class="si" x="' + f1(ix) + '" y="' + f1(iy) + '">' + k + '</text>';
+    }
+    // probe arrows: clockwise arcs just inside the ring, one per jump
+    let arcs = '';
+    let walked = 0;
+    for (let t = 0; t + 1 < f.path.length; t++) {
+      const s = f.step;
+      const turn = Math.floor(walked / m);
+      walked += s;
+      const ra = r - 10 - turn * 9;
+      const g = Math.min(5, slice * s * 0.18);
+      const st = mid(f.path[t]) + g, en = mid(f.path[t]) + s * slice - g;
+      const [sx, sy] = P(cx, cy, ra, st), [ex, ey] = P(cx, cy, ra, en);
+      const large = en - st > 180 ? 1 : 0;
+      const last = t + 2 === f.path.length;
+      const cls = f.state === 'fail' && last ? 'arc fail' : last ? 'arc now' : 'arc';
+      const mk = f.state === 'fail' && last ? 'ar-r' : last ? 'ar-a' : 'ar-b';
+      arcs += '<path class="' + cls + '" d="M' + f1(sx) + ',' + f1(sy) + ' A' + ra + ',' + ra + ' 0 ' + large + ' 1 ' + f1(ex) + ',' + f1(ey) + '" marker-end="url(#' + mk + ')"/>';
+    }
+    const defs = '<defs>' + [['ar-a', 'var(--accent)'], ['ar-b', 'var(--blue)'], ['ar-r', 'var(--red)']].map(([id, c]) =>
+      '<marker id="' + id + '" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M0,0 L10,5 L0,10 z" style="fill:' + c + '"/></marker>').join('') + '</defs>';
+    // centre: current key and counters
+    let center = '';
+    const keys = f.keysRef;
+    if (f.cur !== null) {
+      const key = keys[f.cur];
+      center = '<text class="ck" x="' + cx + '" y="' + (cy - 22) + '">' + K.esc(key.label) + '</text>' +
+        '<text class="cl" x="' + cx + '" y="' + (cy + 2) + '">h = ' + key.h1 + ' · 步长 ' + key.step + '</text>' +
+        '<text class="cl em" x="' + cx + '" y="' + (cy + 19) + '">本次探测 ' + f.probes + '</text>' +
+        '<text class="cl" x="' + cx + '" y="' + (cy + 35) + '">累计 ' + f.total + '</text>';
+    } else {
+      center = '<text class="ck" x="' + cx + '" y="' + (cy - 10) + '">' + (f.done ? '完成' : 'm = ' + f.m) + '</text>' +
+        '<text class="cl" x="' + cx + '" y="' + (cy + 16) + '">累计探测 ' + f.total + '</text>';
+    }
+    return '<svg viewBox="0 0 300 270" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
+      defs + segs + texts + arcs + center + '</svg>';
+  }
+
+  function render(f) {
+    const keys = f.keysRef;
+    const strip = K.cells(keys.map(k => k.label), {
+      cls: (v, k) => {
+        if (f.results[k] === 'fail') return 'bad';
+        if (k === f.cur) return f.state === 'fail' ? 'bad' : 'active';
+        if (f.results[k] != null) return 'done';
+        return 'dim';
+      },
+      ptr: k => (f.results[k] == null ? '' : f.results[k] === 'fail' ? '失败' : String(f.results[k])),
+    });
+    stage.innerHTML = '<div class="oa"><div class="oa-ring">' + ring(f) + '</div><div class="oa-strip"><div class="oa-cap">插入顺序（下方数字 = 探测次数）</div>' + strip + '</div></div>';
+  }
+
+  // build every scenario once (later summaries quote earlier totals)
+  const BUILT = [];
+  SCENARIOS.forEach((sc, i) => {
+    const b = build(i);
+    b.frames.forEach(fr => { fr.keysRef = sc.keys; });
+    BUILT.push(b);
+    TOTALS[i] = b.total;
+  });
+  // rebuild summaries now that all totals are known
+  BUILT.forEach((b, i) => { b.frames[b.frames.length - 1].note = summary(i, b.results, b.total); });
+
+  const group = document.createElement('div');
+  group.className = 'btn-group';
+  const buttons = SCENARIOS.map((sc, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = sc.label;
+    if (i === 0) b.classList.add('active');
+    group.appendChild(b);
+    return b;
+  });
+  controls.appendChild(group);
+
+  const player = AnimKit.player({ frames: BUILT[0].frames, render, interval: 1300 });
+  buttons.forEach((b, i) => b.addEventListener('click', () => {
+    buttons.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    player.load(BUILT[i].frames);
+  }));
+})();
+</script>
+</body>
+</html>
