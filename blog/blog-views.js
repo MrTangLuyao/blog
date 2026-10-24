@@ -89,6 +89,7 @@
   /* ─── Compact list rows — flat, one line, no tags / reading time ─── */
   const PIN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(20deg)"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>';
   const FOLDER_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h5l2 2h9a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/></svg>';
+  const LOCK_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
   function articleThumb(entry, parentPath) {
     const initial = (Blog.pickLang(entry.title) || entry.slug).trim().charAt(0).toUpperCase();
@@ -107,6 +108,12 @@
   function dateMeta(entry) {
     return `<span class="list-row__meta">${Blog.formatDate(entry.date)}</span>`;
   }
+  // lock mark for entries that open behind the "not public" notice
+  function lockMark(entry) {
+    if (!entry.protected) return '';
+    const label = Blog.translations[Blog.currentLang]['lib-protected'];
+    return `<span class="list-row__lock" title="${label}" aria-label="${label}">${LOCK_SVG}</span>`;
+  }
 
   function postRow(entry, parentPath) {
     return `
@@ -114,6 +121,7 @@
         ${articleThumb(entry, parentPath)}
         ${pinSlot(entry)}
         <span class="list-row__title">${Blog.pickLang(entry.title)}</span>
+        ${lockMark(entry)}
         ${dateMeta(entry)}
       </a>`;
   }
@@ -124,6 +132,7 @@
         ${folderThumb}
         ${pinSlot(entry)}
         <span class="list-row__title">${Blog.pickLang(entry.title)}</span>
+        ${lockMark(entry)}
         ${dateMeta(entry)}
       </a>`;
   }

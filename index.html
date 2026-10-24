@@ -163,6 +163,22 @@
     </div>
   </div>
 
+  <!-- Protected-content notice — full screen; wired by blog-core.js, opened by
+       blog-router.js for paths under a "protected" top-level entry. -->
+  <div id="protect-gate" aria-hidden="true">
+    <div class="gate-backdrop"></div>
+    <div class="gate-panel" role="alertdialog" aria-modal="true" aria-labelledby="gate-msg">
+      <div class="gate-icon">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </div>
+      <p class="gate-msg" id="gate-msg" data-i18n="gate-msg">这个内容不是公开内容</p>
+      <div class="gate-actions">
+        <button id="gate-cancel" class="gate-btn gate-btn--cancel ripple-surface" type="button" data-i18n="gate-cancel">取消</button>
+        <button id="gate-continue" class="gate-btn gate-btn--continue ripple-surface ripple-primary" type="button" data-i18n="gate-continue">继续</button>
+      </div>
+    </div>
+  </div>
+
   <script src="lib/runtime/luxon.min.js"></script>
   <script src="lib/marked.min.js"></script>
   <script src="lib/katex/katex.min.js"></script><!-- must precede blog-interpreter.js: the markdown $…$ extension calls katex.renderToString -->

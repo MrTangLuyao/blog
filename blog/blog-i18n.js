@@ -35,7 +35,11 @@
       'lib-home': '博客',
       'lib-collection': '合集',
       'lib-items': '篇',
-      'lib-load-error': '加载失败，请稍后重试。'
+      'lib-load-error': '加载失败，请稍后重试。',
+      'lib-protected': '非公开',
+      'gate-msg': '这个内容不是公开内容',
+      'gate-cancel': '取消',
+      'gate-continue': '继续'
     },
     en: {
       'blog-greeting': 'notes',
@@ -55,7 +59,11 @@
       'lib-home': 'Blog',
       'lib-collection': 'Collection',
       'lib-items': 'items',
-      'lib-load-error': 'Failed to load — please try again.'
+      'lib-load-error': 'Failed to load — please try again.',
+      'lib-protected': 'Not public',
+      'gate-msg': 'This content is not public',
+      'gate-cancel': 'Cancel',
+      'gate-continue': 'Continue'
     }
   };
 

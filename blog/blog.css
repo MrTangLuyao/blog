@@ -189,6 +189,62 @@ body { overscroll-behavior: none; }
 .reader-body tr:last-child td { border-bottom: none; }
 .reader-body tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
 
+/* ─── Post components (usable by any HTML post) ───
+   .anim-frame  <iframe> holding an interactive animation, + .anim-caption under it
+   .callout     tinted box; data-label="…" prints a small heading;
+                variants .key (accent) · .warn (red) · .note (teal)
+   details.qa   collapsible question → answer; give <summary> the class
+                ripple-surface for the tap ripple (bound after the body loads)
+   figure.fig   static diagram (inline SVG or <img>) + <figcaption> */
+.reader-body .anim-frame {
+  display: block; width: 100%; margin: 1.4em 0;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.reader-body .anim-caption {
+  margin-top: -0.6em !important; margin-bottom: 1.4em;
+  text-align: center; font-size: 13px; font-style: italic; color: var(--muted);
+}
+.reader-body .callout {
+  padding: 14px 18px; border-radius: 12px;
+  background: var(--surface); border-left: 3px solid var(--outline);
+}
+.reader-body .callout::before {
+  content: attr(data-label); display: block; margin-bottom: 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted);
+}
+.reader-body .callout:not([data-label])::before { display: none; }
+.reader-body .callout > * + * { margin-top: 0.7em; }
+.reader-body .callout.key { background: rgba(217, 119, 87, 0.08); border-left-color: var(--accent); }
+.reader-body .callout.key::before { color: var(--accent); }
+.reader-body .callout.warn { background: rgba(248, 113, 113, 0.07); border-left-color: #f87171; }
+.reader-body .callout.warn::before { color: #f87171; }
+.reader-body .callout.note { background: rgba(95, 168, 160, 0.08); border-left-color: var(--collection); }
+.reader-body .callout.note::before { color: var(--collection); }
+.reader-body details.qa { border-radius: 12px; background: var(--surface); overflow: hidden; }
+.reader-body details.qa + details.qa { margin-top: 10px; }
+.reader-body details.qa > summary {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 16px; cursor: pointer; list-style: none;
+  font-weight: 600; color: var(--text);
+  transition: background 0.2s ease;
+}
+.reader-body details.qa > summary::-webkit-details-marker { display: none; }
+.reader-body details.qa > summary::before {
+  content: ''; flex: 0 0 auto; width: 7px; height: 7px; margin-top: 0.7em;
+  border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent);
+  transform: rotate(-45deg); transition: transform 0.2s ease;
+}
+.reader-body details.qa[open] > summary::before { transform: rotate(45deg); }
+.reader-body details.qa > summary:hover { background: var(--surface-high); }
+.reader-body details.qa > .qa__body { padding: 4px 18px 16px 33px; color: var(--text); }
+.reader-body details.qa > .qa__body > * + * { margin-top: 0.8em; }
+.reader-body figure.fig { margin: 1.6em 0; text-align: center; }
+.reader-body figure.fig svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.reader-body figure.fig svg text { font-family: 'JBMono', 'JetBrains Mono', monospace; }
+.reader-body figure.fig figcaption { margin-top: 10px; font-size: 13px; font-style: italic; color: var(--muted); }
+
 /* ─── TOC sidebar ─── */
 #toc-sidebar {
   position: fixed;
@@ -293,6 +349,51 @@ body { overscroll-behavior: none; }
   flex: 0 0 auto; font-size: 12px; color: var(--muted);
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }
+/* lock — the entry opens behind the "not public" notice */
+.list-row__lock { flex: 0 0 auto; display: flex; align-items: center; color: var(--muted); opacity: 0.8; }
+
+/* ─── Protected-content notice (full screen; opened by blog-router.js) ───
+   Fades with opacity + visibility (no display toggle), same as the About
+   modal, so a button ripple survives the fade-out and never replays. */
+#protect-gate {
+  position: fixed; inset: 0; z-index: 10001;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.22s ease, visibility 0.22s ease;
+}
+#protect-gate.open { opacity: 1; visibility: visible; }
+.gate-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(31, 31, 30, 0.94);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  touch-action: none;        /* no scroll-through on touch screens */
+}
+.gate-panel {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center;
+  max-width: 420px; text-align: center;
+}
+#protect-gate.open .gate-panel { animation: gate-pop 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
+@keyframes gate-pop { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+.gate-icon {
+  width: 64px; height: 64px; margin-bottom: 24px; border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-dim); color: var(--accent);
+}
+.gate-msg { margin: 0 0 32px; font-size: 20px; font-weight: 700; line-height: 1.5; color: var(--text); }
+.gate-actions { display: flex; gap: 12px; }
+.gate-btn {
+  min-width: 112px; height: 44px; padding: 0 24px;
+  border: none; border-radius: 9999px; cursor: pointer;
+  font: inherit; font-size: 15px; font-weight: 600;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.gate-btn--cancel { background: var(--surface-high); color: var(--text); }
+.gate-btn--cancel:hover { background: var(--outline); }
+.gate-btn--continue { background: var(--accent); color: #ffffff; }
+.gate-btn--continue:hover { background: #c66a4a; }
+.gate-btn:focus-visible { outline: 2px solid var(--accent-on); outline-offset: 3px; }
 
 /* ─── About button + changelog modal ─── */
 #about-btn {

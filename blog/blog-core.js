@@ -10,6 +10,9 @@
  *   UI primitives
  *     Blog.bindRipples()   — ripple effect on .ripple-surface elements
  *     Blog.bindFadeIn()    — IntersectionObserver fade-in
+ *     Blog.openGate(onContinue, onCancel) / Blog.closeGate()
+ *                          — full-screen "not public" notice (#protect-gate);
+ *                            blog-router.js decides when to show it
  *
  *   Lang-aware helpers (Blog.currentLang is owned by blog-i18n.js)
  *     Blog.pickLang(field, fallback)
@@ -158,6 +161,52 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) close(); });
 
     Blog.renderAbout = render;   // let applyLang refresh content if the modal is open
+  })();
+
+  /* ─── Protected-content gate ───
+     A full-screen notice with Cancel / Continue. It fades (opacity +
+     visibility, never display) like the About modal, so a button's ripple
+     keeps playing through the fade-out and nothing replays on the next open.
+     Spans clean themselves up on animationend; blog-router.js leaves this
+     overlay's ripples alone when it sweeps stray ones on navigation. */
+  (function setupGate() {
+    const gate = document.getElementById('protect-gate');
+    const okBtn = document.getElementById('gate-continue');
+    const cancelBtn = document.getElementById('gate-cancel');
+    if (!gate || !okBtn || !cancelBtn) {
+      Blog.openGate = (onContinue) => onContinue();
+      Blog.closeGate = () => {};
+      return;
+    }
+    let pending = null;   // { onContinue, onCancel } of the notice on screen
+
+    function setOpen(isOpen) {
+      gate.classList.toggle('open', isOpen);
+      gate.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    }
+
+    Blog.openGate = function openGate(onContinue, onCancel) {
+      pending = { onContinue, onCancel };
+      if (!gate.classList.contains('open')) setOpen(true);
+      okBtn.focus({ preventScroll: true });
+    };
+    Blog.closeGate = function closeGate() {
+      pending = null;
+      if (!gate.classList.contains('open')) return;
+      setOpen(false);
+      if (gate.contains(document.activeElement)) document.activeElement.blur();
+    };
+
+    // Run one handler, once: a second click during the fade-out finds nothing pending.
+    function settle(which) {
+      const p = pending;
+      if (!p) return;
+      Blog.closeGate();
+      p[which]();
+    }
+    okBtn.addEventListener('click', () => settle('onContinue'));
+    cancelBtn.addEventListener('click', () => settle('onCancel'));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && pending) settle('onCancel'); });
   })();
 
   /* ─── Fade-in observer ─── */

@@ -206,6 +206,8 @@ paint, so the initial list is empty for the duration of that request.
 | `Blog.loadLibrarian(path)` | blog-core | Fetch + normalize + cache one librarian. |
 | `Blog.resolvePath(path)` | blog-core | Walk root→path; return kind + entry/lib + chain. |
 | `Blog.renderAbout()` | blog-core | Render the About modal content for `currentLang`. |
+| `Blog.openGate(onContinue, onCancel)` | blog-core | Show the protected-content notice; runs one handler once. |
+| `Blog.closeGate()` | blog-core | Hide the protected-content notice. |
 | `Blog.buildToc()` | blog-toc | Build the reader TOC and scroll-spy. |
 | `Blog.clearToc()` | blog-toc | Tear down the TOC when leaving the reader. |
 | `Blog.updateTocBtn()` | blog-toc | Toggle the mobile TOC FAB. |
@@ -249,6 +251,7 @@ A librarian file (root `head_librarian.json` or any collection's
 | `lang` | no | `"both"` (default), `"zh"`, or `"en"`. |
 | `pinned` | no | `true` floats the entry to the top of its level. |
 | `draft` | no | `true` excludes it from the list and blocks it in the reader. |
+| `protected` | no | Top-level entries only. `true` shows a lock on the row and puts the "not public" notice in front of it (see [Protected entries](#protected-entries)). |
 
 ### Collection entry
 
@@ -262,6 +265,7 @@ A librarian file (root `head_librarian.json` or any collection's
 | `tags` | no | Array. |
 | `cover` | no | Ignored on the list: a collection always renders a folder icon. |
 | `pinned` | no | `true` floats the collection to the top. |
+| `protected` | no | Top-level collections only. `true` shows a lock on the row and puts the "not public" notice in front of everything inside (see [Protected entries](#protected-entries)). |
 
 ### Sorting
 
@@ -322,6 +326,29 @@ so links created before collections existed still resolve.
    - not found → `Blog.renderNotFound`,
    - `kind: 'post'` → `Blog.renderReader`,
    - `kind: 'collection'` → `Blog.renderList`.
+
+A route whose await is overtaken by a newer navigation renders nothing.
+
+### Protected entries
+
+A top-level entry (in `head_librarian.json`) with `"protected": true` puts a
+full-screen notice — "这个内容不是公开内容" / "This content is not public" with
+Cancel and Continue — in front of every path under it:
+
+- The check uses the first segment of the path, so it applies to the collection
+  page, every post and every nested collection inside it, and to direct links
+  (including a reload). Nested librarians don't need the flag.
+- **Continue** renders the page. Moving around inside the same top-level entry
+  does not ask again; going anywhere outside it, reloading, or returning through
+  the browser's back/forward cache re-arms the notice.
+- **Cancel** (or `Esc`) goes back to the page the reader came from; when the
+  link was opened directly, it lands on the blog home instead.
+- The list row of a protected entry shows a lock before the date.
+
+The notice is `#protect-gate` in `index.html`; `blog-core.js` wires it
+(`Blog.openGate` / `Blog.closeGate`) and `blog-router.js` decides when to show
+it. It is a reading notice, not access control: the files remain publicly
+fetchable.
 
 ## List view rendering
 
@@ -480,6 +507,12 @@ subtree after the body is injected:
   `'JetBrains Mono'` is a CJK body subset and is not reliably monospaced for
   ASCII.
 - Reader prose styles live under `.reader-body` in `blog.css`.
+- Ready-made components for HTML posts (also in `blog.css`, no per-post `<style>` needed):
+  `iframe.anim-frame` + `p.anim-caption` for embedded animations;
+  `div.callout` with `data-label="…"` and a `key` / `warn` / `note` variant;
+  `details.qa` (give its `<summary>` the `ripple-surface` class) for a question with a
+  hidden answer in `div.qa__body`; `figure.fig` for an inline SVG diagram with a caption.
+  `blog-syntax.js` calls `Blog.bindRipples()` after a body loads, so ripples in posts work.
 
 ## Asset and path conventions
 
@@ -578,6 +611,8 @@ subtree after the body is injected:
    About modal's `close()` sweep stray `.ripple` spans. A finished ripple left on
    a persistent element (the back button, a modal button) replays its CSS
    animation when its container toggles visibility; do not remove these sweeps.
+   `route()` skips ripples inside `#protect-gate`: the notice fades rather than
+   toggling `display`, so its button ripples are left to finish on their own.
 7. **A literal `$` in Markdown prose must be `\$`.**
 8. **Code uses `'JBMono'`, not `'JetBrains Mono'`.** The latter is a CJK body
    subset and renders ASCII code with ragged columns.
@@ -814,6 +849,8 @@ blog/
 | `Blog.loadLibrarian(path)` | blog-core | fetch + 规范化 + 缓存一个 librarian。 |
 | `Blog.resolvePath(path)` | blog-core | 从根走到 path；返回 kind + entry/lib + chain。 |
 | `Blog.renderAbout()` | blog-core | 按 `currentLang` 渲染关于弹窗内容。 |
+| `Blog.openGate(onContinue, onCancel)` | blog-core | 显示「非公开内容」提示；两个回调只会执行其中一个、只执行一次。 |
+| `Blog.closeGate()` | blog-core | 隐藏「非公开内容」提示。 |
 | `Blog.buildToc()` | blog-toc | 构建阅读器 TOC 与 scroll-spy。 |
 | `Blog.clearToc()` | blog-toc | 离开阅读器时拆除 TOC。 |
 | `Blog.updateTocBtn()` | blog-toc | 切换移动端 TOC 浮动按钮。 |
@@ -856,6 +893,7 @@ librarian 文件（根 `head_librarian.json` 或任意合集的 `librarian.json`
 | `lang` | 否 | `"both"`（默认）、`"zh"` 或 `"en"`。 |
 | `pinned` | 否 | `true` 把条目浮到本层级顶部。 |
 | `draft` | 否 | `true` 从列表排除并在阅读器拦截。 |
+| `protected` | 否 | 仅限顶层条目。`true` 在列表行显示锁，并在打开前先弹「非公开内容」提示（见[受保护条目](#受保护条目)）。 |
 
 ### 合集条目
 
@@ -869,6 +907,7 @@ librarian 文件（根 `head_librarian.json` 或任意合集的 `librarian.json`
 | `tags` | 否 | 数组。 |
 | `cover` | 否 | 列表上忽略：合集始终渲染文件夹图标。 |
 | `pinned` | 否 | `true` 把合集浮到顶部。 |
+| `protected` | 否 | 仅限顶层合集。`true` 在列表行显示锁，合集内的一切在打开前先弹「非公开内容」提示（见[受保护条目](#受保护条目)）。 |
 
 ### 排序
 
@@ -923,6 +962,25 @@ librarian 文件（根 `head_librarian.json` 或任意合集的 `librarian.json`
    - 找不到 → `Blog.renderNotFound`，
    - `kind: 'post'` → `Blog.renderReader`，
    - `kind: 'collection'` → `Blog.renderList`。
+
+如果某次路由在 await 期间被更新的导航抢先，它什么都不渲染。
+
+### 受保护条目
+
+`head_librarian.json` 里带 `"protected": true` 的顶层条目，在它下面的每个路径前都会
+先出现一个全屏提示——「这个内容不是公开内容」/「This content is not public」，配「取消」
+和「继续」两个按钮：
+
+- 判断依据是路径的第一段，所以合集页、合集里的每篇文章和每个嵌套合集都会被拦，直接
+  链接（包括刷新）同样会弹。嵌套的 librarian 不需要再写这个字段。
+- **继续**：渲染页面。在同一个顶层条目内部跳转不再重复提示；离开它、刷新页面、或经浏
+  览器前进/后退缓存回来，提示都会重新生效。
+- **取消**（或按 `Esc`）：回到读者来时的页面；如果是直接打开的链接，则回到博客首页。
+- 受保护条目的列表行在日期前显示一把锁。
+
+提示层是 `index.html` 里的 `#protect-gate`；`blog-core.js` 负责接线（`Blog.openGate` /
+`Blog.closeGate`），`blog-router.js` 决定何时弹出。它只是阅读提示，不是访问控制：文件
+本身依然可以被公开获取。
 
 ## 列表视图渲染
 
@@ -1057,6 +1115,11 @@ Markdown 改动它之前就被转成了 HTML：
 - 代码用专用的 `'JBMono'` 字体（`blog.css`）从真正的 `JetBrainsMono.woff2` 加载、关
   闭连字，因为站点级 `'JetBrains Mono'` 是 CJK 正文子集，ASCII 并非可靠等宽。
 - 阅读正文样式在 `blog.css` 的 `.reader-body` 下。
+- HTML 文章可直接用的现成组件（同在 `blog.css`，文章里不必再写 `<style>`）：
+  `iframe.anim-frame` + `p.anim-caption` 嵌入动画；`div.callout` 配 `data-label="…"`，有
+  `key` / `warn` / `note` 三种；`details.qa` 做「题目 + 折叠答案」（`<summary>` 加
+  `ripple-surface` 类，答案放在 `div.qa__body`）；`figure.fig` 放内联 SVG 示意图和图注。
+  `blog-syntax.js` 在正文加载后会调用 `Blog.bindRipples()`，所以文章里的涟漪效果可用。
 
 ## 资源与路径约定
 
@@ -1141,7 +1204,8 @@ Markdown 改动它之前就被转成了 HTML：
 5. **移动或重命名文章会改变其 URL。** slug 应视为永久。
 6. **涟漪 span 在 `animationend` 时移除**，且 `route()` 与关于弹窗的 `close()` 都清扫残
    留 `.ripple`。残留在持久元素（返回按钮、弹窗按钮）上用完的涟漪，会在其容器切换可见
-   性时重播 CSS 动画；不要删掉这些清扫。
+   性时重播 CSS 动画；不要删掉这些清扫。`route()` 会跳过 `#protect-gate` 里的涟漪：这
+   个提示层靠淡入淡出而不是切换 `display`，所以它按钮上的涟漪留给它自己播完。
 7. **Markdown 正文里的真美元符号必须写 `\$`。**
 8. **代码用 `'JBMono'`，不是 `'JetBrains Mono'`。** 后者是 CJK 正文子集，渲染 ASCII 代
    码会列不齐。
