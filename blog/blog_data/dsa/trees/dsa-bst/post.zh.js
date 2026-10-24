@@ -1,10 +1,33 @@
 /* Post body — dsa-bst / zh */
 
 (window.__BLOG_POSTS = window.__BLOG_POSTS || {})['dsa-bst:zh'] = `
-<p class="lead">二叉搜索树（Binary Search Tree, BST）把有序数组上的二分查找搬到链式结点上：查找和插入都只走一条从根往下的路径，代价是 O(树高)。树高由插入顺序决定，有序输入会让它退化成链表，所以<strong>任意 BST 的查找最坏是 O(n)</strong>。</p>
+<p class="lead">二叉搜索树（Binary Search Tree, BST）是一棵“左边小、右边大”的二叉树：查找和插入都只沿一条路往下走，快慢全看树有多高，而插入顺序不好时它会退化成链表。</p>
 
-<h2>BST 性质</h2>
-<p>课上的例子：从空树依次插入 32, 14, 53, 9, 28, 42, 64, 50，得到下图。看根 32：左子树里的 14、9、28 都比它小，右子树里的 53、42、50、64 都比它大。53 也一样：42、50 在左，64 在右。每个结点都如此。</p>
+<h2>从猜数字说起</h2>
+<p>朋友心里想一个 1 到 100 之间的数，你每猜一次，他只说“大了”或“小了”。聪明的猜法是先猜 50，他说“大了”就只剩 1–49，再猜 25……每次排除一半，最多 7 次必中。</p>
+<p>这就是二分查找（binary search），但它要求有序数组（sorted array），而往有序数组中间插一个数，后面的元素都得挪一格，O(n)。链表（linked list）插入快，查找却只能从头数，O(n)。</p>
+<p>二叉搜索树两样都要：把“先看中间，再去左半边或右半边”提前用指针搭好。查找像猜数字；插入时找到空位挂上去，谁都不用挪。</p>
+
+<h2>二叉搜索树是什么</h2>
+<p>简单说，二叉搜索树就是<strong>每个结点都满足“左边都比我小，右边都比我大”</strong>的二叉树（binary tree）。它由三部分组成：</p>
+<ul>
+<li><strong>结点（node）</strong>：一个键（key）加 <code>left</code>、<code>right</code> 两根指针，和 3.1 的二叉树结点一样。</li>
+<li><strong>BST 性质（BST property）</strong>：对每个结点 x，<strong>左子树（left subtree）里所有键都比 x 小，右子树（right subtree）里所有键都比 x 大</strong>。本课默认键不重复。</li>
+<li><strong>两个操作</strong>：查找（find / search）和插入（insert），都是“小往左、大往右”。</li>
+</ul>
+<p>性质管的是<strong>整棵子树</strong>，不只是两个孩子。下面这棵树每对父子都“左小右大”，但 35 在 30 的左子树里却比 30 大，所以<strong>不是 BST</strong>：</p>
+<pre><code class="lang-text">      30
+     /  \\
+   20    40
+  /  \\     \\
+10    35    50</code></pre>
+<p>在它上面找 35：35 &gt; 30 往右，35 &lt; 40 往左，空了，报告“不存在”，可 35 明明在树里。它的中序是 10 20 35 30 40 50，不升序；而 <strong>BST 的中序遍历（in-order）一定是升序</strong>（见 3.2）。没有顺序的普通二叉树，查找只能全看一遍，O(n)。</p>
+
+<iframe class="video-frame" src="https://www.youtube-nocookie.com/embed/pYT9F8_LFTM" title="Data structures: Binary Search Tree" loading="lazy" allowfullscreen></iframe>
+<p class="anim-caption">视频：mycodeschool《Data structures: Binary Search Tree》（英文，约 19 分钟），比较数组、链表和 BST 的代价，再画图讲查找和插入。视频里的 O(log n) 指树平衡时；本课问“BST 查找”答 O(n)。</p>
+
+<h2>看个例子：课上那棵树</h2>
+<p>课上从空树依次插入 32, 14, 53, 9, 28, 42, 64, 50，得到下面这棵树。</p>
 
 <figure class="fig">
 <svg viewBox="0 0 520 330" width="520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="课上的 BST：查找 50 的路径、17 的插入位置和 51 查找失败的位置">
@@ -42,21 +65,17 @@
 <text x="416" y="320">51 不在树中</text>
 </g>
 </svg>
-<figcaption>课上的 BST。橙色是查找 50 的路径；结点旁的蓝色数字是找到它所需的比较次数；绿色虚线是插入 17 的位置，红色虚线是查找 51 失败的地方。</figcaption>
+<figcaption>橙色是查找 50 走的路；蓝色数字是找到该结点要比较几次；绿色虚线是插入 17 的位置，红色虚线是查找 51 失败的地方。</figcaption>
 </figure>
 
-<p><strong>BST 性质（BST property）：对每个结点 x，x 的左子树中所有键都小于 x 的键，右子树中所有键都大于 x 的键。</strong>要求针对整棵子树，不只是两个孩子：只检查“左孩子 &lt; 父 &lt; 右孩子”会漏掉错误（见练习 2）。这里默认键互不相同，下面的代码遇到重复键直接忽略。</p>
-<p>普通二叉树（binary tree）没有顺序，找一个键只能遍历所有结点，O(n)。BST 有顺序，所以<strong>中序遍历（in-order）的输出就是升序序列</strong>（见 3.2 树的三种遍历）。</p>
-
-<h2>查找：每层只比较一次</h2>
-<p>找 50：</p>
+<h3>查找 50 和 51</h3>
 <ol>
-<li>与根 32 比较：50 &gt; 32，往右。</li>
-<li>与 53 比较：50 &lt; 53，往左。</li>
-<li>与 42 比较：50 &gt; 42，往右。</li>
-<li>与 50 比较：相等，找到。共 <strong>4 次比较</strong>。</li>
+<li>和根 32 比：50 &gt; 32，往右。左边 14 那整棵子树都不用看了。</li>
+<li>和 53 比：50 &lt; 53，往左。</li>
+<li>和 42 比：50 &gt; 42，往右。</li>
+<li>和 50 比：相等，找到。一共 <strong>4 次</strong>。</li>
 </ol>
-<p>找不存在的 51：前三步相同，到 50 时 51 &gt; 50 应往右，但 50 的右孩子是 NULL，于是断定 51 不在树中，同样 <strong>4 次</strong>。每一步都排除另一侧整棵子树，与二分查找（binary search）同理。</p>
+<p>找不存在的 51：前三步一样，到了 50，51 &gt; 50 该往右，可 50 的右边是空指针（NULL），说明 51 不在树里。经过的还是这 4 个结点，也是 <strong>4 次</strong>。</p>
 
 <table>
 <thead><tr><th>查找</th><th>经过的结点</th><th>比较次数</th></tr></thead>
@@ -69,144 +88,87 @@
 </table>
 
 <div class="callout key" data-label="考点">
-<p>课上的计数法：<strong>每访问一个结点算 1 次比较</strong>，走到 NULL 不算（代码里一个结点可能做 == 和 &lt; 两次判断，仍记 1 次）。所以找到键 k 的比较次数 = 根到 k 路径上的结点数 = <strong>depth(k) + 1</strong>（本课 depth 从根的 0 算起）；找不到时 = 最后经过的结点的 depth + 1。</p>
-<p>一次查找最多比较 h 次，h 为<strong>树高</strong>（本课约定空树高 0、叶子高 1）：上图高 4，最深的 50 正好要 4 次。所以<strong>查找是 O(h)</strong>。</p>
+<p>课上的数法：<strong>每访问一个结点算 1 次比较，走到 NULL 不算</strong>（代码里判断了 == 和 &lt; 也只记 1 次）。找到 k 的次数 = 根到 k 路上的结点数 = <strong>深度（depth）+ 1</strong>，本课根的 depth 为 0；找不到时数到最后一个非空结点。</p>
+<p>一次查找最多比较 h 次，h 是<strong>树高（height）</strong>，本课约定空树高 0、叶子高 1。上图树高 4，最深的 50 正好要 4 次。所以<strong>查找是 O(h)</strong>。</p>
 </div>
 
-<h2>插入：先查找，再挂一片叶子</h2>
-<p>插入 17：17 &lt; 32 往左；17 &gt; 14 往右；17 &lt; 28 往左，28 的左孩子为空，就把 17 挂在那里（图中绿色虚线）。<strong>插入 = 查找空位（O(h)）+ 挂上新结点（O(1)）</strong>。新结点总是叶子，原有结点不动，只改一根指针。</p>
-
-<pre><code>#include &lt;stdlib.h&gt;
-#include &lt;assert.h&gt;
-
-typedef struct node node_t;
-struct node {
-    int key;
-    node_t *left, *right;
-};
-
-node_t *new_node(int key) {
-    node_t *n = malloc(sizeof(*n));
-    assert(n != NULL);
-    n-&gt;key = key;
-    n-&gt;left = n-&gt;right = NULL;
-    return n;
-}
-
-/* 递归查找：找到返回该结点，找不到返回 NULL */
-node_t *bst_find(node_t *t, int key) {
-    if (t == NULL || key == t-&gt;key) return t;
-    if (key &lt; t-&gt;key) return bst_find(t-&gt;left, key);
-    return bst_find(t-&gt;right, key);
-}
-
-/* 迭代查找：同一条路径，用循环代替递归 */
-node_t *bst_find_iter(node_t *t, int key) {
-    while (t != NULL &amp;&amp; key != t-&gt;key)
-        t = (key &lt; t-&gt;key) ? t-&gt;left : t-&gt;right;
-    return t;
-}
-
-/* 递归插入：返回插入后这棵子树的根 */
-node_t *bst_insert(node_t *t, int key) {
-    if (t == NULL) return new_node(key);      /* 空位：新叶子 */
-    if (key &lt; t-&gt;key)      t-&gt;left  = bst_insert(t-&gt;left, key);
-    else if (key &gt; t-&gt;key) t-&gt;right = bst_insert(t-&gt;right, key);
-    return t;                                 /* 键已存在：不变 */
-}
-
-/* 迭代插入：记住父结点，走到 NULL 后挂在父结点下面 */
-node_t *bst_insert_iter(node_t *root, int key) {
-    node_t *parent = NULL, *cur = root;
-    while (cur != NULL) {
-        if (key == cur-&gt;key) return root;     /* 键已存在 */
-        parent = cur;
-        cur = (key &lt; cur-&gt;key) ? cur-&gt;left : cur-&gt;right;
-    }
-    node_t *n = new_node(key);
-    if (parent == NULL) return n;             /* 原来是空树 */
-    if (key &lt; parent-&gt;key) parent-&gt;left = n;
-    else                   parent-&gt;right = n;
-    return root;
-}
-
-/* 后序释放：先释放两棵子树，再释放自己 */
-void free_tree(node_t *t) {
-    if (t == NULL) return;
-    free_tree(t-&gt;left);
-    free_tree(t-&gt;right);
-    free(t);
-}</code></pre>
-<ul>
-<li>递归插入<strong>返回子树的根</strong>，调用时必须写 <code>root = bst_insert(root, key);</code>。空树时新结点就是根，不接住返回值，第一个结点就丢了，内存也泄漏。路径上每层都会赋值 <code>t-&gt;left</code> 或 <code>t-&gt;right</code>，只有最底下那次真正改变指针，其余写回原值。</li>
-<li>迭代插入要<strong>记住父结点</strong>：<code>cur</code> 走到 NULL 后已经回不去，只能通过 <code>parent</code> 挂上新结点。</li>
-<li>查找和插入的两种写法时间都是 O(h)。递归版本调用栈深 h，额外空间 O(h)；迭代版本额外空间 O(1)。</li>
-<li>释放用后序（post-order）：若先 free 父结点，就再也拿不到它的孩子指针。</li>
-</ul>
-
-<h2>插入顺序决定形状</h2>
-<p>同样 7 个键 9, 14, 28, 32, 42, 53, 64：</p>
-<ul>
-<li>按 32, 14, 53, 9, 28, 42, 64 插入：32 是 7 个键的中间值，14、53 又是左右两半的中间值，得到满二叉树（perfect binary tree），高 3，任何查找最多比较 3 次。</li>
-<li>按升序 9, 14, 28, …, 64 插入：每个新键都比已有的键大，一路往右，得到一条向右的链，高 7，就是一个链表，找 64 要比较 7 次。降序输入得到向左的链。</li>
-</ul>
-<p>n 个结点的 BST，高度最小为 ⌈log₂(n+1)⌉（h 层最多放 2<sup>h</sup> − 1 个结点），最大为 n（每个结点只有一个孩子）。按升序插入 n 个键时，第 i 个键要和已有的 i − 1 个结点逐一比较，总共 0 + 1 + … + (n − 1) = <strong>n(n − 1)/2 次，O(n²)</strong>。</p>
+<h3>插入 17</h3>
+<p>插入 = 先查找，再挂上去。17 &lt; 32 往左；17 &gt; 14 往右；17 &lt; 28 往左，28 的左边是空的，就把 17 挂在这里（图中绿色虚线）。</p>
+<p>新结点<strong>永远是一片叶子（leaf）</strong>，旧结点一个不动，只改了 28 的 <code>left</code> 一根指针。所以<strong>插入 = O(h) 找空位 + O(1) 挂结点 = O(h)</strong>。</p>
 
 <iframe class="anim-frame" src="blog/blog_data/dsa-bst/anims/bst-insert.html" loading="lazy" style="height: 540px;" title="BST 插入与退化"></iframe>
-<p class="anim-caption">按钮切换同一组 9 个键的插入顺序，“随机”每次重新打乱；蓝色是本次插入的查找路径，最后一帧绿色是最坏的查找路径。</p>
+<p class="anim-caption">先看“课上顺序”：蓝色是每次插入走的路，橙色是新结点，最后一帧绿色是最慢的查找。再点“升序”对比。</p>
+
+<h2>插入顺序决定形状：退化成链表</h2>
+<p>同样是 9, 14, 28, 32, 42, 53, 64 这 7 个键：</p>
+<ul>
+<li>按 <strong>32, 14, 53, 9, 28, 42, 64</strong> 插入：先来的总是“中间那个”，得到满二叉树（perfect binary tree），高 3，查找最多 3 次。</li>
+<li>按<strong>升序</strong>插入：新键总比树里所有键大，只能一路往右挂，变成一条高 7 的链，其实就是链表，找 64 要比较 7 次。降序则得到向左的链。</li>
+</ul>
+<p>所以 n 个结点的 BST，最矮 ⌈log₂(n+1)⌉ 层，最高 n 层。升序插入 n 个键时，第 i 个键要和前面 i − 1 个结点逐个比较，总共 0 + 1 + … + (n − 1) = <strong>n(n − 1)/2 次，O(n²)</strong>。</p>
 
 <div class="callout key" data-label="考点">
-<p><strong>问“在 BST 中查找的时间复杂度”，答 O(n)。</strong>题目没有保证形状，就要考虑退化成链的最坏情况。第 4 周课堂小测多数人选了 O(log n)，是错的。只有树平衡（balanced，本课定义为查找能在 O(log n) 内完成）时才是 O(log n)。最好情况是要找的键就在根上，Θ(1)。</p>
+<p><strong>问“在 BST 中查找的时间复杂度”，答 O(n)。</strong>题目没保证形状，就按退化成链的最坏情况算；第 4 周课上小测多数人选了 O(log n)，错了。只有树<strong>平衡（balanced）</strong>，即本课定义的“查找能在 O(log n) 内完成”时，才是 O(log n)。最好情况是找的就是根，Θ(1)。</p>
 </div>
 
 <h3>只看根平衡不够</h3>
-<p>依次插入 32, 28, 42, 17, 50, 14, 53, 9, 64：</p>
-<pre><code class="lang-text">            32
-           /  \\
-         28    42
-        /        \\
-      17          50
-     /              \\
-   14                53
-  /                    \\
- 9                      64</code></pre>
-<p>根的左、右子树高度都是 4，看根是“平衡”的。可每一边都是链：n 个结点时树高约 n/2，找 9 或 64 要比较 5 次，一般地仍是 O(n)。平衡条件必须对<strong>每个结点</strong>成立，这就是 AVL 条件（见 3.5 平衡与 AVL 条件）。</p>
+<p>依次插入 32, 28, 42, 17, 50, 14, 53, 9, 64（动画里的“两条长链”）：根左边是链 28 → 17 → 14 → 9，右边是链 42 → 50 → 53 → 64。根两边都高 4，看根很平衡，可树高约 n/2，查找仍是 O(n)。平衡要对<strong>每个结点</strong>成立，这就是 3.5 的 AVL 条件。</p>
 
-<h2>用 BST 实现字典</h2>
+<h3>拿 BST 当字典用</h3>
 <p>先插入 n 个键建字典，再做 m 次查找：</p>
 <table>
 <thead><tr><th>情况</th><th>建树（n 次插入）</th><th>m 次查找</th><th>合计</th></tr></thead>
 <tbody>
-<tr><td>平均（随机顺序，树较平衡）</td><td>n × O(log n) = O(n log n)</td><td>O(m log n)</td><td><strong>O(n log n + m log n)</strong></td></tr>
-<tr><td>最坏（有序输入，退化成链）</td><td>0 + 1 + … + (n − 1) = O(n²)</td><td>O(nm)</td><td><strong>O(n² + nm)</strong></td></tr>
+<tr><td>平均（随机顺序，树较平衡）</td><td>O(n log n)</td><td>O(m log n)</td><td><strong>O(n log n + m log n)</strong></td></tr>
+<tr><td>最坏（有序输入，退化成链）</td><td>O(n²)</td><td>O(nm)</td><td><strong>O(n² + nm)</strong></td></tr>
 </tbody>
 </table>
-<p>BST 想兼得链表的 O(1) 挂结点和有序数组的 O(log n) 查找，最坏情况却和链表一样。出路有两条：指望输入是随机顺序（靠不住），或改用插入时自动保持平衡的树，如 AVL 树（见 3.6 AVL 旋转）和 2-3 树（见 3.7）。删除见 3.4 BST 删除。</p>
+<p>要稳定拿到第一行，就得用自动保持平衡的树：AVL 树（3.6）和 2-3 树（3.7）。删除见 3.4。</p>
+
+<h2>C 代码：查找和插入</h2>
+<pre><code>typedef struct node { int key; struct node *left, *right; } node_t;
+
+node_t *bst_find(node_t *t, int key) {
+    while (t != NULL &amp;&amp; key != t-&gt;key)
+        t = (key &lt; t-&gt;key) ? t-&gt;left : t-&gt;right;
+    return t;                        /* 找不到时是 NULL */
+}
+
+node_t *bst_insert(node_t *t, int key) {
+    if (t == NULL) {                 /* 走到空位：造一片新叶子 */
+        t = malloc(sizeof(*t));
+        assert(t != NULL);
+        t-&gt;key = key;
+        t-&gt;left = t-&gt;right = NULL;
+    } else if (key &lt; t-&gt;key) {
+        t-&gt;left = bst_insert(t-&gt;left, key);
+    } else if (key &gt; t-&gt;key) {
+        t-&gt;right = bst_insert(t-&gt;right, key);
+    }                                /* 相等：已经有了，不插 */
+    return t;                        /* 返回这棵子树的根 */
+}</code></pre>
+<ul>
+<li><code>bst_find</code>：没走到空、也没找到，就继续；比当前小往左，否则往右。结束时 <code>t</code> 是找到的结点或 NULL。</li>
+<li><code>bst_insert</code> 第一个分支：走到空位，<code>malloc</code> 一个结点，孩子设成 NULL，它就是新叶子。</li>
+<li>中间两个分支：插进左（右）子树，再把子树的根写回 <code>t-&gt;left</code>（<code>t-&gt;right</code>）。只有最底下那次真的改了指针，其余层写回原值。键相等时什么也不做。</li>
+<li><code>return t</code> 返回子树的根，所以调用时<strong>必须接住</strong>：<code>root = bst_insert(root, key);</code>，否则空树插入的第一个结点就丢了。</li>
+</ul>
+<div class="callout note" data-label="提示">
+<p>用循环写插入，要多一个 <code>parent</code> 指针记住上一个结点，走到 NULL 后才挂得上去。释放整棵树用后序（post-order）：先释放两棵子树，再释放自己。</p>
+</div>
 
 <h2>考试怎么考</h2>
 <ul>
-<li><strong>数比较次数</strong>（填空）：给一棵 BST，问找某个键（可能不存在）要比较几次。数经过的结点，找不到时数到最后一个非空结点。</li>
-<li><strong>画树</strong>：给插入序列，从空树画出 BST，常接着问树高、中序遍历或某次查找的比较次数。树高用本课约定（叶子 = 1）。</li>
-<li><strong>复杂度选择题</strong>：BST 查找、插入最坏 O(n)，平衡时 O(log n)；有序输入建树 O(n²)；字典“n 次插入 + m 次查找”的平均与最坏两行。</li>
-<li><strong>写代码</strong>（Canvas 纯文本框）：BST 插入（递归或迭代）、查找，或在其上做的小函数（计数、求最小键等）。检查 NULL 和 malloc 的返回值，接住返回的根，最后释放。</li>
-<li>公式表上的等差数列求和可以用来算 n(n − 1)/2；BST 性质、比较计数法、depth/height 约定和各项复杂度都要自己记。</li>
+<li><strong>填空</strong>：给一棵 BST，数找某个键（可能不存在）要比较几次。</li>
+<li><strong>手算</strong>：给插入序列，从空树画出 BST，再问树高、中序遍历或比较次数。</li>
+<li><strong>选择题</strong>：BST 查找、插入最坏 O(n)，平衡时 O(log n)；有序输入建树 O(n²)。</li>
+<li><strong>写代码</strong>：BST 插入、查找，或在它上面的小函数（数结点、找最小键等）。</li>
 </ul>
-<div class="callout warn" data-label="易错">
-<ul>
-<li>把二叉树当成二叉搜索树：普通二叉树查找要遍历，O(n)。</li>
-<li>只检查父子之间的大小关系，没检查整棵子树。</li>
-<li>以为根的左右子树一样高就算平衡。</li>
-<li>看到“BST 查找”就选 O(log n)。</li>
-<li>查不到时少数一次：最后那个结点也要比较，才知道该往哪边走、那边是空的。</li>
-<li>递归插入后没写 <code>root = …</code>；迭代插入没记父结点。</li>
-</ul>
-</div>
+<p>公式表只给等差数列求和（算 n(n − 1)/2 用）；数比较次数的规则、depth / height 约定和复杂度都要自己记。</p>
 
-<h2>练习</h2>
-<details class="qa">
-<summary class="ripple-surface">1. 从空树依次插入 45, 20, 70, 10, 30, 60, 90, 25, 65, 62。(a) 画出 BST；(b) 树高是多少（叶子高 1）？(c) 查找 62、查找 27 各要比较几次？</summary>
-<div class="qa__body">
-<p>(a) 逐个插入（括号内是比较过的结点）：45 为根；20（45）挂在 45 左；70（45）挂在 45 右；10（45, 20）挂在 20 左；30（45, 20）挂在 20 右；60（45, 70）挂在 70 左；90（45, 70）挂在 70 右；25（45, 20, 30）挂在 30 左；65（45, 70, 60）挂在 60 右；62（45, 70, 60, 65）挂在 65 左。</p>
+<h3>例题 1：画树、求高、数比较</h3>
+<p>从空树依次插入 45, 20, 70, 10, 30, 60, 90, 25, 65, 62。画出 BST，求树高（叶子高 1），以及查找 62、查找 27 各比较几次。</p>
+<p><strong>画树</strong>：前 7 个键刚好填满三层（45 当根，20、70 是它的孩子，10、30、60、90 是孙子）。25 比较 45、20、30 后挂 30 左边；65 比较 45、70、60 后挂 60 右边；62 比较 45、70、60、65 后挂 65 左边。</p>
 <pre><code class="lang-text">          45
         /    \\
       20      70
@@ -216,51 +178,34 @@ void free_tree(node_t *t) {
       25       65
               /
             62</code></pre>
-<p>(b) 最长的根到叶路径 45 → 70 → 60 → 65 → 62 有 5 个结点，树高 <strong>5</strong>。</p>
-<p>(c) 找 62：经过 45, 70, 60, 65, 62，<strong>5 次</strong>。找 27：27 &lt; 45 往左，27 &gt; 20 往右，27 &lt; 30 往左，27 &gt; 25 往右，25 的右孩子为空，27 不存在，<strong>4 次</strong>。</p>
-</div>
-</details>
+<p><strong>树高</strong>：最长的根到叶路径 45 → 70 → 60 → 65 → 62 有 5 个结点，树高 <strong>5</strong>。</p>
+<p><strong>找 62</strong>：经过 45, 70, 60, 65, 62，<strong>5 次</strong>。</p>
+<p><strong>找 27</strong>：27 &lt; 45 往左，27 &gt; 20 往右，27 &lt; 30 往左，27 &gt; 25 该往右，但 25 右边是空的，所以不存在。比较了 45、20、30、25，<strong>4 次</strong>。最后的 25 也要算：不和它比，就不知道该往哪边走。</p>
 
-<details class="qa">
-<summary class="ripple-surface">2. 下面这棵树是不是 BST？在它上面运行 bst_find 找 35，结果如何？</summary>
-<div class="qa__body">
-<pre><code class="lang-text">      30
-     /  \\
-   20    40
-  /  \\     \\
-10    35    50</code></pre>
-<p><strong>不是。</strong>每对父子都满足“左小右大”（20 &lt; 30，35 &gt; 20，50 &gt; 40 等），但 35 在 30 的左子树里却比 30 大，违反 BST 性质。中序遍历得 10 20 35 30 40 50，不是升序，也能看出来。</p>
-<p>找 35：35 &gt; 30 往右，35 &lt; 40 往左，40 的左孩子为空，比较 2 次后返回 NULL，报告“不存在”，可 35 明明在树里。查找能跳过一侧子树，前提是整棵子树都满足性质。</p>
-</div>
-</details>
-
-<details class="qa">
-<summary class="ripple-surface">3. 多选：关于有 n 个结点的 BST（n 很大），哪些说法一定正确？A. 查找最坏 O(log n)　B. 查找最坏 O(n)　C. 只要根的左右子树高度差不超过 1，查找就是 O(log n)　D. 把 1, 2, …, n 依次插入空 BST，共做 n(n − 1)/2 次键比较　E. 中序遍历按升序输出所有键</summary>
-<div class="qa__body">
-<p>选 <strong>B、D、E</strong>。</p>
+<h3>例题 2：多选</h3>
+<p>n 个结点的 BST（n 很大），哪些一定正确？A. 查找最坏 O(log n)；B. 查找最坏 O(n)；C. 根的左右子树高度差 ≤ 1 时，查找是 O(log n)；D. 把 1, 2, …, n 依次插入空 BST，共比较 n(n − 1)/2 次；E. 中序遍历按升序输出。</p>
+<p><strong>答案：B、D、E。</strong></p>
 <ul>
-<li>A 错：有序输入得到链，最坏 O(n)。</li>
+<li>A 错、B 对：有序输入得到一条链，最坏要走 n 个结点。</li>
 <li>C 错：根下挂两条等长的链，根处高度差为 0，树高仍约 n/2。</li>
-<li>D 对：插入第 i 个键时，树是 1 → 2 → … → i − 1 的右链，要比较 i − 1 次，求和 0 + 1 + … + (n − 1) = n(n − 1)/2。</li>
-<li>E 对：由 BST 性质直接得到。</li>
+<li>D 对：插第 i 个键时树是 1 → … → i − 1 的右链，比较 i − 1 次，求和得 n(n − 1)/2。</li>
+<li>E 对：BST 性质直接保证。</li>
+</ul>
+
+<div class="callout warn" data-label="易错">
+<ul>
+<li>看到“BST 查找”就选 O(log n)。没说平衡，就是 O(n)。</li>
+<li>只检查父子大小，没检查整棵子树；以为根两边一样高就算平衡。</li>
+<li>找不到时少数最后那个非空结点；递归插入后忘了写 <code>root = …</code>。</li>
 </ul>
 </div>
-</details>
 
-<details class="qa">
-<summary class="ripple-surface">4. 用上文的 node_t 写 int cmp_count(node_t *t, int key)，按课上的计数法返回查找 key 的比较次数（找到或确定不存在都要返回）。在课上那棵树（图中未插入 17 的部分）上，cmp_count(root, 50) 和 cmp_count(root, 51) 各返回多少？</summary>
-<div class="qa__body">
-<pre><code>int cmp_count(node_t *t, int key) {
-    int count = 0;
-    while (t != NULL) {
-        count++;                       /* 访问一个结点 = 一次比较 */
-        if (key == t-&gt;key) break;      /* 找到 */
-        t = (key &lt; t-&gt;key) ? t-&gt;left : t-&gt;right;
-    }
-    return count;
-}</code></pre>
-<p>每访问一个非空结点加 1，找到就停，走到 NULL 结束；空树返回 0。</p>
-<p>cmp_count(root, 50) 经过 32, 53, 42, 50，返回 <strong>4</strong>；cmp_count(root, 51) 经过同样 4 个结点后走到 50 的右空指针，返回 <strong>4</strong>。</p>
-</div>
-</details>
+<h2>小结</h2>
+<ul>
+<li>BST 性质管整棵子树：左边全小，右边全大。中序遍历 = 升序。</li>
+<li>比较次数 = 经过的结点数，找不到时数到最后一个非空结点。</li>
+<li>插入 = 查找空位 + 挂一片新叶子，只改一根指针。</li>
+<li>查找、插入都是 O(h)；有序输入让树退化成链，h = n。</li>
+<li>“BST 查找的复杂度”答 O(n)；平衡时才是 O(log n)，而平衡要看每个结点。</li>
+</ul>
 `;

@@ -53,14 +53,14 @@
         "en": "3.3 Binary Search Trees"
       },
       "excerpt": {
-        "zh": "BST 性质 · 查找比较次数 = depth + 1 · 插入 = 查找空位 + O(1) 挂叶子 · 递归与迭代 C 代码 · 插入顺序决定形状 · 有序输入退化成链 · 最坏 O(n) · 只看根平衡不够 · 字典代价",
-        "en": "BST property · counting comparisons (depth + 1) · insert = find the empty spot + O(1) attach · recursive and iterative C code · insertion order decides the shape · sorted input degenerates into a chain · worst case O(n) · root-only balance trap · dictionary costs"
+        "zh": "BST 性质 · 查找与比较次数 · 插入 · 退化成链表 · 最坏 O(n)",
+        "en": "BST property · find & counting comparisons · insert · degenerating into a chain · O(n) worst case"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 10,
+      "readingTime": 9,
       "lang": "zh"
     },
     {

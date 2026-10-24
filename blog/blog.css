@@ -191,6 +191,7 @@ body { overscroll-behavior: none; }
 
 /* ─── Post components (usable by any HTML post) ───
    .anim-frame  <iframe> holding an interactive animation, + .anim-caption under it
+   .video-frame 16:9 <iframe> for an embedded YouTube / Bilibili video
    .callout     tinted box; data-label="…" prints a small heading;
                 variants .key (accent) · .warn (red) · .note (teal)
    details.qa   collapsible question → answer; give <summary> the class
@@ -200,6 +201,10 @@ body { overscroll-behavior: none; }
   display: block; width: 100%; margin: 1.4em 0;
   border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.reader-body .video-frame {
+  display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; margin: 1.4em 0;
+  border: 0; border-radius: 14px; background: #000;
 }
 .reader-body .anim-caption {
   margin-top: -0.6em !important; margin-bottom: 1.4em;

@@ -72,14 +72,14 @@
         "en": "1.4 Big-O: Definition & Proofs"
       },
       "excerpt": {
-        "zh": "正式定义 · c₀ 与 n₀ · 证明格式 · 去常数与低阶项 · 最紧上界 · 证明不属于",
-        "en": "Formal definition · c₀ and n₀ · Proof format · Dropping constants & lower-order terms · Tightest bound · Disproofs"
+        "zh": "定义 · c₀ 与 n₀ · 系数和取法 · 去常数与低阶项 · 松上界与最紧上界 · 证明不属于",
+        "en": "Definition · c₀ and n₀ · sum-of-coefficients trick · dropping constants & lower-order terms · loose vs tightest bound · disproofs"
       },
       "tags": [
         "c",
         "algorithms"
       ],
-      "readingTime": 7,
+      "readingTime": 8,
       "lang": "zh"
     },
     {
